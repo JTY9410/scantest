@@ -1,0 +1,69 @@
+services:
+  web:
+    build:
+      context: .
+      dockerfile: _docker/Dockerfile.prod
+    container_name: wecarscan-web
+    restart: unless-stopped
+    ports:
+      - "${FORWARD_WEB_PORT:-8080}:${PORT:-8080}"
+    environment:
+      PORT: ${PORT:-8080}
+      APP_ENV: production
+      APP_DEBUG: "false"
+      DB_HOST: db
+      DB_PORT: 3306
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      TZ: Asia/Seoul
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - wecarscan-network
+
+  db:
+    image: mariadb:10.11
+    container_name: wecarscan-db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--su-mysql", "--connect", "--innodb_initialized"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    environment:
+      MYSQL_DATABASE: ${DB_DATABASE}
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_USER: ${DB_USERNAME}
+      TZ: Asia/Seoul
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./_docker/mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+    networks:
+      - wecarscan-network
+    command: --skip-host-cache --skip-name-resolve --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+
+  redis:
+    image: redis:7-alpine
+    container_name: wecarscan-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    environment:
+      TZ: Asia/Seoul
+    networks:
+      - wecarscan-network
+
+networks:
+  wecarscan-network:
+    driver: bridge
+
+volumes:
+  db_data:
+  redis_data:

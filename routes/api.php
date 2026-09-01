@@ -33,6 +33,8 @@ Route::prefix('auth')->group(function () {
             Route::post('/withdraw', [AuthController::class, 'withdraw']);
             // Route::post('/log', [AuthController::class, 'log']);
         });
+
+Route::get('/manufacturers', [ManufacturersController::class, 'index']);
 });
 
 Route::middleware(JwtMiddleware::class)
