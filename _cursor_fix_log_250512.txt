@@ -1,0 +1,15 @@
+# 2024-05-12 테스트 수정 로그
+
+## 1. 인증번호 확인 테스트 수정
+- 문제: SMS 인증번호 확인 테스트가 실패
+- 원인: 테스트에서 사용하는 파라미터 이름이 컨트롤러와 일치하지 않음
+- 수정: 테스트의 파라미터 이름을 컨트롤러와 일치하도록 변경
+  - 'smsCode' -> 'sms_code'
+  - 'smsCodeKey' -> 'sms_code_key'
+
+## 2. SMS 인증 검증 메소드 수정
+- 문제: verifySmsCode 메소드에서 파라미터 이름이 일치하지 않음
+- 원인: 컨트롤러에서는 snake_case를 사용하지만 검증 메소드에서는 camelCase를 사용
+- 수정: verifySmsCode 메소드의 파라미터 이름을 컨트롤러와 일치하도록 변경
+  - 'smsCode' -> 'sms_code'
+  - 'smsCodeKey' -> 'sms_code_key'
