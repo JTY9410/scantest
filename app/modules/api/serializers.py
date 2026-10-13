@@ -6,6 +6,7 @@ from typing import Any
 
 from app.core.time import iso
 from app.modules.accounts.models import Company, User
+from app.modules.obd.models import ObdProfile
 from app.modules.reports.models import Applog, CarMismatchReport
 from app.modules.scans.models import Code, Scan, ScanCode
 
@@ -162,4 +163,22 @@ def applog_dict(log: Applog, requested: set[str] | None = None) -> dict[str, Any
         "desc": log.desc,
         "created_at": iso(log.created_at),
         "updated_at": iso(log.updated_at),
+    }
+
+
+def obd_profile_dict(profile: ObdProfile) -> dict[str, Any]:
+    return {
+        "id": profile.id,
+        "name": profile.name,
+        "transport": profile.transport,
+        "device_name_prefix": profile.device_name_prefix,
+        "service_uuid": profile.service_uuid,
+        "write_uuid": profile.write_uuid,
+        "notify_uuid": profile.notify_uuid,
+        "init_commands": profile.init_commands,
+        "request_header": profile.request_header,
+        "response_header": profile.response_header,
+        "read_commands": profile.read_commands,
+        "response_timeout_ms": profile.response_timeout_ms,
+        "updated_at": iso(profile.updated_at),
     }

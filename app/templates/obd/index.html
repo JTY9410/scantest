@@ -1,0 +1,32 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge, empty %}
+{% block title %}OBD2 연결{% endblock %}
+
+{% block content %}
+{% call page_header("OBD2 연결", "모바일 앱이 블루투스 OBD2 진단기에 연결할 때 받아 쓰는 설정입니다.") %}
+  <a class="btn btn-primary" href="{{ url_for('obd.form') }}">프로필 등록</a>
+{% endcall %}
+
+<section class="card overflow-hidden" aria-label="OBD2 프로필 목록">
+  {% if profiles %}
+  <table class="rtable">
+    <thead><tr><th scope="col">이름</th><th scope="col">연결 방식</th><th scope="col">기기 이름</th><th scope="col">BMS 헤더</th><th scope="col">조회 명령</th><th scope="col">상태</th><th scope="col"><span class="sr-only">관리</span></th></tr></thead>
+    <tbody>
+      {% for p in profiles %}
+      <tr>
+        <td data-primary class="font-semibold">{{ p.name }}</td>
+        <td data-label="연결 방식">{{ p.transport_label }}</td>
+        <td data-label="기기 이름" class="mono">{{ p.device_name_prefix }}…</td>
+        <td data-label="BMS 헤더" class="mono">{{ p.request_header ~ " → " ~ p.response_header if p.request_header else "-" }}</td>
+        <td data-label="조회 명령" class="tabular-nums">{{ p.read_commands|length }}개</td>
+        <td data-label="상태">{{ badge("앱에 제공", "success") if p.enabled else badge("중지") }}</td>
+        <td data-label="관리"><a class="btn btn-secondary" href="{{ url_for('obd.form', profile_id=p.id) }}">수정<span class="sr-only"> ({{ p.name }})</span></a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("등록된 OBD2 프로필이 없습니다.", "진단기 제조사 문서의 BLE UUID와 초기화 명령으로 첫 프로필을 등록하세요.") }}
+  {% endif %}
+</section>
+{% endblock %}

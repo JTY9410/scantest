@@ -18,6 +18,7 @@
 | 진단 코드 조회 | `/api/codes` | - | - | 검색·정렬·페이지 |
 | 차량 불일치 신고 | `/api/carMismatchReports` | `reports` | 신고 | 본인 것만(관리자는 전체) |
 | 앱 로그 | `/api/applogs` | `reports` | 앱 로그 | 본인 것만(관리자는 전체) |
+| 블루투스 OBD2 설정 받기 (신규) | `GET /api/obdProfiles` | `obd.enabled_profiles` | - | 사용 중인 프로필 목록 (`docs/flows/obd.md`) |
 
 - 목록 API는 `search`(`필드:값||필드:연산자:값`), `order`(`필드:asc|desc`), `with`, `page`, `per_page` 파라미터를 이전과 같이 받습니다(`app/modules/api/listing.py`).
 - 가입 시 회원 유형으로 관리자를 고를 수 없습니다(이전 서버의 권한 상승 허점 수정).

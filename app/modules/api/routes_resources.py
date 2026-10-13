@@ -10,7 +10,14 @@ from app.modules.api import bp
 from app.modules.api.auth import current_user, require_api_auth
 from app.modules.api.http import api_input, respond
 from app.modules.api.listing import eager, list_payload, load_options, parse_with
-from app.modules.api.serializers import applog_dict, code_dict, mismatch_dict, scan_dict
+from app.modules.api.serializers import (
+    applog_dict,
+    code_dict,
+    mismatch_dict,
+    obd_profile_dict,
+    scan_dict,
+)
+from app.modules.obd import service as obd
 from app.modules.reports import service as reports
 from app.modules.reports.models import CarMismatchReport
 from app.modules.scans import service as scans
@@ -264,3 +271,11 @@ def applogs_store():
 @require_api_auth
 def applogs_show(log_id: int):
     return respond(applog_dict(reports.get_applog(current_user(), log_id)))
+
+
+# ---- 블루투스 OBD2 연결 프로필 (기존 서버에 없던 신규 API) ----------------------------
+
+@bp.get("/obdProfiles")
+@require_api_auth
+def obd_profiles_index():
+    return respond({"data": [obd_profile_dict(p) for p in obd.enabled_profiles()]})
