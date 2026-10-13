@@ -1,0 +1,48 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, pager, badge, empty %}
+{% from "monitoring/_filters.html" import filter_bar %}
+{% block title %}앱 로그{% endblock %}
+
+{% block content %}
+{{ page_header("앱 로그", "모바일 앱이 보낸 진단 로그입니다. 기간은 앱에서 기록한 시각 기준입니다.") }}
+
+{% call filter_bar("monitoring.applogs", params, "메시지 또는 상세 내용", member) %}
+  <div class="field">
+    <label for="type" class="field-label">유형</label>
+    <select id="type" name="type" class="input">
+      <option value="">전체</option>
+      {% for t in types %}<option value="{{ t }}" {% if log_type == t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+    </select>
+  </div>
+{% endcall %}
+
+<section class="card overflow-hidden" aria-label="앱 로그 목록">
+  {% if page.items %}
+  <table class="rtable">
+    <thead><tr><th scope="col">메시지</th><th scope="col">유형</th><th scope="col">회원</th><th scope="col">기록 시각</th></tr></thead>
+    <tbody>
+      {% for log in page.items %}
+      <tr>
+        <td data-primary>
+          {% if log.desc %}
+          <details>
+            <summary class="inline-flex min-h-11 cursor-pointer items-center font-medium">{{ log.message|truncate(120) }}</summary>
+            <pre class="mono mt-1 max-h-60 overflow-auto rounded-sm bg-surface-2 p-2 text-xs whitespace-pre-wrap">{{ log.desc }}</pre>
+          </details>
+          {% else %}
+          <span class="font-medium">{{ log.message|truncate(120) }}</span>
+          {% endif %}
+        </td>
+        <td data-label="유형">{{ badge(log.type, "danger" if log.type|lower in ("error", "fatal") else "warning" if log.type|lower in ("warn", "warning") else "") }}</td>
+        <td data-label="회원">{% if log.user %}<a class="underline" href="{{ url_for('members.show', user_id=log.user.id) }}">{{ log.user.name }}</a>{% else %}-{% endif %}</td>
+        <td data-label="기록 시각" class="tabular-nums">{{ log.timestamp|kst }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {{ pager(page, "monitoring.applogs", filters) }}
+  {% else %}
+  {{ empty("조건에 맞는 앱 로그가 없습니다.") }}
+  {% endif %}
+</section>
+{% endblock %}

@@ -1,0 +1,69 @@
+/*
+ * 디자인 토큰. 색·서체·간격·모서리·그림자·움직임은 여기서만 정한다.
+ * Tailwind 유틸리티는 app.css의 @theme 에서 이 변수를 참조한다.
+ * 브랜드 기본색은 WECAR 로고(흰 글자 + 검정 바탕)에 맞춘 검정·중립색이다.
+ * 공식 강조색이 정해지면 --wc-color-accent 만 바꾼다.
+ */
+:root {
+  --wc-color-ink: #0b0b0c;
+  --wc-color-ink-2: #1b1c20;
+  --wc-color-ink-3: #2a2c33;
+  --wc-color-on-ink: #ffffff;
+  --wc-color-on-ink-muted: #b8bcc6;
+
+  --wc-color-accent: #0b0b0c;
+  --wc-color-on-accent: #ffffff;
+
+  --wc-color-bg: #f5f6f8;
+  --wc-color-surface: #ffffff;
+  --wc-color-surface-2: #f0f1f4;
+  --wc-color-border: #dfe2e8;
+  --wc-color-border-strong: #b9bec9;
+
+  --wc-color-text: #15171c;
+  --wc-color-text-muted: #545b69;
+  --wc-color-focus: #1f5eff;
+
+  --wc-color-success: #11703a;
+  --wc-color-success-bg: #e7f5ec;
+  --wc-color-danger: #b3261e;
+  --wc-color-danger-bg: #fdeceb;
+  --wc-color-warning: #8a4b00;
+  --wc-color-warning-bg: #fff3df;
+  --wc-color-info: #1d4ed8;
+  --wc-color-info-bg: #e9f0ff;
+
+  --wc-font-sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic",
+    system-ui, -apple-system, "Segoe UI", sans-serif;
+  --wc-font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --wc-space-1: 0.25rem;
+  --wc-space-2: 0.5rem;
+  --wc-space-3: 0.75rem;
+  --wc-space-4: 1rem;
+  --wc-space-6: 1.5rem;
+  --wc-space-8: 2rem;
+
+  --wc-radius-sm: 0.5rem;
+  --wc-radius-md: 0.75rem;
+  --wc-radius-lg: 1rem;
+  --wc-radius-full: 999px;
+
+  --wc-shadow-sm: 0 1px 2px rgb(16 18 24 / 0.06);
+  --wc-shadow-md: 0 4px 16px rgb(16 18 24 / 0.08);
+  --wc-shadow-lg: 0 16px 40px rgb(16 18 24 / 0.18);
+
+  --wc-touch: 44px;
+  --wc-sidebar-width: 15.5rem;
+
+  --wc-motion-fast: 120ms;
+  --wc-motion-base: 200ms;
+  --wc-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --wc-motion-fast: 0ms;
+    --wc-motion-base: 0ms;
+  }
+}

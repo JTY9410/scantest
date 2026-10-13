@@ -1,0 +1,68 @@
+/*
+ * Tailwind CSS 진입 파일. 빌드 결과는 static/dist/app.css (Git에 올리지 않음).
+ *   npm run build:css   /   npm run watch:css
+ */
+@import "tailwindcss";
+@import "./tokens.css";
+@import "./components.css";
+@import "./pages/auth.css";
+
+@source "../../templates";
+@source "../js";
+
+@theme inline {
+  --font-sans: var(--wc-font-sans);
+  --font-mono: var(--wc-font-mono);
+
+  --color-ink: var(--wc-color-ink);
+  --color-ink-2: var(--wc-color-ink-2);
+  --color-ink-3: var(--wc-color-ink-3);
+  --color-on-ink: var(--wc-color-on-ink);
+  --color-on-ink-muted: var(--wc-color-on-ink-muted);
+  --color-canvas: var(--wc-color-bg);
+  --color-surface: var(--wc-color-surface);
+  --color-surface-2: var(--wc-color-surface-2);
+  --color-line: var(--wc-color-border);
+  --color-line-strong: var(--wc-color-border-strong);
+  --color-fg: var(--wc-color-text);
+  --color-muted: var(--wc-color-text-muted);
+  --color-success: var(--wc-color-success);
+  --color-danger: var(--wc-color-danger);
+  --color-warning: var(--wc-color-warning);
+  --color-info: var(--wc-color-info);
+
+  --radius-sm: var(--wc-radius-sm);
+  --radius-md: var(--wc-radius-md);
+  --radius-lg: var(--wc-radius-lg);
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    /* 모바일 상단 고정 헤더(56px)에 포커스·스크롤 대상이 가려지지 않게 한다. */
+    scroll-padding-top: 4.5rem;
+  }
+  @media (min-width: 1024px) {
+    html {
+      scroll-padding-top: 1rem;
+    }
+  }
+  body {
+    background: var(--wc-color-bg);
+    color: var(--wc-color-text);
+    font-family: var(--wc-font-sans);
+    line-height: 1.55;
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+  }
+  h1,
+  h2,
+  h3 {
+    line-height: 1.3;
+    letter-spacing: -0.01em;
+  }
+  a {
+    text-underline-offset: 2px;
+  }
+}

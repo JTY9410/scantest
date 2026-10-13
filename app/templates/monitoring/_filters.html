@@ -1,0 +1,28 @@
+{# 조회 화면 공통 검색 조건: 검색어·기간·회원(선택한 경우). 추가 조건은 call 블록으로 넣는다. #}
+{% macro filter_bar(endpoint, params, placeholder, member=None) -%}
+<form method="get" class="card card-body mb-4 grid gap-3" role="search" aria-label="검색 조건" data-autosubmit>
+  {% if member %}
+  <input type="hidden" name="user_id" value="{{ member.id }}">
+  <p class="flex flex-wrap items-center gap-2 text-sm">
+    <span class="badge badge-ink">회원: {{ member.name }} ({{ member.tid }})</span>
+    <a class="inline-flex min-h-11 items-center underline" href="{{ url_for(endpoint) }}">회원 조건 해제</a>
+  </p>
+  {% endif %}
+  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,2fr)_repeat(2,minmax(0,1fr))_auto] lg:items-end">
+    <div class="field sm:col-span-2 lg:col-span-1">
+      <label for="q" class="field-label">검색어</label>
+      <input id="q" name="q" type="search" value="{{ params.q }}" class="input" placeholder="{{ placeholder }}" enterkeyhint="search">
+    </div>
+    <div class="field">
+      <label for="start" class="field-label">시작일</label>
+      <input id="start" name="start" type="date" value="{{ params.start.isoformat() if params.start else '' }}" class="input">
+    </div>
+    <div class="field">
+      <label for="end" class="field-label">종료일</label>
+      <input id="end" name="end" type="date" value="{{ params.end.isoformat() if params.end else '' }}" class="input">
+    </div>
+    <button type="submit" class="btn btn-primary sm:col-span-2 lg:col-span-1">검색</button>
+  </div>
+  {% if caller %}<div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{{ caller() }}</div>{% endif %}
+</form>
+{%- endmacro %}

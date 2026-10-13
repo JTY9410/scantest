@@ -1,0 +1,83 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, pager, member_badge, empty %}
+{% block title %}회원관리{% endblock %}
+
+{% block content %}
+{{ page_header("회원관리", "회원별 정보와 이용 기록을 확인하고 수정합니다.") }}
+
+<form method="get" class="card card-body mb-4 grid gap-3" role="search" aria-label="회원 검색" data-autosubmit>
+  <div class="flex flex-col gap-2 sm:flex-row">
+    <label for="q" class="sr-only">검색어</label>
+    <input id="q" name="q" type="search" value="{{ filters.q }}" class="input sm:flex-1"
+           placeholder="아이디, 이름, 휴대전화, 이메일" autocomplete="off" enterkeyhint="search">
+    <button type="submit" class="btn btn-primary">검색</button>
+  </div>
+  <details {% if filters.active_count > (1 if filters.q else 0) or filters.sort != "-created_at" %}open{% endif %}>
+    <summary class="group inline-flex min-h-11 cursor-pointer items-center gap-1 text-sm font-medium">
+      <span aria-hidden="true" class="inline-block transition-transform group-open:rotate-90 motion-reduce:transition-none">▸</span>
+      표시 옵션{% if filters.active_count %} · 적용 {{ filters.active_count }}개{% endif %}
+    </summary>
+    <div class="mt-2 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="field">
+        <label for="type" class="field-label">유형</label>
+        <select id="type" name="type" class="input">
+          <option value="">전체</option>
+          {% for t in types %}<option value="{{ t.value }}" {% if filters.type == t.value %}selected{% endif %}>{{ t.label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="company_id" class="field-label">소속 회사</label>
+        <select id="company_id" name="company_id" class="input">
+          <option value="">전체</option>
+          {% for c in companies %}<option value="{{ c.id }}" {% if filters.company_id == c.id %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="status" class="field-label">상태</label>
+        <select id="status" name="status" class="input">
+          {% for key, label in statuses.items() %}<option value="{{ key }}" {% if filters.status == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label for="sort" class="field-label">정렬</label>
+        <select id="sort" name="sort" class="input">
+          {% for key, label in sorts.items() %}<option value="{{ key }}" {% if filters.sort == key %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    {% if filters.active_count %}
+    <a href="{{ url_for('members.index') }}" class="mt-3 inline-flex min-h-11 items-center text-sm font-medium underline">조건 초기화</a>
+    {% endif %}
+  </details>
+</form>
+
+<section class="card overflow-hidden" aria-label="회원 목록">
+  {% if page.items %}
+  <table class="rtable">
+    <thead>
+      <tr><th scope="col">회원</th><th scope="col">유형</th><th scope="col">소속</th><th scope="col">휴대전화</th><th scope="col">가입일</th><th scope="col">최근 로그인</th></tr>
+    </thead>
+    <tbody>
+      {% for m in page.items %}
+      <tr>
+        <td data-primary>
+          <a href="{{ url_for('members.show', user_id=m.id) }}" class="inline-flex min-h-11 flex-col justify-center font-semibold underline-offset-2 hover:underline">
+            <span>{{ m.name }}</span>
+            <span class="mono text-sm font-normal text-muted">{{ m.tid }}</span>
+          </a>
+        </td>
+        <td data-label="유형">{{ member_badge(m) }}</td>
+        <td data-label="소속">{{ m.company.name if m.company else "-" }}</td>
+        <td data-label="휴대전화" class="tabular-nums">{{ m.formatted_mobile or "-" }}</td>
+        <td data-label="가입일" class="tabular-nums">{{ m.created_at|kst }}</td>
+        <td data-label="최근 로그인" class="tabular-nums">{{ m.last_login_at|kst }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {{ pager(page, "members.index", filters.query_args(page=None)) }}
+  {% else %}
+  {{ empty("조건에 맞는 회원이 없습니다.", "검색어나 표시 옵션을 바꿔 보세요.") }}
+  {% endif %}
+</section>
+{% endblock %}

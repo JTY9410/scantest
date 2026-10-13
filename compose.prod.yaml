@@ -1,0 +1,42 @@
+# 운영 예시. 비밀값은 서버의 .env.production(저장소에 올리지 않음) 또는 배포 도구의 비밀 저장소로 주입한다.
+#   docker compose -f compose.prod.yaml --env-file .env.production up -d
+#   DB 이전은 수동: docker compose -f compose.prod.yaml run --rm web flask db upgrade
+name: wecarscan_prod
+
+services:
+  web:
+    image: wecarmobility/wecarscan_dh:${IMAGE_TAG:-latest}
+    env_file: .env.production
+    environment:
+      APP_ENV: production
+      RATELIMIT_STORAGE_URI: redis://redis:6379/0
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-wecarscan}
+      POSTGRES_USER: ${POSTGRES_USER:-wecarscan}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 가 필요합니다}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+volumes:
+  pgdata:

@@ -1,0 +1,17 @@
+.git
+.github
+.cursor
+.env
+.env.*
+!.env.example
+_storage
+_doc
+docs
+tests
+node_modules
+app/static/dist
+**/__pycache__
+**/*.pyc
+.pytest_cache
+.venv
+.DS_Store

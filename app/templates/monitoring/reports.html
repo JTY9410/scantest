@@ -1,0 +1,32 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, pager, empty %}
+{% from "monitoring/_filters.html" import filter_bar %}
+{% block title %}불일치 신고{% endblock %}
+
+{% block content %}
+{{ page_header("불일치 신고", "차량정보 조회 결과와 스캔한 차대번호가 달라 앱에서 보낸 신고입니다.") }}
+
+{{ filter_bar("monitoring.reports", params, "차량번호 또는 차대번호", member) }}
+
+<section class="card overflow-hidden" aria-label="불일치 신고 목록">
+  {% if page.items %}
+  <table class="rtable">
+    <thead><tr><th scope="col">차량번호</th><th scope="col">조회 차대번호</th><th scope="col">스캔 차대번호</th><th scope="col">신고자</th><th scope="col">신고일</th></tr></thead>
+    <tbody>
+      {% for r in page.items %}
+      <tr>
+        <td data-primary class="font-semibold">{{ r.car_no }}</td>
+        <td data-label="조회 차대번호" class="mono">{{ r.api_vin }}</td>
+        <td data-label="스캔 차대번호" class="mono">{{ r.scan_vin }}</td>
+        <td data-label="신고자">{% if r.user %}<a class="underline" href="{{ url_for('members.show', user_id=r.user.id) }}">{{ r.user.name }}</a>{% else %}-{% endif %}</td>
+        <td data-label="신고일" class="tabular-nums">{{ r.created_at|kst }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {{ pager(page, "monitoring.reports", filters) }}
+  {% else %}
+  {{ empty("조건에 맞는 불일치 신고가 없습니다.") }}
+  {% endif %}
+</section>
+{% endblock %}

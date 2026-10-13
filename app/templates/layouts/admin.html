@@ -1,0 +1,104 @@
+{% extends "layouts/base.html" %}
+{% from "components/ui.html" import flashes %}
+
+{% set endpoint = request.endpoint or "" %}
+{% macro nav(href, label, active, icon) -%}
+<li>
+  <a class="nav-link" href="{{ href }}" {% if active %}aria-current="page"{% endif %}>
+    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">{{ icon|safe }}</svg>
+    <span>{{ label }}</span>
+  </a>
+</li>
+{%- endmacro %}
+
+{% block body %}
+<div class="lg:flex">
+  <div id="sidebar-backdrop" class="backdrop lg:hidden" data-open="false"></div>
+
+  <aside id="sidebar" class="sidebar flex flex-col lg:sticky lg:top-0 lg:h-dvh lg:w-(--wc-sidebar-width) lg:flex-none" data-open="false" aria-label="관리자 메뉴">
+    <div class="flex h-16 flex-none items-center justify-between px-5">
+      <a href="{{ url_for('admin.dashboard') }}" class="flex min-h-11 min-w-0 items-center" aria-label="WECAR SCAN 대시보드">
+        <img src="{{ url_for('static', filename='brand/wecar-logo.png') }}" alt="" width="104" height="18" class="h-[18px] w-auto">
+        <span class="ml-2 flex-none rounded-sm border border-on-ink-muted/40 px-1.5 text-xs font-semibold whitespace-nowrap text-on-ink-muted">SCAN</span>
+      </a>
+      <button type="button" class="btn btn-ghost btn-icon text-on-ink lg:hidden" data-drawer-toggle aria-controls="sidebar" aria-expanded="false" aria-label="메뉴 닫기">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+
+    <nav class="flex-1 overflow-y-auto px-3 pb-4" aria-label="주 메뉴">
+      <ul class="grid gap-0.5">
+        {{ nav(url_for('admin.dashboard'), "대시보드", endpoint == "admin.dashboard",
+               '<path d="M3 13h8V3H3zM13 21h8V11h-8zM3 21h8v-6H3zM13 3v6h8V3z"/>') }}
+      </ul>
+      <p class="nav-group">회원</p>
+      <ul class="grid gap-0.5">
+        {{ nav(url_for('members.index'), "회원관리", endpoint.startswith("members."),
+               '<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M16 4a4 4 0 010 8M22 21c0-3-2-5-4-5.6"/>') }}
+      </ul>
+      <p class="nav-group">운영 데이터</p>
+      <ul class="grid gap-0.5">
+        {{ nav(url_for('monitoring.scans'), "스캔 기록", endpoint in ("monitoring.scans", "monitoring.scan_show"),
+               '<path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3M7 12h10"/>') }}
+        {{ nav(url_for('monitoring.reports'), "불일치 신고", endpoint == "monitoring.reports",
+               '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/>') }}
+        {{ nav(url_for('monitoring.applogs'), "앱 로그", endpoint == "monitoring.applogs",
+               '<path d="M4 6h16M4 12h16M4 18h10"/>') }}
+        {{ nav(url_for('monitoring.activities'), "활동 기록", endpoint == "monitoring.activities",
+               '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>') }}
+      </ul>
+      <p class="nav-group">기준 정보</p>
+      <ul class="grid gap-0.5">
+        {{ nav(url_for('catalog.companies'), "회사", endpoint in ("catalog.companies", "catalog.company_form"),
+               '<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/>') }}
+        {{ nav(url_for('catalog.codes'), "진단코드", endpoint in ("catalog.codes", "catalog.code_form"),
+               '<path d="M8 6l-6 6 6 6M16 6l6 6-6 6"/>') }}
+      </ul>
+      <p class="nav-group">설정</p>
+      <ul class="grid gap-0.5">
+        {{ nav(url_for('admin.ai_index'), "AI 연결", endpoint.startswith("admin.ai_"),
+               '<path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><rect x="7" y="7" width="10" height="10" rx="2"/>') }}
+        {{ nav(url_for('auth.account'), "내 계정·보안", endpoint == "auth.account",
+               '<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>') }}
+        <li>
+          <button type="button" class="nav-link w-full" data-install-reopen>
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+            <span>앱 설치 안내</span>
+          </button>
+        </li>
+      </ul>
+    </nav>
+
+    <div class="flex-none border-t border-ink-3 p-3">
+      <p class="truncate px-3 pb-2 text-sm text-on-ink-muted">{{ current_user.name }} <span class="text-xs">({{ current_user.tid }})</span></p>
+      <form method="post" action="{{ url_for('auth.logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="nav-link w-full">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+          <span>로그아웃</span>
+        </button>
+      </form>
+    </div>
+  </aside>
+
+  <div class="flex min-h-dvh min-w-0 flex-1 flex-col">
+    <header class="sticky top-0 z-30 flex h-14 items-center gap-2 bg-ink px-2 pt-[env(safe-area-inset-top)] text-on-ink lg:hidden">
+      <button type="button" class="btn btn-ghost btn-icon" data-drawer-toggle aria-controls="sidebar" aria-expanded="false" aria-label="메뉴 열기">
+        <svg aria-hidden="true" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      </button>
+      <a href="{{ url_for('admin.dashboard') }}" class="flex min-h-11 items-center">
+        <img src="{{ url_for('static', filename='brand/wecar-logo.png') }}" alt="WECAR" width="104" height="18" class="h-[18px] w-auto">
+      </a>
+      <span class="sr-only">관리자</span>
+    </header>
+
+    <main id="main" class="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8" tabindex="-1">
+      {% include "components/install_hint.html" %}
+      {{ flashes() }}
+      {% block content %}{% endblock %}
+    </main>
+
+    {% include "components/footer.html" %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,28 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, field %}
+{% block title %}{{ member.name }} 정보 수정{% endblock %}
+
+{% block content %}
+{{ page_header("회원 정보 수정", member.name ~ " (" ~ member.tid ~ ")", back=(url_for('members.show', user_id=member.id), "회원 상세")) }}
+
+<section class="card max-w-2xl">
+  <form method="post" class="card-body grid gap-5" novalidate>
+    {{ form.hidden_tag() }}
+    {{ field(form.name, autocomplete="off") }}
+    <div class="grid gap-5 sm:grid-cols-2">
+      {{ field(form.type, tip="관리자로 바꾸면 이 관리 화면에 로그인할 수 있습니다. 스캔 조회 범위도 유형에 따라 달라집니다.") }}
+      {{ field(form.company_id) }}
+    </div>
+    <div class="grid gap-5 sm:grid-cols-2">
+      {{ field(form.mobile, inputmode="tel", autocomplete="off", placeholder="010-1234-5678") }}
+      {{ field(form.email, autocomplete="off") }}
+    </div>
+    {{ field(form.biz_no, inputmode="numeric", autocomplete="off", placeholder="123-45-67890") }}
+    <p class="text-sm text-muted">아이디와 비밀번호는 여기서 바꿀 수 없습니다. 비밀번호는 회원이 앱에서 휴대전화 인증으로 재설정합니다.</p>
+    <div class="flex flex-wrap gap-2">
+      <button type="submit" class="btn btn-primary">저장</button>
+      <a class="btn btn-secondary" href="{{ url_for('members.show', user_id=member.id) }}">취소</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

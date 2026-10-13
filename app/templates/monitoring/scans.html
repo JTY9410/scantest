@@ -1,0 +1,46 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, pager, badge, empty %}
+{% from "monitoring/_filters.html" import filter_bar %}
+{% block title %}스캔 기록{% endblock %}
+
+{% block content %}
+{{ page_header("스캔 기록", "앱에서 올라온 차량 진단 결과입니다. 이 화면에서는 조회만 할 수 있습니다.") }}
+
+{% call filter_bar("monitoring.scans", params, "차량번호, 차대번호, 모델", member) %}
+  <div class="field">
+    <label for="type" class="field-label">차종</label>
+    <select id="type" name="type" class="input">
+      <option value="">전체</option>
+      {% for t in types %}<option value="{{ t.value }}" {% if scan_type == t.value %}selected{% endif %}>{{ t.label }}</option>{% endfor %}
+    </select>
+  </div>
+{% endcall %}
+
+<section class="card overflow-hidden" aria-label="스캔 목록">
+  {% if page.items %}
+  <table class="rtable">
+    <thead><tr><th scope="col">차량</th><th scope="col">차종</th><th scope="col">검사자</th><th scope="col">소속</th><th scope="col" class="num">주행거리</th><th scope="col">검사일</th></tr></thead>
+    <tbody>
+      {% for s in page.items %}
+      <tr>
+        <td data-primary>
+          <a href="{{ url_for('monitoring.scan_show', scan_id=s.id) }}" class="inline-flex min-h-11 flex-col justify-center font-semibold hover:underline">
+            <span>{{ s.car_no }}</span>
+            <span class="text-sm font-normal text-muted">{{ s.car_maker or "" }} {{ s.car_model }}</span>
+          </a>
+        </td>
+        <td data-label="차종">{{ badge(s.type_label, "info" if s.type == "ev" else "") }}</td>
+        <td data-label="검사자">{{ s.tester.name if s.tester else "-" }}</td>
+        <td data-label="소속">{{ s.company.name if s.company else "-" }}</td>
+        <td data-label="주행거리" class="num">{{ "{:,} km".format(s.car_distance) if s.car_distance is not none else "-" }}</td>
+        <td data-label="검사일" class="tabular-nums">{{ s.created_at|kst }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {{ pager(page, "monitoring.scans", filters) }}
+  {% else %}
+  {{ empty("조건에 맞는 스캔 기록이 없습니다.") }}
+  {% endif %}
+</section>
+{% endblock %}

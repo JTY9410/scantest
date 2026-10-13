@@ -1,0 +1,36 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, pager, empty %}
+{% block title %}회사{% endblock %}
+
+{% block content %}
+{% call page_header("회사", "앱 가입 때 기업코드로 연결되는 회사입니다.") %}
+  <a class="btn btn-primary" href="{{ url_for('catalog.company_form') }}">회사 등록</a>
+{% endcall %}
+
+<form method="get" class="card card-body mb-4 flex flex-col gap-2 sm:flex-row" role="search" aria-label="회사 검색">
+  <label for="q" class="sr-only">검색어</label>
+  <input id="q" name="q" type="search" value="{{ q }}" class="input sm:flex-1" placeholder="기업코드 또는 이름" enterkeyhint="search">
+  <button type="submit" class="btn btn-primary">검색</button>
+</form>
+
+<section class="card overflow-hidden" aria-label="회사 목록">
+  {% if page.items %}
+  <table class="rtable">
+    <thead><tr><th scope="col">이름</th><th scope="col">기업코드</th><th scope="col">등록일</th><th scope="col"><span class="sr-only">관리</span></th></tr></thead>
+    <tbody>
+      {% for c in page.items %}
+      <tr>
+        <td data-primary class="font-semibold">{{ c.name }}</td>
+        <td data-label="기업코드" class="mono">{{ c.code }}</td>
+        <td data-label="등록일" class="tabular-nums">{{ c.created_at|kst }}</td>
+        <td data-label="관리"><a class="btn btn-secondary" href="{{ url_for('catalog.company_form', company_id=c.id) }}">수정<span class="sr-only"> ({{ c.name }})</span></a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {{ pager(page, "catalog.companies", {"q": q} if q else {}) }}
+  {% else %}
+  {{ empty("등록된 회사가 없습니다." if not q else "검색 결과가 없습니다.") }}
+  {% endif %}
+</section>
+{% endblock %}

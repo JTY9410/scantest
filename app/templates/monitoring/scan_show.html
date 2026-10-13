@@ -1,0 +1,65 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge, empty %}
+{% block title %}스캔 {{ scan.car_no }}{% endblock %}
+
+{% block content %}
+{% call page_header(scan.car_no, (scan.car_maker or "") ~ " " ~ scan.car_model, back=(url_for('monitoring.scans'), "스캔 기록")) %}
+  {{ badge(scan.type_label, "info" if scan.type == "ev" else "") }}
+{% endcall %}
+
+<div class="grid gap-6 lg:grid-cols-2">
+  <section class="card" aria-labelledby="car-title">
+    <div class="card-body">
+      <h2 id="car-title" class="text-lg font-bold">차량 정보</h2>
+      <dl class="dl mt-4">
+        <dt>차량번호</dt><dd>{{ scan.car_no }}</dd>
+        <dt>차대번호</dt><dd class="mono">{{ scan.car_vin }}</dd>
+        <dt>스캔 차대번호</dt><dd class="mono">{{ scan.scan_vin or "-" }}</dd>
+        <dt>제조사·모델</dt><dd>{{ scan.car_maker or "-" }} / {{ scan.car_model }} {{ scan.car_submodel or "" }}</dd>
+        <dt>연식</dt><dd class="tabular-nums">{{ scan.car_year or "-" }}</dd>
+        <dt>배기량</dt><dd class="tabular-nums">{{ "{:,} cc".format(scan.car_cc) if scan.car_cc is not none else "-" }}</dd>
+        <dt>연료</dt><dd>{{ scan.car_fuel or "-" }}</dd>
+        <dt>주행거리</dt><dd class="tabular-nums">{{ "{:,} km".format(scan.car_distance) if scan.car_distance is not none else "-" }}</dd>
+        {% if scan.type == "ev" %}
+        <dt>배터리 용량</dt><dd class="tabular-nums">{{ scan.car_battery_capacity if scan.car_battery_capacity is not none else "-" }}</dd>
+        <dt>누적 방전량</dt><dd class="tabular-nums">{{ scan.car_discharge_energy if scan.car_discharge_energy is not none else "-" }}</dd>
+        <dt>누적 충전량</dt><dd class="tabular-nums">{{ scan.car_charge_energy if scan.car_charge_energy is not none else "-" }}</dd>
+        {% endif %}
+      </dl>
+    </div>
+  </section>
+
+  <section class="card" aria-labelledby="scan-title">
+    <div class="card-body">
+      <h2 id="scan-title" class="text-lg font-bold">검사 정보</h2>
+      <dl class="dl mt-4">
+        <dt>검사일</dt><dd class="tabular-nums">{{ scan.created_at|kst }}</dd>
+        <dt>검사자</dt><dd>{% if scan.tester %}<a class="underline" href="{{ url_for('members.show', user_id=scan.tester.id) }}">{{ scan.tester.name }} ({{ scan.tester.tid }})</a>{% else %}-{% endif %}</dd>
+        <dt>소유자</dt><dd>{% if scan.owner %}<a class="underline" href="{{ url_for('members.show', user_id=scan.owner.id) }}">{{ scan.owner.name }} ({{ scan.owner.tid }})</a>{% else %}-{% endif %}</dd>
+        <dt>소속 회사</dt><dd>{{ scan.company.name if scan.company else "-" }}</dd>
+        <dt>장비</dt><dd>{{ scan.device_type }} <span class="mono text-sm text-muted">{{ scan.device_uid }}</span></dd>
+      </dl>
+    </div>
+  </section>
+</div>
+
+<section class="card mt-6 overflow-hidden" aria-labelledby="codes-title">
+  <div class="card-body pb-2"><h2 id="codes-title" class="text-lg font-bold">검출된 고장코드 <span class="text-muted">{{ scan.scan_codes|length }}</span></h2></div>
+  {% if scan.scan_codes %}
+  <table class="rtable">
+    <thead><tr><th scope="col">고장코드</th><th scope="col">유니트</th><th scope="col">설명</th></tr></thead>
+    <tbody>
+      {% for sc in scan.scan_codes %}
+      <tr>
+        <td data-primary class="mono font-semibold">{{ sc.code.code }}</td>
+        <td data-label="유니트">{{ sc.code.unit_name }}</td>
+        <td data-label="설명">{{ sc.code.desc or "-" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("검출된 고장코드가 없습니다.") }}
+  {% endif %}
+</section>
+{% endblock %}

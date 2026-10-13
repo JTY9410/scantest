@@ -1,0 +1,18 @@
+{% extends "layouts/auth.html" %}
+{% from "components/ui.html" import field %}
+{% block title %}2단계 인증{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold">2단계 인증</h1>
+<p class="mt-1 text-muted">인증 앱(Google Authenticator 등)에 표시된 6자리 코드를 입력하세요.</p>
+
+<form method="post" class="mt-8 grid gap-5" novalidate>
+  {{ form.hidden_tag() }}
+  {{ field(form.code, autocomplete="one-time-code", inputmode="numeric", pattern="[0-9]*", maxlength="6", autofocus=true) }}
+  <button type="submit" class="btn btn-primary w-full">확인</button>
+</form>
+
+<p class="mt-6 text-sm">
+  <a class="font-medium underline" href="{{ url_for('auth.login') }}">다른 계정으로 로그인</a>
+</p>
+{% endblock %}

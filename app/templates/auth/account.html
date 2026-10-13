@@ -1,0 +1,76 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import field, page_header, badge %}
+{% block title %}내 계정·보안{% endblock %}
+
+{% block content %}
+{{ page_header("내 계정·보안", "비밀번호와 2단계 인증(OTP)을 관리합니다.") }}
+
+<div class="grid gap-6 lg:grid-cols-2">
+  <section class="card" aria-labelledby="pw-title">
+    <div class="card-body">
+      <h2 id="pw-title" class="text-lg font-bold">비밀번호 변경</h2>
+      <p class="mt-1 text-sm text-muted">처음 전달받은 비밀번호는 바로 바꾸세요.</p>
+      <form method="post" action="{{ url_for('auth.account') }}" class="mt-6 grid gap-5" novalidate>
+        {{ password_form.hidden_tag() }}
+        {{ field(password_form.current_password, autocomplete="current-password") }}
+        {{ field(password_form.new_password, help="10자 이상. 다른 서비스와 같은 비밀번호는 피하세요.", autocomplete="new-password") }}
+        {{ field(password_form.confirm_password, autocomplete="new-password") }}
+        <div><button type="submit" class="btn btn-primary">비밀번호 변경</button></div>
+      </form>
+    </div>
+  </section>
+
+  <section id="mfa" class="card" aria-labelledby="mfa-title">
+    <div class="card-body">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <h2 id="mfa-title" class="text-lg font-bold">2단계 인증(OTP)</h2>
+        {% if current_user.mfa_enabled %}{{ badge("사용 중", "success") }}{% else %}{{ badge("꺼짐", "warning") }}{% endif %}
+      </div>
+      <p class="mt-1 text-sm text-muted">켜면 로그인할 때 비밀번호와 함께 인증 앱의 6자리 코드를 입력합니다.</p>
+
+      {% if not encryption_ready %}
+      <div class="flash flash-warning mt-6"><span aria-hidden="true" class="font-bold">!</span><p>서버에 ENCRYPTION_KEY가 설정되지 않아 OTP를 등록할 수 없습니다.</p></div>
+
+      {% elif current_user.mfa_enabled %}
+      <form method="post" action="{{ url_for('auth.mfa_disable') }}" class="mt-6 grid gap-5" novalidate
+            data-confirm="2단계 인증을 끄시겠습니까? 계정 보안이 약해집니다.">
+        {{ otp_form.hidden_tag() }}
+        {{ field(otp_form.code, help="끄려면 현재 코드를 입력하세요.", autocomplete="one-time-code", inputmode="numeric", maxlength="6") }}
+        <div><button type="submit" class="btn btn-danger">2단계 인증 끄기</button></div>
+      </form>
+
+      {% elif setup_secret %}
+      <ol class="mt-6 grid list-decimal gap-2 pl-5 text-sm">
+        <li>인증 앱에서 아래 QR 코드를 스캔하세요.</li>
+        <li>스캔할 수 없으면 설정 키를 직접 입력하세요.</li>
+        <li>앱에 표시된 6자리 코드를 입력해 등록을 마칩니다.</li>
+      </ol>
+      <div class="mt-4 flex flex-col items-start gap-4 sm:flex-row">
+        <div class="qr w-44 flex-none rounded-md border border-line bg-white p-2" role="img" aria-label="OTP 등록용 QR 코드">{{ setup_qr }}</div>
+        <div class="min-w-0">
+          <p class="text-sm text-muted">설정 키</p>
+          <p class="mono mt-1 select-all break-all rounded-sm bg-surface-2 px-2 py-1 text-sm">{{ setup_secret }}</p>
+        </div>
+      </div>
+      <form method="post" action="{{ url_for('auth.mfa_confirm') }}" class="mt-6 grid gap-5" novalidate>
+        {{ otp_form.hidden_tag() }}
+        {{ field(otp_form.code, autocomplete="one-time-code", inputmode="numeric", maxlength="6") }}
+        <div class="flex flex-wrap gap-2">
+          <button type="submit" class="btn btn-primary">등록 완료</button>
+        </div>
+      </form>
+      <form method="post" action="{{ url_for('auth.mfa_cancel') }}" class="mt-2">
+        {{ action_form.hidden_tag() }}
+        <button type="submit" class="btn btn-ghost">취소</button>
+      </form>
+
+      {% else %}
+      <form method="post" action="{{ url_for('auth.mfa_start') }}" class="mt-6">
+        {{ action_form.hidden_tag() }}
+        <button type="submit" class="btn btn-primary">2단계 인증 설정 시작</button>
+      </form>
+      {% endif %}
+    </div>
+  </section>
+</div>
+{% endblock %}

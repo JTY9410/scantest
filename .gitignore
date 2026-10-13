@@ -1,26 +1,27 @@
-/node_modules
-/public/hot
-/public/storage
-/storage/*.key
-/vendor
+# 비밀값
 .env
 .env.*
 !.env.example
-.env.backup
-deploy_*.log
-.phpunit.result.cache
-docker-compose.override.yml
-Homestead.json
-Homestead.yaml
-npm-debug.log
-yarn-error.log
-/.idea
-/.vscode
-*.sublime-project
-*.sublime-workspace
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+
+# 프론트 빌드
+/node_modules/
+/app/static/dist/
+
+# 로컬 데이터(이전 Laravel 실행 데이터 포함)
+/_storage/
+/instance/
+
+# 편집기·OS
+/.idea/
+/.vscode/
 .DS_Store
 Thumbs.db
-
-# Storage directories
-/_storage/
-.vercel

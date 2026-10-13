@@ -1,0 +1,29 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, field %}
+{% block title %}{{ "진단코드 수정" if code else "진단코드 등록" }}{% endblock %}
+
+{% block content %}
+{{ page_header("진단코드 수정" if code else "진단코드 등록", code.code if code else None, back=(url_for('catalog.codes'), "진단코드 목록")) }}
+
+<section class="card max-w-3xl">
+  <form method="post" class="card-body grid gap-5" novalidate>
+    {{ form.hidden_tag() }}
+    <div class="grid gap-5 sm:grid-cols-2">
+      {{ field(form.type) }}
+      {{ field(form.code, autocapitalize="characters", spellcheck="false") }}
+      {{ field(form.unit_name) }}
+      {{ field(form.unit_type) }}
+    </div>
+    {{ field(form.desc, rows="3") }}
+    {{ field(form.detail_desc, rows="4") }}
+    {{ field(form.root_cause, rows="3") }}
+    {{ field(form.howto_fix1, rows="3") }}
+    {{ field(form.howto_fix2, rows="3") }}
+    {{ field(form.howto_fix3, rows="3") }}
+    <div class="flex flex-wrap gap-2">
+      <button type="submit" class="btn btn-primary">저장</button>
+      <a class="btn btn-secondary" href="{{ url_for('catalog.codes') }}">취소</a>
+    </div>
+  </form>
+</section>
+{% endblock %}

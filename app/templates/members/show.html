@@ -1,0 +1,78 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, member_badge, badge, empty %}
+{% block title %}{{ member.name }} 회원{% endblock %}
+
+{% block content %}
+{% call page_header(member.name, member.tid, back=(url_for('members.index'), "회원 목록")) %}
+  {% if not member.deleted_at %}
+  <a class="btn btn-primary" href="{{ url_for('members.edit', user_id=member.id) }}">정보 수정</a>
+  {% endif %}
+{% endcall %}
+
+<div class="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+  <section class="card" aria-labelledby="info-title">
+    <div class="card-body">
+      <div class="flex items-center justify-between gap-2">
+        <h2 id="info-title" class="text-lg font-bold">기본 정보</h2>
+        {{ member_badge(member) }}
+      </div>
+      <dl class="dl mt-4">
+        <dt>아이디</dt><dd class="mono">{{ member.tid }}</dd>
+        <dt>이름</dt><dd>{{ member.name }}</dd>
+        <dt>유형</dt><dd>{{ member.type_label }}</dd>
+        <dt>소속 회사</dt><dd>{{ member.company.name ~ " (" ~ member.company.code ~ ")" if member.company else "-" }}</dd>
+        <dt>휴대전화</dt><dd class="tabular-nums">{{ member.formatted_mobile or "-" }}</dd>
+        <dt>이메일</dt><dd>{{ member.email or "-" }}</dd>
+        <dt>사업자등록번호</dt><dd class="tabular-nums">{{ member.formatted_biz_no or "-" }}</dd>
+        <dt>2단계 인증</dt><dd>{{ badge("사용", "success") if member.mfa_enabled else "-" }}</dd>
+        <dt>가입일</dt><dd class="tabular-nums">{{ member.created_at|kst }}</dd>
+        <dt>최근 로그인</dt><dd class="tabular-nums">{{ member.last_login_at|kst }}</dd>
+        {% if member.deleted_at %}<dt>탈퇴일</dt><dd class="tabular-nums">{{ member.deleted_at|kst }}</dd>{% endif %}
+      </dl>
+    </div>
+  </section>
+
+  <div class="grid content-start gap-6">
+    <section class="card" aria-labelledby="usage-title">
+      <div class="card-body">
+        <h2 id="usage-title" class="text-lg font-bold">이용 기록</h2>
+        <ul class="mt-4 grid grid-cols-2 gap-3">
+          {% set links = [
+            ("검사한 스캔", summary.scans_tested, url_for('monitoring.scans', user_id=member.id)),
+            ("소유 차량 스캔", summary.scans_owned, url_for('monitoring.scans', user_id=member.id)),
+            ("앱 로그", summary.applogs, url_for('monitoring.applogs', user_id=member.id)),
+            ("불일치 신고", summary.reports, url_for('monitoring.reports', user_id=member.id)),
+          ] %}
+          {% for label, value, href in links %}
+          <li>
+            <a href="{{ href }}" class="block rounded-md border border-line p-3 hover:border-line-strong">
+              <span class="block text-sm text-muted">{{ label }}</span>
+              <span class="mt-1 block text-xl font-bold tabular-nums">{{ "{:,}".format(value) }}</span>
+            </a>
+          </li>
+          {% endfor %}
+        </ul>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="history-title">
+      <div class="card-body pb-2">
+        <h2 id="history-title" class="text-lg font-bold">변경 이력</h2>
+      </div>
+      {% if summary.activities %}
+      <ul class="divide-y divide-line">
+        {% for a in summary.activities %}
+        <li class="px-4 py-3 sm:px-6">
+          <p class="flex flex-wrap justify-between gap-x-3"><span class="font-medium">{{ a.relation_type }}</span>
+            <time class="text-sm text-muted tabular-nums" datetime="{{ a.created_at.isoformat() }}">{{ a.created_at|kst }}</time></p>
+          <p class="text-sm text-muted">{{ a.user.name if a.user else "시스템" }}{% if a.changes %} · {{ a.changes.keys()|join(", ") }}{% endif %}</p>
+        </li>
+        {% endfor %}
+      </ul>
+      {% else %}
+      {{ empty("변경 이력이 없습니다.") }}
+      {% endif %}
+    </section>
+  </div>
+</div>
+{% endblock %}

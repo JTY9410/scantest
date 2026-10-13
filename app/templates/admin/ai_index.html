@@ -1,0 +1,41 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, ai_status_badge, badge %}
+{% block title %}AI 연결{% endblock %}
+
+{% block content %}
+{{ page_header("AI 연결", "외부 AI 공급자의 모델·사용 기능·한도와 API 키를 관리합니다.") }}
+
+{% if not encryption_ready %}
+<div class="flash flash-warning mb-6"><span aria-hidden="true" class="font-bold">!</span>
+  <p>서버에 ENCRYPTION_KEY가 설정되지 않아 API 키를 저장할 수 없습니다. 운영 환경 변수에 키를 설정한 뒤 다시 시도하세요.</p></div>
+{% endif %}
+
+<div class="grid gap-4 md:grid-cols-3">
+  {% for p in providers %}
+  {% set c = connections[p.value] %}
+  <article class="card flex flex-col">
+    <div class="card-body flex flex-1 flex-col gap-3">
+      <div class="flex items-start justify-between gap-2">
+        <h2 class="text-lg font-bold">{{ p.label }}</h2>
+        {{ ai_status_badge(c) }}
+      </div>
+      <dl class="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        <dt class="text-muted">모델</dt><dd class="mono break-all">{{ c.model if c else "-" }}</dd>
+        <dt class="text-muted">API 키</dt><dd class="mono">{{ "••••" ~ c.key_last4 if c and c.key_last4 else "없음" }}</dd>
+        <dt class="text-muted">최근 테스트</dt><dd>{{ c.last_tested_at|kst if c else "-" }}</dd>
+      </dl>
+      <div class="flex flex-wrap gap-1">
+        {% for f in features_summary(c) if f.on %}{{ badge(f.label, "info") }}{% else %}<span class="text-sm text-muted">사용 중인 기능 없음</span>{% endfor %}
+      </div>
+      <div class="mt-auto pt-2">
+        <a class="btn btn-secondary w-full" href="{{ url_for('admin.ai_edit', provider=p.value) }}">{{ "설정 변경" if c else "연결 설정" }}<span class="sr-only"> ({{ p.label }})</span></a>
+      </div>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+
+<p class="mt-6 text-sm text-muted">
+  API 키는 서버에서 암호화해 보관하며 화면에는 끝 4자리만 표시합니다. 설정 변경·키 교체·폐기·연결 테스트는 모두 활동 기록에 남습니다.
+</p>
+{% endblock %}

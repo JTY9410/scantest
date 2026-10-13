@@ -1,0 +1,13 @@
+{
+  "name": "wecarscan-assets",
+  "private": true,
+  "description": "관리자 화면 CSS 빌드(Tailwind CSS)",
+  "scripts": {
+    "build:css": "tailwindcss -i app/static/css/app.css -o app/static/dist/app.css --minify",
+    "watch:css": "tailwindcss -i app/static/css/app.css -o app/static/dist/app.css --watch=always"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "tailwindcss": "4.3.3"
+  }
+}

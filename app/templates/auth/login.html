@@ -1,0 +1,19 @@
+{% extends "layouts/auth.html" %}
+{% from "components/ui.html" import field %}
+{% block title %}로그인{% endblock %}
+
+{% block content %}
+<h1 class="text-2xl font-bold">관리자 로그인</h1>
+<p class="mt-1 text-muted">관리자 계정으로 로그인하세요.</p>
+
+<form method="post" class="mt-8 grid gap-5" novalidate>
+  {{ form.hidden_tag() }}
+  {{ field(form.tid, autocomplete="username", autocapitalize="none", spellcheck="false", autofocus=true) }}
+  {{ field(form.password, autocomplete="current-password") }}
+  <button type="submit" class="btn btn-primary w-full">로그인</button>
+</form>
+
+<p class="mt-6 text-sm text-muted">
+  여러 번 틀리면 잠시 로그인이 제한됩니다. 계정 문제는 시스템 담당자에게 문의하세요.
+</p>
+{% endblock %}

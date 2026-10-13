@@ -1,0 +1,113 @@
+{# 공통 UI 매크로. 화면마다 같은 마크업을 복사하지 않고 여기서 가져다 쓴다. #}
+
+{% macro tooltip(id, text, label="도움말") -%}
+<span class="tip" data-open="false">
+  <button type="button" class="tip-trigger" aria-label="{{ label }}" aria-describedby="{{ id }}" aria-expanded="false">
+    <span aria-hidden="true">?</span>
+  </button>
+  <span role="tooltip" id="{{ id }}" class="tip-body">{{ text }}</span>
+</span>
+{%- endmacro %}
+
+{% macro field(f, help=None, tip=None, class_="") -%}
+{% set described = [] %}
+{% if help %}{% do described.append(f.id ~ "-help") %}{% endif %}
+{% if f.errors %}{% do described.append(f.id ~ "-error") %}{% endif %}
+{% set attrs = kwargs %}
+{% do attrs.update({"class": "input"}) %}
+{% if described %}{% do attrs.update({"aria-describedby": described|join(" ")}) %}{% endif %}
+{% if f.errors %}{% do attrs.update({"aria-invalid": "true"}) %}{% endif %}
+<div class="field {{ class_ }}">
+  <div class="field-label-row">
+    <label class="field-label" for="{{ f.id }}">{{ f.label.text }}{% if f.flags.required %}<span class="field-req" aria-hidden="true">*</span><span class="sr-only">(필수)</span>{% endif %}</label>
+    {% if tip %}{{ tooltip(f.id ~ "-tip", tip) }}{% endif %}
+  </div>
+  {{ f(**attrs) }}
+  {% if help %}<p class="field-help" id="{{ f.id }}-help">{{ help }}</p>{% endif %}
+  {% if f.errors %}<p class="field-error" id="{{ f.id }}-error">{{ f.errors|join(" ") }}</p>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro flashes() -%}
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="mb-6 grid gap-2" role="status" aria-live="polite">
+  {% for category, message in messages %}
+  {% set tone = category if category in ("success", "error", "info", "warning") else "info" %}
+  <div class="flash flash-{{ tone }}">
+    <span aria-hidden="true" class="font-bold">{{ {"success": "✓", "error": "!", "warning": "!", "info": "i"}[tone] }}</span>
+    <p>{{ message }}</p>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+{%- endmacro %}
+
+{% macro badge(text, tone="") -%}
+<span class="badge {% if tone %}badge-{{ tone }}{% endif %}">{{ text }}</span>
+{%- endmacro %}
+
+{% macro member_badge(user) -%}
+{% if user.deleted_at %}{{ badge("탈퇴", "danger") }}
+{% elif user.type == "admin" %}{{ badge(user.type_label, "ink") }}
+{% elif user.type == "owner" %}{{ badge(user.type_label, "info") }}
+{% else %}{{ badge(user.type_label) }}{% endif %}
+{%- endmacro %}
+
+{% macro ai_status_badge(connection) -%}
+{% set status = connection.status if connection else "no_key" %}
+{% set tone = {"ok": "success", "failed": "danger", "untested": "warning", "revoked": "danger"}.get(status, "") %}
+{{ badge(connection.status_label if connection else "설정 전", tone) }}
+{%- endmacro %}
+
+{% macro empty(title, body=None) -%}
+<div class="empty">
+  <svg aria-hidden="true" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 7l9-4 9 4-9 4-9-4z"/><path d="M3 12l9 4 9-4"/><path d="M3 17l9 4 9-4"/></svg>
+  <p class="font-semibold text-fg">{{ title }}</p>
+  {% if body %}<p class="text-sm">{{ body }}</p>{% endif %}
+  {% if caller %}<div class="mt-2">{{ caller() }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro pager(page, endpoint, args={}) -%}
+{% if page.total %}
+<nav class="pager border-t border-line px-4 py-3" aria-label="페이지 이동">
+  <p class="text-sm text-muted">
+    전체 <strong class="text-fg">{{ "{:,}".format(page.total) }}</strong>건 중 {{ page.first_index }}–{{ page.last_index }}
+  </p>
+  <div class="flex items-center gap-2">
+    {% if page.has_prev %}
+    <a class="btn btn-secondary" href="{{ url_for(endpoint, **dict(args, page=page.page - 1)) }}" rel="prev">이전</a>
+    {% else %}
+    <span class="btn btn-secondary" aria-disabled="true">이전</span>
+    {% endif %}
+    <span class="px-1 text-sm tabular-nums" aria-current="page">{{ page.page }} / {{ page.last_page }}</span>
+    {% if page.has_next %}
+    <a class="btn btn-secondary" href="{{ url_for(endpoint, **dict(args, page=page.page + 1)) }}" rel="next">다음</a>
+    {% else %}
+    <span class="btn btn-secondary" aria-disabled="true">다음</span>
+    {% endif %}
+  </div>
+</nav>
+{% endif %}
+{%- endmacro %}
+
+{% macro page_header(title, description=None, back=None) -%}
+<div class="mb-6 flex flex-wrap items-end justify-between gap-4">
+  <div class="min-w-0">
+    {% if back %}
+    <a href="{{ back[0] }}" class="mb-2 inline-flex min-h-11 items-center gap-1 text-sm font-medium text-muted hover:text-fg">
+      <span aria-hidden="true">←</span> {{ back[1] }}
+    </a>
+    {% endif %}
+    <h1 class="text-2xl font-bold sm:text-[1.75rem]">{{ title }}</h1>
+    {% if description %}<p class="mt-1 text-muted">{{ description }}</p>{% endif %}
+  </div>
+  {% if caller %}<div class="flex flex-wrap gap-2">{{ caller() }}</div>{% endif %}
+</div>
+{%- endmacro %}
+
+{% macro csrf() -%}
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+{%- endmacro %}

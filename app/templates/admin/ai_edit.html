@@ -1,0 +1,93 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, field, ai_status_badge, tooltip %}
+{% block title %}{{ provider.label }} 연결{% endblock %}
+
+{% block content %}
+{% call page_header(provider.label ~ " 연결", None, back=(url_for('admin.ai_index'), "AI 연결")) %}
+  {{ ai_status_badge(connection) }}
+{% endcall %}
+
+<div class="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+  <section class="card" aria-labelledby="settings-title">
+    <div class="card-body">
+      <h2 id="settings-title" class="text-lg font-bold">모델과 사용 설정</h2>
+      <form method="post" class="mt-6 grid gap-5" novalidate>
+        {{ form.hidden_tag() }}
+        {{ field(form.model, help="공급자 문서의 모델 ID를 그대로 입력하세요.", autocapitalize="none", spellcheck="false") }}
+
+        <fieldset class="grid gap-2">
+          <legend class="field-label mb-2 flex items-center gap-1">사용할 기능
+            {{ tooltip("features-tip", "AI는 설명·검색·초안에만 씁니다. 권한·금액 계산·데이터 변경에는 쓰지 않습니다.") }}
+          </legend>
+          <ul class="check-list">
+            {% for choice in form.features %}
+            <li><label for="{{ choice.id }}">{{ choice() }}<span>{{ choice.label.text }}</span></label></li>
+            {% endfor %}
+          </ul>
+        </fieldset>
+
+        <div class="grid gap-5 sm:grid-cols-2">
+          {{ field(form.monthly_budget, help="비워 두면 상한 없음", inputmode="decimal") }}
+          {{ field(form.monthly_token_limit, help="비워 두면 상한 없음", inputmode="numeric") }}
+        </div>
+        <div><button type="submit" class="btn btn-primary">설정 저장</button></div>
+      </form>
+    </div>
+  </section>
+
+  <div class="grid content-start gap-6">
+    <section class="card" aria-labelledby="key-title">
+      <div class="card-body">
+        <h2 id="key-title" class="text-lg font-bold">API 키</h2>
+        {% if connection and connection.key_last4 %}
+        <p class="mt-2">현재 키 <span class="mono">••••{{ connection.key_last4 }}</span></p>
+        {% else %}
+        <p class="mt-2 text-muted">등록된 키가 없습니다.</p>
+        {% endif %}
+
+        {% if not connection %}
+        <p class="mt-4 text-sm text-muted">먼저 왼쪽에서 모델과 사용 설정을 저장하세요.</p>
+        {% elif not encryption_ready %}
+        <p class="mt-4 text-sm text-danger">ENCRYPTION_KEY가 없어 키를 저장할 수 없습니다.</p>
+        {% else %}
+        <form method="post" action="{{ url_for('admin.ai_key', provider=provider.value) }}" class="mt-4 grid gap-4" novalidate>
+          {{ key_form.hidden_tag() }}
+          {{ field(key_form.api_key, help="저장하면 암호화되고, 다시 표시되지 않습니다.", autocomplete="off", spellcheck="false") }}
+          <div><button type="submit" class="btn btn-primary">{{ "키 교체" if connection.has_key else "키 등록" }}</button></div>
+        </form>
+        {% endif %}
+      </div>
+    </section>
+
+    {% if connection %}
+    <section class="card" aria-labelledby="test-title">
+      <div class="card-body">
+        <h2 id="test-title" class="text-lg font-bold">연결 테스트</h2>
+        <p class="mt-2 text-sm text-muted">
+          최근 테스트: {{ connection.last_tested_at|kst }}
+          {% if connection.last_test_message %}<br>{{ connection.last_test_message }}{% endif %}
+        </p>
+        <form method="post" action="{{ url_for('admin.ai_test', provider=provider.value) }}" class="mt-4">
+          {{ action_form.hidden_tag() }}
+          <button type="submit" class="btn btn-secondary" {% if not connection.has_key %}disabled{% endif %}>연결 테스트 실행</button>
+        </form>
+      </div>
+    </section>
+
+    {% if connection.has_key %}
+    <section class="card border-danger/40" aria-labelledby="revoke-title">
+      <div class="card-body">
+        <h2 id="revoke-title" class="text-lg font-bold text-danger">키 폐기</h2>
+        <p class="mt-2 text-sm text-muted">키를 지우고 이 공급자를 쓰는 기능을 모두 끕니다. 공급자 콘솔에서도 키를 폐기하세요.</p>
+        <form method="post" action="{{ url_for('admin.ai_revoke', provider=provider.value) }}" class="mt-4"
+              data-confirm="{{ provider.label }} API 키를 폐기하시겠습니까?">
+          {{ action_form.hidden_tag() }}
+          <button type="submit" class="btn btn-danger">키 폐기</button>
+        </form>
+      </div>
+    </section>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

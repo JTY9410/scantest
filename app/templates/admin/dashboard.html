@@ -1,0 +1,61 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, ai_status_badge, empty %}
+{% block title %}대시보드{% endblock %}
+
+{% macro stat(label, value, href, note=None) -%}
+<a href="{{ href }}" class="card card-body block transition-colors hover:border-line-strong">
+  <p class="text-sm font-medium text-muted">{{ label }}</p>
+  <p class="mt-2 text-3xl font-bold tabular-nums">{{ "{:,}".format(value) }}</p>
+  {% if note %}<p class="mt-1 text-sm text-muted">{{ note }}</p>{% endif %}
+</a>
+{%- endmacro %}
+
+{% block content %}
+{{ page_header("대시보드", current_user.name ~ "님, 오늘의 현황입니다.") }}
+
+<section aria-label="주요 지표" class="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 xl:grid-cols-4">
+  {{ stat("이용 중인 회원", stats.members, url_for('members.index'), "테스터 " ~ "{:,}".format(stats.testers) ~ " · 소유자 " ~ "{:,}".format(stats.owners)) }}
+  {{ stat("스캔 기록", stats.scans, url_for('monitoring.scans'), "최근 7일 " ~ "{:,}".format(stats.scans_week) ~ "건") }}
+  {{ stat("불일치 신고", stats.reports, url_for('monitoring.reports')) }}
+  {{ stat("앱 로그(최근 7일)", stats.applogs_week, url_for('monitoring.applogs')) }}
+</section>
+
+<div class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+  <section class="card" aria-labelledby="recent-title">
+    <div class="flex items-center justify-between gap-2 px-4 pt-4 sm:px-6">
+      <h2 id="recent-title" class="text-lg font-bold">최근 활동</h2>
+      <a class="inline-flex min-h-11 items-center text-sm font-medium underline" href="{{ url_for('monitoring.activities') }}">전체 보기</a>
+    </div>
+    {% if activities %}
+    <ul class="mt-2 divide-y divide-line">
+      {% for a in activities %}
+      <li class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 px-4 py-3 sm:px-6">
+        <p class="min-w-0"><span class="font-medium">{{ a.relation_type }}</span>
+          <span class="text-sm text-muted">· {{ a.user.name if a.user else "시스템" }}</span></p>
+        <time class="text-sm text-muted tabular-nums" datetime="{{ a.created_at.isoformat() }}">{{ a.created_at|kst }}</time>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    {{ empty("아직 활동 기록이 없습니다.") }}
+    {% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="ai-title">
+    <div class="card-body">
+      <div class="flex items-center justify-between gap-2">
+        <h2 id="ai-title" class="text-lg font-bold">AI 연결</h2>
+        <a class="inline-flex min-h-11 items-center text-sm font-medium underline" href="{{ url_for('admin.ai_index') }}">설정</a>
+      </div>
+      <ul class="mt-3 grid gap-2">
+        {% for p in providers %}
+        <li class="flex items-center justify-between gap-2">
+          <span>{{ p.label }}</span>
+          {{ ai_status_badge(connections[p.value]) }}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+</div>
+{% endblock %}

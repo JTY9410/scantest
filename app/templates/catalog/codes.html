@@ -1,0 +1,49 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, pager, badge, empty %}
+{% block title %}진단코드{% endblock %}
+
+{% block content %}
+{% call page_header("진단코드", "앱 진단 결과에 표시되는 고장코드 설명과 조치 방법입니다.") %}
+  <a class="btn btn-primary" href="{{ url_for('catalog.code_form') }}">진단코드 등록</a>
+{% endcall %}
+
+<form method="get" class="card card-body mb-4 grid gap-2 sm:grid-cols-[10rem_1fr_auto]" role="search" aria-label="진단코드 검색" data-autosubmit>
+  <div>
+    <label for="type" class="sr-only">차종</label>
+    <select id="type" name="type" class="input">
+      <option value="">전체 차종</option>
+      {% for t in types %}<option value="{{ t.value }}" {% if code_type == t.value %}selected{% endif %}>{{ t.label }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="q" class="sr-only">검색어</label>
+    <input id="q" name="q" type="search" value="{{ q }}" class="input" placeholder="고장코드, 유니트명, 설명" enterkeyhint="search">
+  </div>
+  <button type="submit" class="btn btn-primary">검색</button>
+</form>
+
+<section class="card overflow-hidden" aria-label="진단코드 목록">
+  {% if page.items %}
+  <table class="rtable">
+    <thead><tr><th scope="col">고장코드</th><th scope="col">차종</th><th scope="col">유니트</th><th scope="col">설명</th><th scope="col"><span class="sr-only">관리</span></th></tr></thead>
+    <tbody>
+      {% for c in page.items %}
+      <tr>
+        <td data-primary class="mono font-semibold">{{ c.code }}</td>
+        <td data-label="차종">{{ badge("전기차" if c.type == "ev" else "내연기관", "info" if c.type == "ev" else "") }}</td>
+        <td data-label="유니트">{{ c.unit_name }}{% if c.unit_type %} <span class="text-sm text-muted">({{ c.unit_type }})</span>{% endif %}</td>
+        <td data-label="설명" class="max-w-xs"><span class="line-clamp-2">{{ c.desc or "-" }}</span></td>
+        <td data-label="관리"><a class="btn btn-secondary" href="{{ url_for('catalog.code_form', code_id=c.id) }}">수정<span class="sr-only"> ({{ c.code }})</span></a></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% set args = {} %}
+  {% if q %}{% do args.update({"q": q}) %}{% endif %}
+  {% if code_type %}{% do args.update({"type": code_type}) %}{% endif %}
+  {{ pager(page, "catalog.codes", args) }}
+  {% else %}
+  {{ empty("조건에 맞는 진단코드가 없습니다.") }}
+  {% endif %}
+</section>
+{% endblock %}

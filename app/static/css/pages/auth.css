@@ -1,0 +1,10 @@
+/* 로그인·OTP 화면 전용. 환영 영역에만 그라데이션과 글래스 패널을 쓴다. */
+@layer components {
+  .auth-welcome {
+    background:
+      radial-gradient(120% 80% at 10% 0%, #3a3d47 0%, transparent 60%),
+      radial-gradient(90% 70% at 100% 100%, #23252c 0%, transparent 55%),
+      var(--wc-color-ink);
+    color: var(--wc-color-on-ink);
+  }
+}

@@ -1,0 +1,47 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, pager, empty %}
+{% from "monitoring/_filters.html" import filter_bar %}
+{% block title %}활동 기록{% endblock %}
+
+{% block content %}
+{{ page_header("활동 기록", "누가 언제 무엇을 했는지 남긴 감사 기록입니다. 비밀번호·키 같은 비밀값은 기록하지 않습니다.") }}
+
+{% call filter_bar("monitoring.activities", params, "행동 또는 메시지") %}
+  <div class="field">
+    <label for="relation" class="field-label">대상</label>
+    <select id="relation" name="relation" class="input">
+      <option value="">전체</option>
+      {% for r in relations %}<option value="{{ r }}" {% if relation == r %}selected{% endif %}>{{ r }}</option>{% endfor %}
+    </select>
+  </div>
+{% endcall %}
+
+<section class="card overflow-hidden" aria-label="활동 기록 목록">
+  {% if page.items %}
+  <table class="rtable">
+    <thead><tr><th scope="col">행동</th><th scope="col">대상</th><th scope="col">수행자</th><th scope="col">IP</th><th scope="col">시각</th></tr></thead>
+    <tbody>
+      {% for a in page.items %}
+      <tr>
+        <td data-primary>
+          <details>
+            <summary class="inline-flex min-h-11 cursor-pointer items-center font-semibold">{{ a.relation_type }}</summary>
+            {% if a.message %}<p class="text-sm">{{ a.message }}</p>{% endif %}
+            {% if a.changes %}<pre class="mono mt-1 max-h-60 overflow-auto rounded-sm bg-surface-2 p-2 text-xs whitespace-pre-wrap">{{ a.changes|pretty_json }}</pre>{% endif %}
+            {% if not a.message and not a.changes %}<p class="text-sm text-muted">추가 정보 없음</p>{% endif %}
+          </details>
+        </td>
+        <td data-label="대상">{{ a.relation }}{% if a.relation_id %} <span class="mono text-sm text-muted">#{{ a.relation_id }}</span>{% endif %}</td>
+        <td data-label="수행자">{% if a.user %}<a class="underline" href="{{ url_for('members.show', user_id=a.user.id) }}">{{ a.user.name }}</a>{% else %}-{% endif %}</td>
+        <td data-label="IP" class="mono text-sm">{{ a.ip or "-" }}</td>
+        <td data-label="시각" class="tabular-nums">{{ a.created_at|kst }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {{ pager(page, "monitoring.activities", filters) }}
+  {% else %}
+  {{ empty("조건에 맞는 활동 기록이 없습니다.") }}
+  {% endif %}
+</section>
+{% endblock %}
