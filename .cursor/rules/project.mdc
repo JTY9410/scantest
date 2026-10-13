@@ -1,0 +1,6 @@
+---
+description: WecarScan 프로젝트 공통 규칙
+alwaysApply: true
+---
+
+작업 전에 `pro.md`와 `AGENTS.md`, `docs/superpowers/specs/`의 요구사항을 읽는다.
