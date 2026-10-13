@@ -1,5 +1,6 @@
 import os
 from datetime import timedelta
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from cryptography.fernet import Fernet
 from sqlalchemy.pool import NullPool
@@ -17,6 +18,17 @@ def _int(name: str, default: int) -> int:
     return int(value) if value else default
 
 
+def database_url() -> str | None:
+    """DATABASE_URL이 없으면 Vercel Supabase 연동이 넣어 주는 POSTGRES_URL을 쓴다.
+    psycopg가 거부하는 supa 쿼리 값은 지우고 드라이버를 psycopg로 지정한다."""
+    url = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
+    if not url or not url.startswith("postgres://"):
+        return url
+    parts = urlsplit(url)
+    query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if k != "supa"])
+    return urlunsplit(parts._replace(scheme="postgresql+psycopg", query=query))
+
+
 def engine_options() -> dict:
     """DATABASE_POOL=none: 서버리스(Vercel) + Supabase 트랜잭션 풀러용.
     함수 인스턴스가 연결을 붙잡지 않고, 풀러가 지원하지 않는 prepared statement를 끈다."""
@@ -30,7 +42,7 @@ class Config:
     APP_VERSION = os.environ.get("APP_VERSION", "2.0.0")
 
     SECRET_KEY = os.environ.get("SECRET_KEY")
-    SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
+    SQLALCHEMY_DATABASE_URI = database_url()
     SQLALCHEMY_ENGINE_OPTIONS = engine_options()
 
     JWT_SECRET = os.environ.get("JWT_SECRET")
