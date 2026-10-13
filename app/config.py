@@ -2,6 +2,7 @@ import os
 from datetime import timedelta
 
 from cryptography.fernet import Fernet
+from sqlalchemy.pool import NullPool
 
 
 def _bool(name: str, default: bool) -> bool:
@@ -16,13 +17,21 @@ def _int(name: str, default: int) -> int:
     return int(value) if value else default
 
 
+def engine_options() -> dict:
+    """DATABASE_POOL=none: 서버리스(Vercel) + Supabase 트랜잭션 풀러용.
+    함수 인스턴스가 연결을 붙잡지 않고, 풀러가 지원하지 않는 prepared statement를 끈다."""
+    if os.environ.get("DATABASE_POOL") == "none":
+        return {"poolclass": NullPool, "connect_args": {"prepare_threshold": None}}
+    return {"pool_pre_ping": True}
+
+
 class Config:
     APP_ENV = "development"
     APP_VERSION = os.environ.get("APP_VERSION", "2.0.0")
 
     SECRET_KEY = os.environ.get("SECRET_KEY")
     SQLALCHEMY_DATABASE_URI = os.environ.get("DATABASE_URL")
-    SQLALCHEMY_ENGINE_OPTIONS = {"pool_pre_ping": True}
+    SQLALCHEMY_ENGINE_OPTIONS = engine_options()
 
     JWT_SECRET = os.environ.get("JWT_SECRET")
     JWT_TTL_MINUTES = _int("JWT_TTL", 60)

@@ -1,0 +1,6 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "flask",
+  "installCommand": "npm ci --no-audit --no-fund",
+  "buildCommand": "npm run build:css && rm -rf public && mkdir public && cp -R app/static public/static"
+}

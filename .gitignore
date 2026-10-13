@@ -15,6 +15,10 @@ htmlcov/
 # 프론트 빌드
 /node_modules/
 /app/static/dist/
+/public/
+
+# Vercel
+/.vercel/
 
 # 로컬 데이터(이전 Laravel 실행 데이터 포함)
 /_storage/

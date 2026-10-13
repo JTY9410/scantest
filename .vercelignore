@@ -1,0 +1,16 @@
+# 비밀값
+.env
+.env.*
+
+# 배포에 필요 없는 파일
+/_storage/
+/_doc/
+/instance/
+/node_modules/
+/public/
+/can_reverse_engineer/
+/tests/
+/docs/
+/compose*.yaml
+/Dockerfile
+*.md
