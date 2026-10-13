@@ -12,7 +12,7 @@ from app.modules.accounts.passwords import hash_password
 
 def register_cli(app: Flask) -> None:
     @app.cli.command("create-admin")
-    @click.option("--tid", required=True, help="관리자 로그인 아이디")
+    @click.option("--tid", envvar="ADMIN_TID", required=True, help="관리자 로그인 아이디(또는 ADMIN_TID)")
     @click.option("--name", default="관리자", show_default=True, help="표시 이름")
     def create_admin(tid: str, name: str) -> None:
         """최초 관리자를 한 번 등록한다. 비밀번호는 ADMIN_PASSWORD 또는 입력 프롬프트로 받는다."""

@@ -142,3 +142,13 @@ def test_create_admin_command(app):
     with app.app_context():
         user = db.session.scalar(select(User).where(User.tid == "wecar"))
         assert user.is_admin and ADMIN_PASSWORD not in user.password
+
+
+def test_create_admin_reads_tid_from_env(app, client):
+    runner = app.test_cli_runner()
+
+    result = runner.invoke(args=["create-admin"],
+                           env={"ADMIN_TID": "wecar", "ADMIN_PASSWORD": ADMIN_PASSWORD})
+
+    assert result.exit_code == 0, result.output
+    assert admin_login(client, "wecar", ADMIN_PASSWORD).status_code == 302
