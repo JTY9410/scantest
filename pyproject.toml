@@ -24,6 +24,7 @@ dependencies = [
     "redis>=6.4,<7",
     "pypdf>=6.20,<7",
     "pillow>=12.3,<13",
+    "reportlab>=5.0.1,<6",
 ]
 
 [project.optional-dependencies]

@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -149,3 +150,18 @@ class CarInfoCache(TimestampMixin, db.Model):
     car_no: Mapped[str] = mapped_column(String(20), unique=True)
     dto: Mapped[dict[str, Any]] = mapped_column(JSON)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class ScanDocument(TimestampMixin, db.Model):
+    """스캔 결과 PDF. 스캔을 저장할 때 함께 만든다."""
+
+    __tablename__ = "scan_documents"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    scan_id: Mapped[int] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), unique=True)
+    filename: Mapped[str] = mapped_column(String(200))
+    content: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+    size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String(64))
+
+    scan: Mapped[Scan] = relationship()

@@ -18,7 +18,9 @@
 {% set protocol = result.protocol or {} %}
 {% call page_header("위스캔 결과 · " ~ scan.car_no, scan.created_at|kst ~ " · " ~ transports.get(result.transport, result.transport),
                     back=(url_for('scanner.index'), "스캔하기")) %}
-  <button type="button" class="btn btn-secondary print:hidden" data-print>인쇄·PDF 저장</button>
+  <a class="btn btn-secondary print:hidden" href="{{ url_for('scanner.pdf', scan_id=scan.id) }}" download
+     {% if request.args.get('pdf') %}data-pdf-auto{% endif %}>PDF 내려받기</a>
+  <button type="button" class="btn btn-secondary print:hidden" data-print>인쇄</button>
   {% if result.report_id %}<a class="btn btn-secondary print:hidden" href="{{ url_for('canlab.report', report_id=result.report_id) }}">결과지</a>{% endif %}
   <a class="btn btn-secondary print:hidden" href="{{ url_for('monitoring.scan_show', scan_id=scan.id) }}">스캔 기록</a>
   <a class="btn btn-primary print:hidden" href="{{ url_for('scanner.index', car_no=scan.car_no) }}">다시 스캔</a>
@@ -106,6 +108,25 @@
   {% endif %}
 </section>
 
+{% if result.freeze_frame %}
+<section class="card mt-6 overflow-hidden" aria-labelledby="freeze-title">
+  <h2 id="freeze-title" class="card-body pb-0 text-lg font-bold">고장 당시 값(프리즈 프레임)
+    {% if result.freeze_frame.dtc %}<span class="mono text-muted">{{ result.freeze_frame.dtc }}</span>{% endif %}</h2>
+  {% if result.freeze_frame["values"] %}
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">항목</th><th scope="col" class="num">값</th></tr></thead>
+    <tbody>
+      {% for v in result.freeze_frame["values"] %}
+      <tr><td data-primary class="font-semibold">{{ v.label }}</td><td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="card-body text-sm">고장코드는 남았지만 당시 값은 읽지 못했습니다.</p>
+  {% endif %}
+</section>
+{% endif %}
+
 {% if result.battery %}
 <section class="card mt-6 overflow-hidden" aria-labelledby="battery-title">
   <h2 id="battery-title" class="card-body pb-0 text-lg font-bold">고전압 배터리</h2>
@@ -145,10 +166,11 @@
     <h2 id="ecus-title" class="card-body pb-0 text-lg font-bold">응답한 제어기</h2>
     {% if result.ecus %}
     <table class="rtable mt-3">
-      <thead><tr><th scope="col">주소</th><th scope="col">제어기</th><th scope="col">응답한 서비스</th></tr></thead>
+      <thead><tr><th scope="col">주소</th><th scope="col">제어기</th><th scope="col">부품번호·소프트웨어</th><th scope="col">응답한 서비스</th></tr></thead>
       <tbody>
         {% for e in result.ecus %}
         <tr><td data-primary class="mono font-semibold">{{ e.address }}</td><td data-label="제어기">{{ e.label or "-" }}</td>
+          <td data-label="부품번호" class="mono text-sm">{{ e.part_no or "-" }}{% if e.sw_version %} · {{ e.sw_version }}{% endif %}</td>
           <td data-label="서비스" class="mono">{{ e.services|join(", ") }}</td></tr>
         {% endfor %}
       </tbody>
@@ -156,10 +178,11 @@
     {% else %}
     {{ empty("응답한 제어기가 없습니다.") }}
     {% endif %}
-    {% if result.ecu_names or result.calibration_ids %}
+    {% if result.ecu_names or result.calibration_ids or result.cvns %}
     <dl class="dl card-body">
       {% if result.ecu_names %}<dt>ECU 이름</dt><dd>{{ result.ecu_names|join(", ") }}</dd>{% endif %}
       {% if result.calibration_ids %}<dt>소프트웨어 보정 ID</dt><dd class="mono">{{ result.calibration_ids|join(", ") }}</dd>{% endif %}
+      {% if result.cvns %}<dt>보정 검증 번호(CVN)</dt><dd class="mono">{{ result.cvns|join(", ") }}</dd>{% endif %}
     </dl>
     {% endif %}
   </section>

@@ -75,6 +75,14 @@ def _credentials() -> tuple[str | None, str | None]:
     return current_app.config.get("CAR_INFO_API_URL"), current_app.config.get("CAR_INFO_API_KEY")
 
 
+def configured() -> bool:
+    """조회 주소와 인증키가 (관리자 설정이나 환경변수에) 있는지. 키 값은 읽지 않는다."""
+    setting = get_setting()
+    if setting and setting.key_enc:
+        return bool(setting.url)
+    return bool(current_app.config.get("CAR_INFO_API_URL") and current_app.config.get("CAR_INFO_API_KEY"))
+
+
 def _kind(message: str) -> str:
     if "인증" in message:
         return "key"

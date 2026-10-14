@@ -1,9 +1,11 @@
 {% extends "layouts/admin.html" %}
 {% from "components/ui.html" import page_header, ai_status_badge, empty %}
 {% from "canlab/_obd_panel.html" import obd_panel %}
+{% from "scanner/_flow.html" import scan_flow %}
 {% block title %}대시보드{% endblock %}
 {% block head %}
 <script src="{{ url_for('static', filename='js/components/obd-link.js', v=asset_version) }}" defer></script>
+<script src="{{ url_for('static', filename='js/components/obd-scan.js', v=asset_version) }}" defer></script>
 <script src="{{ url_for('static', filename='js/components/obd-dashboard.js', v=asset_version) }}" defer></script>
 {% endblock %}
 
@@ -17,7 +19,7 @@
 
 {% block content %}
 {% call page_header("대시보드", current_user.name ~ "님, 오늘의 현황입니다.") %}
-  <a class="btn btn-primary" href="{{ url_for('scanner.index') }}">스캔하기</a>
+  <a class="btn btn-primary" href="#obd-quick" data-scan-jump>스캔하기</a>
 {% endcall %}
 
 <section aria-label="주요 지표" class="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 xl:grid-cols-4">
@@ -32,10 +34,12 @@
     <h2 id="obd-title" class="text-lg font-bold">블루투스 진단기</h2>
     <div class="flex flex-wrap items-center gap-3">
       <a class="inline-flex min-h-11 items-center text-sm font-medium underline" href="{{ url_for('canlab.live') }}">반복 수집</a>
-      <a class="btn btn-primary" href="{{ url_for('scanner.index') }}">스캔하기</a>
+      <a class="inline-flex min-h-11 items-center text-sm font-medium underline" href="{{ url_for('scanner.index') }}">스캔 전용 화면</a>
     </div>
   </div>
   <div class="mt-3">{{ obd_panel(obd) }}</div>
+  <div class="mt-4 border-t border-line pt-4">{{ scan_flow(scan_config, id_prefix="dash") }}</div>
+  <h3 class="mt-6 border-t border-line pt-4 font-bold">빠른 점검</h3>
   <form class="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end" data-quick-form novalidate>
     {{ action.csrf_token }}
     <div class="field">

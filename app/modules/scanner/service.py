@@ -10,6 +10,7 @@ from typing import Any
 
 from flask import current_app
 from sqlalchemy import select
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core import audit
 from app.core.errors import ServiceError
@@ -18,11 +19,12 @@ from app.modules.accounts.models import User
 from app.modules.canlab.engine.decode import diagnose
 from app.modules.canlab.models import CanDataset, DatasetKind, DatasetSource, DiagnosticReport
 from app.modules.canlab.service import _describe_dtcs, _trace_summary, active_rule_refs
+from app.modules.scanner import pdf
 from app.modules.scanner.interpret import detect_protocol, interpret, record_text
 from app.modules.scanner.obd import STATUS_LABELS, SYSTEMS
 from app.modules.scanner.plan import DOIP_NOTE
 from app.modules.scans import car_info
-from app.modules.scans.models import Code, Scan, ScanCode, ScanType
+from app.modules.scans.models import Code, Scan, ScanCode, ScanDocument, ScanType
 
 TRANSPORTS = {"ble": "블루투스(BLE)", "serial": "블루투스 클래식·USB(시리얼)", "wifi": "WiFi", "lte": "LTE 단말기"}
 MAX_STEPS = 400
@@ -78,7 +80,7 @@ def _failed_result(steps: list[dict], message: str) -> dict:
              "status": "server_error", "status_label": STATUS_LABELS["server_error"], "message": message, "raw": ""}
     return {"status": "failed", "protocol": detect_protocol(steps), "voltage": None, "vin": None,
             "vin_sources": {}, "monitor": None, "values": [], "dtcs": [], "systems": {k: 0 for k in SYSTEMS},
-            "ecus": [], "calibration_ids": [], "ecu_names": [], "battery": {}, "steps": [error], "errors": [error],
+            "ecus": [], "calibration_ids": [], "cvns": [], "ecu_names": [], "freeze_frame": None, "battery": {}, "steps": [error], "errors": [error],
             "counts": {"total": len(steps), "ok": 0, "unsupported": 0, "errors": 1}, "notes": [DOIP_NOTE]}
 
 
@@ -101,12 +103,24 @@ def _describe(dtcs: list[dict]) -> dict[str, Code]:
     return matched
 
 
+def _add_error(result: dict, group: str, label: str, status: str, message: str, first: bool = False) -> None:
+    error = {"id": None, "group": group, "label": label, "header": None, "command": None, "status": status,
+             "status_label": STATUS_LABELS.get(status, status), "message": message[:300], "raw": ""}
+    if first:
+        result["errors"].insert(0, error)
+    else:
+        result["errors"].append(error)
+    result["counts"]["errors"] += 1
+    if result["status"] == "ok":
+        result["status"] = "partial"
+
+
 def _int(value: Any) -> int | None:
     return value if isinstance(value, int) else None
 
 
 def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, transport: str,
-             device: str | None = None, lookup_error: str | None = None,
+             device: str | None = None, lookup_error: str | None = None, client_error: str | None = None,
              source: str = DatasetSource.WEB) -> Scan:
     car_no = car_info.normalize_car_no(car_no)
     if not car_no:
@@ -130,12 +144,9 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
         current_app.logger.exception("스캔 결과 해석 실패")
         result = _failed_result(steps, f"결과를 해석하지 못했습니다({type(exc).__name__}). 통신 기록은 저장했습니다.")
     if lookup_error:
-        error = {"id": None, "group": "lookup", "label": "차량정보 조회", "header": None, "command": None,
-                 "status": "lookup_error", "status_label": "조회 실패", "message": lookup_error[:300], "raw": ""}
-        result["errors"].insert(0, error)
-        result["counts"]["errors"] += 1
-        if result["status"] == "ok":
-            result["status"] = "partial"
+        _add_error(result, "lookup", "차량정보 조회", "lookup_error", str(lookup_error), first=True)
+    if client_error:
+        _add_error(result, "client", "스캔 진행", "client_error", str(client_error))
     matched = _describe(result["dtcs"])
     if result["vin"] and car.get("diag_car_id"):
         result["vin_match"] = result["vin"] == str(car["diag_car_id"]).upper()
@@ -186,12 +197,42 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     db.session.flush()
     for code in {c.id: c for c in matched.values()}.values():
         db.session.add(ScanCode(type=scan.type, scan_id=scan.id, code_id=code.id))
+    document = _save_document(scan)
+    if document is None:
+        _add_error(result, "pdf", "결과 PDF", "pdf_error", "결과 PDF를 만들지 못했습니다. 결과 화면에서 다시 내려받으세요.")
+        scan.bms_data.update(status=result["status"], errors=result["errors"], counts=result["counts"])
+        flag_modified(scan, "bms_data")
     audit.record("스캔하기", "Scan", scan.id, user_id=actor.id,
                  changes={"status": result["status"], "transport": transport, "steps": len(steps),
                           "errors": result["counts"]["errors"], "dtcs": len(result["dtcs"]),
-                          "report": report.id, "dataset": dataset.id})
+                          "report": report.id, "dataset": dataset.id, "pdf": document.size if document else None})
     db.session.commit()
     return scan
+
+
+def _save_document(scan: Scan) -> ScanDocument | None:
+    """결과 PDF를 만들어 스캔에 붙인다. 실패해도 스캔 저장은 계속한다."""
+    try:
+        content = pdf.render(scan, scan.bms_data)
+    except Exception:
+        current_app.logger.exception("스캔 결과 PDF 생성 실패")
+        return None
+    document = ScanDocument(scan_id=scan.id, filename=pdf.filename(scan), content=content, size=len(content),
+                            sha256=hashlib.sha256(content).hexdigest())
+    db.session.add(document)
+    return document
+
+
+def scan_document(scan: Scan) -> ScanDocument:
+    """저장된 결과 PDF. 없으면(생성 실패, 이전 스캔) 지금 만든다."""
+    scan_result(scan)
+    document = db.session.scalar(select(ScanDocument).where(ScanDocument.scan_id == scan.id))
+    if document is None:
+        document = _save_document(scan)
+        if document is None:
+            raise ServiceError("결과 PDF를 만들지 못했습니다. 잠시 후 다시 시도하세요.", 500)
+        db.session.commit()
+    return document
 
 
 def scan_result(scan: Scan) -> dict:

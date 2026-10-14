@@ -1,7 +1,9 @@
 """차량별 스캔 계획: 진단기에 보낼 명령 목록.
 
-- 공통: SAE J1979(ISO 15031-5) 모드 01·03·07·09·0A. 모든 OBD2 차량(CAN, K-Line, J1850)에 쓴다.
-- UDS(ISO 14229): CAN 차량의 ECU 주소마다 VIN(22 F190)과 고장코드(19 02 FF).
+- 공통: SAE J1979(ISO 15031-5) 모드 01·02(프리즈 프레임)·03·07·09·0A. 모든 OBD2 차량(CAN, K-Line, J1850)에 쓴다.
+  브라우저는 01 00·20·40… 지원 비트맵에 없는 PID와, 저장된 고장코드가 없을 때의 프리즈 프레임을 보내지 않는다.
+- UDS(ISO 14229): 기능 주소로 19 02 09·19 02 04·19 15(위카 앱과 같음), ECU 주소마다 VIN(22 F190),
+  고장코드(19 02 FF), 부품번호(22 F187), 소프트웨어 버전(22 F195).
 - 제조사별: 현대·기아·제네시스 전기·하이브리드 BMS(7E4) 22 0101/0105와 구형 KWP 21 01/05.
   공개 자료(JejuSoul/OBD-PIDs-for-HKMC-EVs) 기준이고, 값은 적용 규칙 또는 참고 해석으로 읽는다.
 - CAN 분석에서 적용한 규칙의 요청도 함께 보낸다.
@@ -10,7 +12,7 @@
 """
 
 from app.modules.canlab.service import capture_requests
-from app.modules.scanner.obd import PIDS, SUPPORT_PIDS
+from app.modules.scanner.obd import ECU_IDENT_DIDS, FREEZE_PIDS, PIDS, SUPPORT_PIDS
 
 HKMC = ("현대", "기아", "제네시스", "HYUNDAI", "KIA", "GENESIS")
 ELECTRIFIED = ("전기", "하이브리드", "수소", "EV", "HEV")
@@ -67,10 +69,19 @@ def build_plan(car: dict | None = None) -> dict:
     add("vehicle", "차대번호(VIN)", "0902", optional=True)
     add("vehicle", "소프트웨어 보정 ID", "0904", optional=True)
     add("vehicle", "ECU 이름", "090A", optional=True)
+    add("vehicle", "보정 검증 번호(CVN)", "0906", optional=True)
 
     add("dtc", "확정 고장코드", "03")
     add("dtc", "대기(미확정) 고장코드", "07", optional=True)
     add("dtc", "영구 고장코드", "0A", optional=True)
+    add("freeze", "고장 당시 값: 원인 고장코드", "020200", optional=True)
+    for pid in FREEZE_PIDS:
+        add("freeze", f"고장 당시 값: {PIDS[pid].label}", f"02{pid:02X}00", optional=True)
+
+    # 위카 앱과 같은 UDS 고장코드 조회(기능 주소로 모든 제어기에)
+    add("uds", "전체 제어기 확정 고장코드(19 02 09)", "190209", timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
+    add("uds", "전체 제어기 대기 고장코드(19 02 04)", "190204", timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
+    add("uds", "전체 제어기 영구 고장코드(19 15)", "1915", timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
 
     ecus = dict(UDS_ECUS)
     if _is_hkmc(car):
@@ -80,6 +91,9 @@ def build_plan(car: dict | None = None) -> dict:
             optional=True, probe=True, bus="can")
         add("uds", f"{name} 고장코드(19 02)", "1902FF", header=header, timeout=UDS_TIMEOUT_MS,
             optional=True, bus="can")
+        for did, (_, label) in ECU_IDENT_DIDS.items():
+            add("uds", f"{name} {label}(22 {did})", f"22{did}", header=header, timeout=UDS_TIMEOUT_MS,
+                optional=True, bus="can")
 
     if _is_hkmc_electrified(car):
         for did in ("0101", "0105"):

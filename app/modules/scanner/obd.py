@@ -54,6 +54,7 @@ STATUS_LABELS = {
     "ok": "성공", "no_data": "응답 없음", "unsupported": "지원 안 함", "negative": "부정 응답",
     "timeout": "시간 초과", "device_error": "단말기 오류", "parse_error": "해석 오류",
     "server_error": "서버 오류", "skipped": "건너뜀", "disconnected": "연결 끊김",
+    "lookup_error": "조회 실패", "client_error": "화면 오류", "pdf_error": "PDF 오류",
 }
 
 
@@ -110,7 +111,7 @@ def _echo(command: bytes) -> bytes:
     service = command[0]
     if service in (0x01, 0x09, 0x21, 0x19):
         return command[1:2]
-    if service == 0x22:
+    if service in (0x02, 0x22):
         return command[1:3]
     return b""
 
@@ -176,24 +177,90 @@ FUEL_TYPES = {1: "휘발유", 2: "메탄올", 3: "에탄올", 4: "경유", 5: "L
               9: "바이퓨얼(휘발유)", 17: "하이브리드(휘발유)", 18: "하이브리드(에탄올)", 19: "하이브리드(경유)",
               20: "하이브리드(전기)", 21: "하이브리드(혼합)", 22: "하이브리드(회생)"}
 
+FUEL_SYSTEM = {1: "개회로(엔진 온도 부족)", 2: "폐회로(산소센서 사용)", 4: "개회로(부하·감속)",
+               8: "개회로(시스템 고장)", 16: "폐회로(피드백 이상)"}
+OBD_STANDARDS = {1: "OBD-II(CARB)", 2: "OBD(EPA)", 3: "OBD, OBD-II", 4: "OBD-I", 5: "OBD 미적용", 6: "EOBD",
+                 7: "EOBD, OBD-II", 8: "EOBD, OBD", 9: "EOBD, OBD, OBD-II", 10: "JOBD", 11: "JOBD, OBD-II",
+                 12: "JOBD, EOBD", 13: "JOBD, EOBD, OBD-II", 17: "EMD", 18: "EMD+", 19: "HD OBD-C",
+                 20: "HD OBD", 21: "WWH OBD", 23: "HD EOBD-I", 24: "HD EOBD-I N", 25: "HD EOBD-II",
+                 26: "HD EOBD-II N", 28: "OBDBr-1", 29: "OBDBr-2", 30: "KOBD(한국)", 31: "IOBD I", 32: "IOBD II",
+                 33: "HD EOBD-IV"}
+
+
+def _pct(d: bytes) -> float:
+    return round(d[0] * 100 / 255, 1)
+
+
+def _trim(d: bytes) -> float:
+    return round((d[0] - 128) * 100 / 128, 1)
+
+
+def _o2(name: str) -> Pid:
+    return Pid(f"o2_{name.lower()}", f"산소센서 {name} 전압", "V", 2, lambda d: round(d[0] / 200, 3))
+
+
+def _cat(name: str) -> Pid:
+    return Pid(f"catalyst_temp_{name.lower()}", f"촉매 온도 {name}", "°C", 2, lambda d: round(_u16(d) / 10 - 40, 1))
+
+
+# SAE J1979 모드 01 공식(공개 요약: 위키백과 'OBD-II PIDs'). size는 데이터 바이트 수.
 PIDS: dict[int, Pid] = {
-    0x04: Pid("engine_load", "엔진 부하", "%", 1, lambda d: round(d[0] * 100 / 255, 1)),
+    0x03: Pid("fuel_system", "연료 계통 상태", "", 2, lambda d: FUEL_SYSTEM.get(d[0], f"코드 {d[0]}")),
+    0x04: Pid("engine_load", "엔진 부하", "%", 1, _pct),
     0x05: Pid("coolant_temp", "냉각수 온도", "°C", 1, lambda d: d[0] - 40),
+    0x06: Pid("stft_b1", "단기 연료 보정(뱅크1)", "%", 1, _trim),
+    0x07: Pid("ltft_b1", "장기 연료 보정(뱅크1)", "%", 1, _trim),
+    0x08: Pid("stft_b2", "단기 연료 보정(뱅크2)", "%", 1, _trim),
+    0x09: Pid("ltft_b2", "장기 연료 보정(뱅크2)", "%", 1, _trim),
+    0x0A: Pid("fuel_pressure", "연료 압력", "kPa", 1, lambda d: d[0] * 3),
+    0x0B: Pid("map", "흡기 매니폴드 압력", "kPa", 1, lambda d: d[0]),
     0x0C: Pid("rpm", "엔진 회전수", "rpm", 2, lambda d: _u16(d) / 4),
     0x0D: Pid("speed", "차속", "km/h", 1, lambda d: d[0]),
+    0x0E: Pid("timing_advance", "점화 진각", "°", 1, lambda d: d[0] / 2 - 64),
     0x0F: Pid("intake_temp", "흡기 온도", "°C", 1, lambda d: d[0] - 40),
-    0x11: Pid("throttle", "스로틀 개도", "%", 1, lambda d: round(d[0] * 100 / 255, 1)),
+    0x10: Pid("maf", "흡입 공기량(MAF)", "g/s", 2, lambda d: round(_u16(d) / 100, 2)),
+    0x11: Pid("throttle", "스로틀 개도", "%", 1, _pct),
+    0x14: _o2("B1S1"), 0x15: _o2("B1S2"), 0x16: _o2("B1S3"), 0x17: _o2("B1S4"),
+    0x18: _o2("B2S1"), 0x19: _o2("B2S2"), 0x1A: _o2("B2S3"), 0x1B: _o2("B2S4"),
+    0x1C: Pid("obd_standard", "OBD 규격", "", 1, lambda d: OBD_STANDARDS.get(d[0], f"코드 {d[0]}")),
     0x1F: Pid("run_time", "시동 후 경과 시간", "s", 2, _u16),
     0x21: Pid("distance_mil", "경고등 켜진 뒤 주행거리", "km", 2, _u16),
-    0x2F: Pid("fuel_level", "연료 잔량", "%", 1, lambda d: round(d[0] * 100 / 255, 1)),
+    0x22: Pid("fuel_rail_pressure", "연료 레일 압력(진공 기준)", "kPa", 2, lambda d: round(_u16(d) * 0.079, 1)),
+    0x23: Pid("fuel_rail_gauge", "연료 레일 압력(게이지)", "kPa", 2, lambda d: _u16(d) * 10),
+    0x2C: Pid("egr_commanded", "EGR 목표 개도", "%", 1, _pct),
+    0x2D: Pid("egr_error", "EGR 오차", "%", 1, _trim),
+    0x2E: Pid("evap_purge", "증발가스 퍼지 목표", "%", 1, _pct),
+    0x2F: Pid("fuel_level", "연료 잔량", "%", 1, _pct),
+    0x30: Pid("warmups_cleared", "고장코드 삭제 후 워밍업 횟수", "회", 1, lambda d: d[0]),
     0x31: Pid("distance_cleared", "고장코드 삭제 후 주행거리", "km", 2, _u16),
+    0x33: Pid("baro", "대기압", "kPa", 1, lambda d: d[0]),
+    0x3C: _cat("B1S1"), 0x3D: _cat("B2S1"), 0x3E: _cat("B1S2"), 0x3F: _cat("B2S2"),
     0x42: Pid("module_voltage", "제어 모듈 전압", "V", 2, lambda d: round(_u16(d) / 1000, 2)),
+    0x43: Pid("absolute_load", "절대 부하", "%", 2, lambda d: round(_u16(d) * 100 / 255, 1)),
+    0x44: Pid("commanded_lambda", "목표 공연비(람다)", "λ", 2, lambda d: round(_u16(d) * 2 / 65536, 3)),
+    0x45: Pid("relative_throttle", "상대 스로틀 개도", "%", 1, _pct),
     0x46: Pid("ambient_temp", "외기 온도", "°C", 1, lambda d: d[0] - 40),
+    0x47: Pid("throttle_b", "스로틀 개도 B", "%", 1, _pct),
+    0x49: Pid("pedal_d", "가속 페달 D", "%", 1, _pct),
+    0x4A: Pid("pedal_e", "가속 페달 E", "%", 1, _pct),
+    0x4C: Pid("throttle_actuator", "스로틀 액추에이터 목표", "%", 1, _pct),
+    0x4D: Pid("time_mil", "경고등 켜진 시간", "분", 2, _u16),
+    0x4E: Pid("time_cleared", "고장코드 삭제 후 시간", "분", 2, _u16),
     0x51: Pid("fuel_type", "연료 종류", "", 1, lambda d: FUEL_TYPES.get(d[0], f"코드 {d[0]}")),
-    0x5B: Pid("hybrid_battery", "하이브리드 배터리 잔량", "%", 1, lambda d: round(d[0] * 100 / 255, 1)),
+    0x52: Pid("ethanol", "에탄올 비율", "%", 1, _pct),
+    0x59: Pid("fuel_rail_absolute", "연료 레일 절대 압력", "kPa", 2, lambda d: _u16(d) * 10),
+    0x5B: Pid("hybrid_battery", "하이브리드 배터리 잔량", "%", 1, _pct),
     0x5C: Pid("oil_temp", "엔진오일 온도", "°C", 1, lambda d: d[0] - 40),
+    0x5D: Pid("injection_timing", "연료 분사 시기", "°", 2, lambda d: round(_u16(d) / 128 - 210, 2)),
+    0x5E: Pid("fuel_rate", "연료 소비율", "L/h", 2, lambda d: round(_u16(d) / 20, 2)),
+    0x61: Pid("torque_demand", "운전자 요구 토크", "%", 1, lambda d: d[0] - 125),
+    0x62: Pid("torque_actual", "실제 엔진 토크", "%", 1, lambda d: d[0] - 125),
+    0x63: Pid("torque_reference", "기준 엔진 토크", "Nm", 2, _u16),
+    0x8E: Pid("torque_friction", "엔진 마찰 토크", "%", 1, lambda d: d[0] - 125),
     0xA6: Pid("odometer", "누적 주행거리", "km", 4, lambda d: int.from_bytes(d[:4], "big") / 10),
 }
+# 고장코드가 저장될 때 함께 남는 값(모드 02 프리즈 프레임)으로 읽을 PID
+FREEZE_PIDS = (0x04, 0x05, 0x06, 0x07, 0x0B, 0x0C, 0x0D, 0x0F, 0x11)
 SUPPORT_PIDS = (0x00, 0x20, 0x40, 0x60, 0x80, 0xA0)
 
 
@@ -215,6 +282,18 @@ def mode01(payload: bytes) -> dict | None:
     if pid is None or len(data) < pid.size:
         return None
     return {"key": pid.key, "label": pid.label, "unit": pid.unit, "value": pid.decode(data)}
+
+
+def freeze_value(payload: bytes) -> dict | None:
+    """모드 02 응답 '42 PID 프레임 데이터…'. 데이터 공식은 모드 01과 같다."""
+    return mode01(payload[:2] + payload[3:]) if len(payload) >= 4 else None
+
+
+def freeze_dtc(payload: bytes) -> str | None:
+    """02 02 00: 프리즈 프레임을 남긴 고장코드."""
+    if len(payload) < 5 or not (payload[3] or payload[4]):
+        return None
+    return _two_byte_dtc(payload[3], payload[4])
 
 
 def monitor_status(payload: bytes) -> dict | None:
@@ -247,8 +326,8 @@ def obd_dtcs(payloads: list[bytes], bus: str | None) -> list[str]:
 
 
 def uds_dtcs(payload: bytes) -> list[dict]:
-    """19 02 응답: 3바이트 DTC + 상태 바이트. 상태 bit0=현재, bit3=확정."""
-    if len(payload) < 3 or payload[1] != 0x02:
+    """19 02(상태 마스크)·19 15(영구) 응답: 3바이트 DTC + 상태 바이트. 상태 bit0=현재, bit3=확정."""
+    if len(payload) < 3 or payload[1] not in (0x02, 0x15):
         return []
     records = payload[3:]
     result = []
@@ -299,3 +378,18 @@ def calibration_ids(payloads: list[bytes]) -> list[str]:
 
 def ecu_name(payloads: list[bytes]) -> str | None:
     return _ascii(_mode09_data(payloads)).replace("-", " ").strip() or None
+
+
+def cvns(payloads: list[bytes]) -> list[str]:
+    """09 06: 보정 검증 번호(CVN) 4바이트씩."""
+    data = _mode09_data(payloads)
+    return [data[i : i + 4].hex().upper() for i in range(0, len(data) - 3, 4)]
+
+
+# UDS 22 제어기 식별 DID(ISO 14229 부록 C)
+ECU_IDENT_DIDS = {"F187": ("part_no", "부품번호"), "F195": ("sw_version", "소프트웨어 버전")}
+
+
+def ecu_ident(payload: bytes) -> str | None:
+    """62 F1 xx 문자열. 글자가 없으면 None."""
+    return _ascii(payload[3:]) or None

@@ -6,6 +6,12 @@
   const root = document.getElementById("obd-quick");
   if (!config || !root) return;
   const link = window.WecarObd.bindPanel(root.querySelector("[data-obd-panel]"), config);
+  const flow = window.WecarScanFlow?.mount(root.querySelector("[data-scan-flow]"), link);
+  document.querySelector("[data-scan-jump]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    root.scrollIntoView({ behavior: "smooth", block: "start" });
+    flow?.start();
+  });
 
   const form = root.querySelector("[data-quick-form]");
   const runBtn = root.querySelector("[data-quick-run]");

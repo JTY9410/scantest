@@ -21,10 +21,33 @@ def _json(client, url, body):
 
 def test_scan_page_menu_and_dashboard_button(admin_client):
     html = admin_client.get("/admin/scan/").get_data(as_text=True)
-    assert "차량번호 조회하기" in html and "블루투스 클래식·USB" in html and 'id="scanner-config"' in html
+    assert "차량번호 조회하기" in html and "블루투스 클래식·USB" in html and "data-scan-config" in html
     assert html.index("스캔하기</span>") < html.index("운영 데이터")
+    assert html.index("진단기 연결") < html.index("data-scan-flow")
+    assert "차량정보 조회 인증키가 없어" not in html
     dashboard = admin_client.get("/admin/").get_data(as_text=True)
-    assert 'href="/admin/scan/"' in dashboard
+    # 대시보드 스캔하기는 같은 페이지의 연결을 쓰는 카드 안 흐름이다(이동하면 블루투스 연결이 끊긴다).
+    assert "data-scan-jump" in dashboard and "data-scan-flow" in dashboard
+    assert 'href="/admin/scan/">스캔하기' not in dashboard
+
+
+def test_missing_car_info_key_is_warned(admin_client, monkeypatch):
+    monkeypatch.setitem(admin_client.application.config, "CAR_INFO_API_KEY", None)
+    for url in ("/admin/scan/", "/admin/"):
+        assert "차량정보 조회 인증키가 없어 조회가 실패합니다" in admin_client.get(url).get_data(as_text=True)
+
+
+def test_lookup_failure_is_audited(admin_client, monkeypatch):
+    from sqlalchemy import select
+
+    from app.core.audit import Activity
+    from app.extensions import db
+
+    _fake_post(monkeypatch, {"status": "fail", "msg": "일제한 초과"})
+    assert _json(admin_client, "/admin/scan/lookup", {"carNo": "34나5678"}).status_code == 400
+    with admin_client.application.app_context():
+            activity = db.session.scalar(select(Activity).where(Activity.relation_type == "차량정보 조회 실패"))
+    assert activity.changes["kind"] == "quota" and activity.changes["car_no"] == "34나5678"
 
 
 def test_lookup_success_and_failure(admin_client, monkeypatch):
@@ -64,7 +87,14 @@ def test_run_then_result_page_shows_wescan_format(admin_client):
     assert "위스캔 결과" in html and "P0133" in html and "진단 요약" in html
     assert "오류 기록" in html and "시간 초과" in html and "ISO 15765-4 CAN" in html
     show = admin_client.get(f"/admin/scans/{saved['id']}").get_data(as_text=True)
-    assert "위스캔 결과" in show and "스캔 오류 1건" in show
+    assert "위스캔 결과" in show and "스캔 오류 1건" in show and f"/admin/scan/{saved['id']}/pdf" in show
+
+    assert "data-pdf-auto" not in html
+    assert "data-pdf-auto" in admin_client.get(f"{saved['url']}?pdf=1").get_data(as_text=True)
+    pdf = admin_client.get(f"/admin/scan/{saved['id']}/pdf")
+    assert pdf.status_code == 200 and pdf.mimetype == "application/pdf" and pdf.data.startswith(b"%PDF")
+    assert "attachment" in pdf.headers["Content-Disposition"] and "filename*=UTF-8''" in pdf.headers[
+        "Content-Disposition"]
 
 
 def test_run_rejects_bad_input(admin_client):

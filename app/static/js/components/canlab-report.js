@@ -5,6 +5,8 @@
   document.querySelectorAll("[data-print]").forEach((button) =>
     button.addEventListener("click", () => window.print()),
   );
+  // 스캔 직후(?pdf=1)에는 저장된 결과 PDF를 바로 내려받는다.
+  document.querySelector("[data-pdf-auto]")?.click();
 
   const source = document.getElementById("report-data");
   if (!source || !window.Chart) return;

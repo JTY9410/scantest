@@ -1,0 +1,55 @@
+{% from "components/ui.html" import csrf %}
+
+{# 진단기 연결 패널 아래에 둔다. 같은 페이지의 연결을 그대로 쓰므로 페이지를 옮기지 않고 스캔한다. #}
+{% macro scan_flow(config, car_no="", id_prefix="scan") -%}
+<div class="grid gap-4" data-scan-flow>
+  <script type="application/json" data-scan-config>{{ config|tojson }}</script>
+  <ol class="flex flex-wrap gap-2" aria-label="스캔 단계" data-flow-stages>
+    {% for key, label in [("connect", "1. 진단기 연결"), ("lookup", "2. 차량번호 조회"), ("scan", "3. 차량 스캔"), ("analyze", "4. 분석 결과")] %}
+    <li class="badge" data-stage="{{ key }}">{{ label }}</li>
+    {% endfor %}
+  </ol>
+  <div class="flex flex-wrap gap-2">
+    <button class="btn btn-primary" type="button" data-scan-run>스캔하기</button>
+    <button class="btn btn-secondary" type="button" data-scan-stop disabled>중지</button>
+  </div>
+  <p class="font-semibold" role="status" aria-live="polite" data-scan-notice>시동을 켜고 진단기를 연결한 뒤 '스캔하기'를 누르세요.</p>
+
+  <div class="grid gap-3 rounded-md border border-line p-4" data-lookup hidden>
+    <h3 class="font-bold">차량번호 조회</h3>
+    {% if config.keyMissing %}
+    <p class="flash flash-warning"><span aria-hidden="true" class="font-bold">!</span>
+      <span>차량정보 조회 인증키가 없어 조회가 실패합니다. <a class="underline" href="{{ config.settingsUrl }}">설정 &gt; 차량정보 조회</a>에서 인증키를 입력하세요. 조회 없이도 스캔할 수 있습니다.</span></p>
+    {% endif %}
+    <form class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end" data-lookup-form novalidate>
+      {{ csrf() }}
+      <div class="field">
+        <label class="field-label" for="{{ id_prefix }}-car-no">차량번호</label>
+        <input class="input" id="{{ id_prefix }}-car-no" name="car_no" maxlength="20" autocomplete="off" placeholder="예: 12가3456" value="{{ car_no }}">
+      </div>
+      <button class="btn btn-primary" type="submit">차량번호 조회하기</button>
+    </form>
+    <p class="font-semibold" role="status" aria-live="polite" data-lookup-status></p>
+    <div data-lookup-result hidden>
+      <dl class="dl"></dl>
+      <p class="mt-2 text-sm text-muted" data-lookup-cache></p>
+    </div>
+    <div class="flash flash-warning" data-lookup-failed hidden>
+      <span aria-hidden="true" class="font-bold">!</span>
+      <div class="grid gap-2">
+        <span>차량 정보 없이 스캔할 수 있습니다. 조회 오류는 스캔 결과의 오류 기록에 함께 남습니다.</span>
+        <button class="btn btn-secondary justify-self-start" type="button" data-lookup-skip>조회 없이 스캔 계속</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid gap-2" data-scan-progress hidden>
+    <progress class="h-2 w-full" max="100" value="0" data-scan-bar aria-label="스캔 진행률"></progress>
+    <p class="font-semibold" role="status" aria-live="polite" data-scan-status></p>
+    <p class="text-sm text-muted tabular-nums" data-scan-counts></p>
+    <button class="btn btn-secondary justify-self-start" type="button" data-scan-retry hidden>저장 다시 시도</button>
+    <ol class="mono grid max-h-80 gap-1 overflow-y-auto rounded-md border border-line p-3 text-sm" data-scan-log aria-label="단계별 응답"></ol>
+  </div>
+  <p class="text-sm text-muted">시동을 ON(또는 엔진 시동) 상태로 두세요. 고장코드, 실시간 데이터, 고장 당시 값, 차대번호, 제어기별 고장코드(UDS)와 전기차 배터리 데이터를 차례로 읽습니다. 차량에 따라 1~3분 걸리며, 끝나면 결과와 PDF가 저장됩니다.</p>
+</div>
+{%- endmacro %}

@@ -77,6 +77,21 @@ def test_uds_dtcs_and_systems():
         "engine", "transmission", "chassis", "network", "body"]
 
 
+def test_extended_pids_freeze_frame_and_ident():
+    assert obd.mode01(bytes.fromhex("41030200"))["value"] == "폐회로(산소센서 사용)"
+    assert obd.mode01(bytes.fromhex("41142080"))["value"] == 0.16
+    assert obd.mode01(bytes.fromhex("4106A0"))["value"] == 25.0
+    assert obd.mode01(bytes.fromhex("415E0640"))["value"] == 80.0
+    assert obd.mode01(bytes.fromhex("411C01"))["value"] == "OBD-II(CARB)"
+    assert obd.freeze_value(bytes.fromhex("420C000FA0"))["value"] == 1000.0
+    assert obd.freeze_dtc(bytes.fromhex("4202000143")) == "P0143"
+    assert obd.freeze_dtc(bytes.fromhex("4202000000")) is None
+    assert obd.cvns([bytes.fromhex("490601" "1A2B3C4D")]) == ["1A2B3C4D"]
+    assert obd.ecu_ident(bytes.fromhex("62F187" + "91000-AB12".encode().hex())) == "91000-AB12"
+    permanent = obd.uds_dtcs(bytes.fromhex("5915FF" "01010008"))
+    assert [d["code"] for d in permanent] == ["P010100"]
+
+
 def test_kline_frames_are_kept_in_record_but_not_reassembled():
     assert reply_frames("48 6B 10 41 0C 1A F8 C5", "serial")[0].data == bytes.fromhex("410C1AF8")
     assert reply_frames("18 DA F1 10 03 41 0D 20", "can29")[0].source == 0x18DAF110

@@ -14,6 +14,11 @@ from app.modules.scanner.plan import DOIP_NOTE
 INFO_STATUSES = {"ok", "unsupported", "skipped"}
 BROADCAST = {"can11": "7DF", "can29": "18DB33F1"}
 REFERENCE_CONFIDENCE = 0.5
+_ECU_LABEL = re.compile(r" (?:차대번호|고장코드|부품번호|소프트웨어 버전|BMS 배터리)")
+
+
+def _ecu_address(ecu: int) -> str:
+    return f"{ecu:03X}" if ecu > 0xFF else f"{ecu:02X}"
 
 
 def _row(step: dict, status: str, message: str) -> dict:
@@ -93,14 +98,17 @@ def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, An
     dtcs: list[dict] = []
     vins: dict[str, str] = {}
     calids: list[str] = []
+    cvns: list[str] = []
     ecu_names: list[str] = []
     ecus: dict[str, dict] = {}
+    freeze: dict[str, Any] = {"dtc": None, "values": []}
 
     for step in steps:
         command = (step.get("command") or "").upper()
         error = step.get("error")
         if error == "skipped":
-            rows.append(_row(step, "skipped", step.get("reason") or "앞 단계 결과에 따라 건너뛰었습니다."))
+            reason = step.get("reason") or "앞 단계 결과에 따라 건너뛰었습니다."
+            rows.append(_row(step, "unsupported" if "지원하지 않는" in reason else "skipped", reason))
             continue
         if command.startswith("AT"):
             if error or step.get("reply") is None:
@@ -134,7 +142,7 @@ def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, An
             entry = ecus.setdefault(address, {"address": address, "request": step.get("header"),
                                               "label": None, "services": []})
             if step.get("header") and step.get("group") in ("uds", "maker"):
-                entry["label"] = entry["label"] or (step.get("label") or "").split(" 차대번호")[0].split(" 고장코드")[0]
+                entry["label"] = entry["label"] or _ECU_LABEL.split(step.get("label") or "")[0]
             if command[:2] not in entry["services"]:
                 entry["services"].append(command[:2])
 
@@ -151,6 +159,11 @@ def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, An
                                "dtc_count": sum(s["dtc_count"] for s in states)}
             elif value := obd.mode01(first[0]):
                 values.append(value)
+        elif service == 0x02:
+            if command[2:4] == "02":
+                freeze["dtc"] = freeze["dtc"] or obd.freeze_dtc(first[0])
+            elif value := obd.freeze_value(first[0]):
+                freeze["values"].append(value)
         elif service in (0x03, 0x07, 0x0A):
             kind = {0x03: "확정", 0x07: "대기", 0x0A: "영구"}[service]
             for ecu, payloads in outcome.positive.items():
@@ -165,15 +178,25 @@ def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, An
                 calids += [c for c in obd.calibration_ids(first) if c not in calids]
             elif info == "0A" and (name := obd.ecu_name(first)) and name not in ecu_names:
                 ecu_names.append(name)
+            elif info == "06":
+                cvns += [c for c in obd.cvns(first) if c not in cvns]
         elif command == "22F190":
             if vin := obd.vin_from(command, first):
                 vins.setdefault(vin, f"{step.get('header')} 22 F190")
+        elif service == 0x22 and command[2:] in obd.ECU_IDENT_DIDS:
+            field_name = obd.ECU_IDENT_DIDS[command[2:]][0]
+            for ecu, payloads in outcome.positive.items():
+                if text := obd.ecu_ident(payloads[0]):
+                    ecus[f"{ecu:03X}" if ecu > 0xFF else f"{ecu:02X}"][field_name] = text
         elif service == 0x19:
+            permanent = command[2:4] == "15"
             for ecu, payloads in outcome.positive.items():
                 for payload in payloads:
                     for dtc in obd.uds_dtcs(payload):
-                        dtcs.append(dtc | {"kind": "현재" if dtc["active"] else ("확정" if dtc["confirmed"] else "기록"),
-                                           "ecu": step.get("header") or f"{ecu:03X}", "source": "UDS 19 02"})
+                        kind = "영구" if permanent else (
+                            "현재" if dtc["active"] else ("확정" if dtc["confirmed"] else "기록"))
+                        dtcs.append(dtc | {"kind": kind, "ecu": step.get("header") or _ecu_address(ecu),
+                                           "source": f"UDS 19 {command[2:4]}"})
 
     trace = load_trace(record)
     battery = battery_values(trace, rules)
@@ -212,7 +235,9 @@ def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, An
         "systems": systems,
         "ecus": list(ecus.values()),
         "calibration_ids": calids,
+        "cvns": cvns,
         "ecu_names": ecu_names,
+        "freeze_frame": freeze if freeze["dtc"] or freeze["values"] else None,
         "battery": battery,
         "steps": rows,
         "errors": errors,

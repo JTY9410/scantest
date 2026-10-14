@@ -8,6 +8,7 @@
   {{ badge(scan.type_label, "info" if scan.type == "ev" else "") }}
   {% if scanned %}
   <a class="btn btn-primary" href="{{ url_for('scanner.result', scan_id=scan.id) }}">위스캔 결과</a>
+  <a class="btn btn-secondary" href="{{ url_for('scanner.pdf', scan_id=scan.id) }}" download>결과 PDF</a>
   {% if scanned.report_id %}<a class="btn btn-secondary" href="{{ url_for('canlab.report', report_id=scanned.report_id) }}">결과지</a>{% endif %}
   {% endif %}
 {% endcall %}

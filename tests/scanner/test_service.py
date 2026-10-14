@@ -7,7 +7,7 @@ from app.modules.accounts.models import User
 from app.modules.canlab.models import CanDataset, DiagnosticReport
 from app.modules.scanner import service
 from app.modules.scanner.plan import build_plan
-from app.modules.scans.models import Code, Scan, ScanCode
+from app.modules.scans.models import Code, Scan, ScanCode, ScanDocument
 from tests.canlab.synthetic import bms_0101, isotp_frames
 
 KONA_EV = {"diag_car_id": "KMHK381GFMU000001", "diag_company": "현대", "diag_model": "코나 일렉트릭",
@@ -141,6 +141,71 @@ def test_kline_vehicle_skips_can_only_steps(app, admin):
     assert data["protocol"]["bus"] == "serial" and [d["code"] for d in data["dtcs"]] == ["P0133"]
     skipped = [s for s in data["steps"] if s["command"] == "22F190"][0]
     assert skipped["status"] == "skipped" and data["status"] == "ok"
+
+
+def test_plan_has_freeze_cvn_and_app_uds_steps(app):
+    with app.app_context():
+        steps = build_plan(AVANTE)["steps"]
+    commands = [(s["header"], s["command"]) for s in steps]
+    assert {(None, "0906"), (None, "020200"), (None, "020C00"), (None, "190209"), (None, "190204"),
+            (None, "1915"), ("7E0", "22F187"), ("7E0", "22F195")} <= set(commands)
+    assert all(s["group"] == "freeze" and s["optional"] for s in steps if s["command"].startswith("02"))
+
+
+def test_freeze_frame_cvn_permanent_dtc_and_ecu_ident(app, admin):
+    part = "62F187" + "91000-AB12".encode().hex()
+    steps = [
+        _step("0100", "7E8 06 41 00 98 3B 80 13\r\r>"),
+        _step("ATDPN", "A6\r\r>", group="device"),
+        _step("0906", "7E8 07 49 06 01 1A 2B 3C 4D\r\r>", group="vehicle", optional=True),
+        _step("020200", "7E8 05 42 02 00 01 43\r\r>", group="freeze", optional=True),
+        _step("020C00", "7E8 05 42 0C 00 0F A0\r\r>", group="freeze", optional=True),
+        _step("0205", None, error="skipped", group="freeze", optional=True),
+        _step("1915", "7E8 07 59 15 FF 01 01 00 08\r\r>", optional=True, bus="can", group="uds"),
+        _step("22F187", _can_reply("7E8", bytes.fromhex(part)), header="7E0", optional=True, bus="can",
+              group="uds"),
+        _step("010D", None, error="skipped", optional=True),
+    ]
+    steps[5]["reason"] = "저장된 고장코드가 없어 건너뛰었습니다."
+    steps[-1]["reason"] = "차량이 지원하지 않는 항목이라 보내지 않았습니다."
+    data = service.run_scan(admin, car_no="34나5678", car=AVANTE, steps=steps, transport="ble").bms_data
+
+    assert data["cvns"] == ["1A2B3C4D"]
+    assert data["freeze_frame"]["dtc"] == "P0143"
+    assert data["freeze_frame"]["values"][0]["value"] == 1000.0
+    permanent = [d for d in data["dtcs"] if d["source"] == "UDS 19 15"]
+    assert permanent[0]["code"] == "P010100" and permanent[0]["kind"] == "영구"
+    assert [e for e in data["ecus"] if e["address"] == "7E8"][0]["part_no"] == "91000-AB12"
+    statuses = {s["command"]: s["status"] for s in data["steps"]}
+    assert statuses["0205"] == "skipped" and statuses["010D"] == "unsupported"
+
+
+def test_scan_saves_result_pdf(app, admin):
+    scan = service.run_scan(admin, car_no="12가3456", car=AVANTE, steps=[_step("03", "7E8 04 43 01 01 33\r\r>")],
+                            transport="ble")
+    document = db.session.scalar(select(ScanDocument).where(ScanDocument.scan_id == scan.id))
+    assert document.content.startswith(b"%PDF") and document.size == len(document.content)
+    assert document.filename.startswith("위스캔-12가3456-") and document.filename.endswith(".pdf")
+    assert service.scan_document(scan).id == document.id
+
+
+def test_pdf_failure_still_saves_scan_and_retries_later(app, admin, monkeypatch):
+    def broken(*args, **kwargs):
+        raise OSError("font missing")
+
+    monkeypatch.setattr(service.pdf, "render", broken)
+    scan = service.run_scan(admin, car_no="12가3456", car=AVANTE,
+                            steps=[_step("03", "7E8 04 43 01 01 33\r\r>")], transport="ble",
+                            client_error="블루투스 연결이 끊겼습니다.")
+    data = scan.bms_data
+    statuses = {e["status"] for e in data["errors"]}
+    assert {"client_error", "pdf_error"} <= statuses and data["status"] == "partial"
+    assert db.session.scalar(select(ScanDocument.id).where(ScanDocument.scan_id == scan.id)) is None
+    with pytest.raises(ServiceError):
+        service.scan_document(scan)
+
+    monkeypatch.undo()
+    assert service.scan_document(scan).content.startswith(b"%PDF")
 
 
 @pytest.mark.parametrize("bad", [

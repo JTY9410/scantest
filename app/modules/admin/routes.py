@@ -24,6 +24,7 @@ from app.modules.auth.access import admin_required
 from app.modules.canlab import service as canlab_service
 from app.modules.canlab.forms import ActionForm
 from app.modules.reports.models import Applog, CarMismatchReport
+from app.modules.scanner.routes import flow_config
 from app.modules.scans import car_info
 from app.modules.scans.models import DEFAULT_CAR_INFO_URL, Scan
 
@@ -72,6 +73,7 @@ def dashboard():
         connections=ai_service.connections_by_provider(),
         providers=list(AiProvider),
         obd=canlab_service.obd_config(),
+        scan_config=flow_config(),
         action=ActionForm(),
     )
 
