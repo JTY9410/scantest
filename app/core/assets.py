@@ -4,7 +4,15 @@ from pathlib import Path
 from flask import Flask
 
 # 내용이 바뀌면 브라우저·service worker 캐시를 새로 받아야 하는 정적 파일
-VERSIONED_FILES = ("dist/app.css", "js/app.js", "js/components/pwa.js", "service-worker.js")
+VERSIONED_FILES = (
+    "dist/app.css",
+    "js/app.js",
+    "js/components/pwa.js",
+    "js/components/obd-link.js",
+    "js/components/obd-ble.js",
+    "js/components/obd-dashboard.js",
+    "service-worker.js",
+)
 
 
 def asset_version(app: Flask) -> str:
