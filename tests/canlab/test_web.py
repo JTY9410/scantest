@@ -1,17 +1,19 @@
 import io
+import json
 import re
 
 import pytest
 from PIL import Image
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.core.audit import Activity
 from app.extensions import db
 from app.modules.canlab import ai, service
+from app.modules.canlab.engine.frames import elm_from_exchanges
 from app.modules.canlab.engine.search import Layout
 from app.modules.canlab.models import AnalysisRun, CanDataset, DecodeRule, GroundTruthValue, RuleStatus
 from app.modules.obd.models import ObdProfile
-from tests.canlab.synthetic import bms_0101, bms_session, exchange, trc
+from tests.canlab.synthetic import bms_0101, bms_session, exchange, isotp_frames, trc
 from tests.conftest import csrf_token
 
 TRUTHS = """배터리 충전 상태(BMS) | 94.5 | %
@@ -280,15 +282,98 @@ def test_live_capture_is_saved_as_dataset(app, admin_client):
     assert empty.status_code == 400 and "빈 파일" in empty.get_json()["message"]
 
 
-def test_live_page_lists_requests_from_active_rules(app, admin_client, trained):
-    assert "사용할 BLE 프로필이 없습니다" in admin_client.get("/admin/canlab/live").get_data(as_text=True)
+def _elm_reply(payload: bytes) -> str:
+    return "\r".join("7EC " + " ".join(f"{b:02X}" for b in frame) for frame in isotp_frames(payload))
+
+
+def _elm_capture() -> str:
+    """웹 블루투스 수집이 만드는 '# WECAR-ELM 1' 기록."""
+    return elm_from_exchanges([
+        {"t_ms": 10, "header": "7E4", "command": "220101",
+         "reply": _elm_reply(bms_0101(soc=37.5, voltage=256.5, current=5.5, cell_max=3.56, cell_min=3.54))},
+        {"t_ms": 20, "header": "7E4", "command": "1902FF", "reply": "7EC 03 59 02 FF"},
+        {"t_ms": 30, "header": "7E4", "command": "22F190", "reply": _elm_reply(b"\x62\xF1\x90TESTVIN0000123456")},
+    ], {"vehicle": "아이오닉5", "source": "web"})
+
+
+def test_live_preview_interprets_without_saving(app, client, admin_client, trained):
+    token = csrf_token(admin_client, "/admin/canlab/live")
+    with app.app_context():
+        before = db.session.scalar(select(func.count(CanDataset.id)))
+
+    response = admin_client.post("/admin/canlab/live/preview", data={"csrf_token": token, "content": _elm_capture()})
+
+    assert response.status_code == 200
+    body = response.get_json()
+    values = {v["key"]: v for v in body["values"]}
+    assert values["soc"]["value"] == 37.5 and values["soc"]["unit"] == "%"
+    assert values["pack_voltage"]["value"] == 256.5
+    assert body["vin"] == "TESTVIN0000******"
+    assert [e["request_id"] for e in body["ecus"]] == ["7E4"]
+    assert body["dtcCheckedEcus"] == ["7E4"] and body["dtcs"] == {"7E4": []}
+    with app.app_context():
+        assert db.session.scalar(select(func.count(CanDataset.id))) == before
+
+    no_reply = admin_client.post("/admin/canlab/live/preview", data={
+        "csrf_token": token, "content": "# WECAR-ELM 1\n10.0 TX 7E4 03 22 01 01\n"})
+    assert no_reply.status_code == 400 and "진단 요청·응답을 찾지 못했습니다" in no_reply.get_json()["message"]
+    assert admin_client.post("/admin/canlab/live/preview", data={"content": _elm_capture()}).status_code == 400
+    assert client.post("/admin/canlab/live/preview", data={"content": _elm_capture()}).status_code in (302, 400)
+
+
+def test_live_capture_can_create_report_directly(app, admin_client, trained):
+    token = csrf_token(admin_client, "/admin/canlab/live")
+    response = admin_client.post("/admin/canlab/live", data={
+        "csrf_token": token, "vehicle": "아이오닉5", "filename": "quick.txt", "content": _elm_capture(), "report": "1"})
+
+    assert response.status_code == 201
+    report_url = response.get_json()["report_url"]
+    assert re.fullmatch(r"/admin/canlab/reports/\d+", report_url)
+    assert "37.5%" in admin_client.get(report_url).get_data(as_text=True)
+
+
+def _obd_config(html: str) -> dict:
+    match = re.search(r'<script type="application/json" id="obd-config">(.*?)</script>', html, re.S)
+    return json.loads(match.group(1))
+
+
+def test_live_page_connects_without_profiles(app, admin_client, trained):
+    html = admin_client.get("/admin/canlab/live").get_data(as_text=True)
+    assert "진단기 연결" in html and "자동 감지" in html
+    assert "js/components/obd-link.js" in html and "js/components/obd-ble.js" in html
+    config = _obd_config(html)
+    assert config["profiles"] == [] and config["fromRules"] is True
+    assert {"header": "7E4", "command": "220101"} in config["requests"]
+    assert {"header": "7E4", "command": "1902FF"} in config["requests"]
+    assert config["saveUrl"] == "/admin/canlab/live" and config["previewUrl"] == "/admin/canlab/live/preview"
+
     with app.app_context():
         db.session.add(ObdProfile(name="vLinker", transport="ble", device_name_prefix="vLinker",
                                   service_uuid="fff0", write_uuid="fff2", notify_uuid="fff1",
                                   init_commands=["ATZ", "ATE0"], read_commands=["220101"]))
         db.session.commit()
+    config = _obd_config(admin_client.get("/admin/canlab/live").get_data(as_text=True))
+    assert config["profiles"] == [{"id": config["profiles"][0]["id"], "name": "vLinker", "namePrefix": "vLinker",
+                                   "service": "fff0", "write": "fff2", "notify": "fff1",
+                                   "init": ["ATZ", "ATE0"], "timeout": 2000}]
 
-    html = admin_client.get("/admin/canlab/live").get_data(as_text=True)
-    assert 'data-header="7E4" data-command="220101"' in html
-    assert 'data-command="1902FF"' in html and "적용 중 규칙 기준" in html
-    assert "js/components/obd-ble.js" in html
+
+def test_dashboard_has_bluetooth_card(app, admin_client, trained):
+    html = admin_client.get("/admin/").get_data(as_text=True)
+
+    assert "블루투스 진단기" in html and "빠른 점검" in html and "결과지로 저장" in html
+    assert "js/components/obd-link.js" in html and "js/components/obd-dashboard.js" in html
+    assert 'id="obd-quick"' in html and 'name="csrf_token"' in html
+    config = _obd_config(html)
+    assert {"header": "7E4", "command": "220101"} in config["requests"]
+    assert config["previewUrl"] == "/admin/canlab/live/preview"
+
+
+def test_live_page_without_rules_uses_profile_commands(app, admin_client):
+    with app.app_context():
+        db.session.add(ObdProfile(name="vLinker", transport="ble", device_name_prefix="vLinker",
+                                  service_uuid="fff0", write_uuid="fff2", notify_uuid="fff1",
+                                  request_header="7E4", response_header="7EC", read_commands=["220105"]))
+        db.session.commit()
+    config = _obd_config(admin_client.get("/admin/canlab/live").get_data(as_text=True))
+    assert config["requests"] == [{"header": "7E4", "command": "220105"}] and config["fromRules"] is False

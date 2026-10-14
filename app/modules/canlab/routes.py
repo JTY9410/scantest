@@ -7,7 +7,6 @@ from app.modules.canlab import service
 from app.modules.canlab.engine import signals
 from app.modules.canlab.forms import ActionForm, AnalysisForm, ReportForm, TruthTextForm, UploadForm
 from app.modules.canlab.models import DatasetKind, DatasetSource, RuleStatus
-from app.modules.obd.service import list_profiles
 
 bp = Blueprint("canlab", __name__, url_prefix="/admin/canlab")
 
@@ -231,28 +230,39 @@ def report_ai(report_id: int):
     return redirect(url_for("canlab.report", report_id=report_id))
 
 
+CSRF_EXPIRED = {"message": "보안 토큰이 만료되었습니다. 새로고침하세요."}
+
+
 @bp.route("/live", methods=["GET", "POST"])
 @admin_required
 def live():
     if request.method == "POST":
-        form = ActionForm()
-        if not form.validate_on_submit():
-            return {"message": "보안 토큰이 만료되었습니다. 새로고침하세요."}, 400
+        if not ActionForm().validate_on_submit():
+            return CSRF_EXPIRED, 400
         try:
             dataset = service.upload_dataset(
                 current_user, filename=request.form.get("filename", "live.txt")[:100],
                 content=(request.form.get("content") or "").encode(), kind=DatasetKind.LIVE_CAPTURE,
                 vehicle=request.form.get("vehicle") or "미입력", source=DatasetSource.WEB,
             )
+            if request.form.get("report") == "1":
+                report = service.create_report(current_user, dataset)
+                report_url = url_for("canlab.report", report_id=report.id)
+            else:
+                report_url = url_for("canlab.reports", dataset_id=dataset.id)
         except ServiceError as error:
             return {"message": error.message}, error.status
         return {"id": dataset.id, "url": url_for("canlab.dataset", dataset_id=dataset.id),
-                "report_url": url_for("canlab.reports", dataset_id=dataset.id)}, 201
-    profiles = [p for p in list_profiles() if p.enabled and p.transport == "ble"]
-    requests, from_rules = service.capture_requests(), True
-    if not requests:
-        # 적용 규칙이 없을 때는 프로필의 조회 명령으로 기초데이터를 모은다.
-        requests, from_rules = [{"header": p.request_header, "command": c} for p in profiles[:1]
-                                if p.request_header for c in p.read_commands], False
-    return render_template("canlab/live.html", profiles=profiles, requests=requests, from_rules=from_rules,
-                           action=ActionForm())
+                "report_url": report_url}, 201
+    return render_template("canlab/live.html", obd=service.obd_config(), action=ActionForm())
+
+
+@bp.post("/live/preview")
+@admin_required
+def live_preview():
+    if not ActionForm().validate_on_submit():
+        return CSRF_EXPIRED, 400
+    try:
+        return service.preview_capture((request.form.get("content") or "").encode())
+    except ServiceError as error:
+        return {"message": error.message}, error.status

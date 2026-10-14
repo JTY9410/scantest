@@ -15,6 +15,8 @@ from app.modules.admin import ai_service
 from app.modules.admin.forms import AiKeyForm, AiSettingsForm
 from app.modules.admin.models import AiProvider
 from app.modules.auth.access import admin_required
+from app.modules.canlab import service as canlab_service
+from app.modules.canlab.forms import ActionForm
 from app.modules.reports.models import Applog, CarMismatchReport
 from app.modules.scans.models import Scan
 
@@ -62,6 +64,8 @@ def dashboard():
         activities=activities,
         connections=ai_service.connections_by_provider(),
         providers=list(AiProvider),
+        obd=canlab_service.obd_config(),
+        action=ActionForm(),
     )
 
 

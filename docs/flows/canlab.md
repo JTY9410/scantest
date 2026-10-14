@@ -13,8 +13,21 @@
 | 규칙 적용·해제·되돌리기 | `POST /admin/canlab/rules/<id>/activate`, `/retire` | `activate_rule`, `retire_rule` | 규칙, 감사기록 | 버전이 다르면 409 |
 | 결과지 만들기 | `POST /admin/canlab/reports` | `create_report` | 결과지 | 적용 규칙으로 값·DTC 해석, 그래프 |
 | AI 요약 | `POST /admin/canlab/reports/<id>/ai` | `summarize_with_ai` | 결과지 요약 | AI가 없으면 규칙 기반 요약 |
-| 웹 블루투스 수집 | `GET/POST /admin/canlab/live` | `capture_requests`, `upload_dataset` | 데이터셋(live_capture) | Chrome·Edge에서 OBD2(BLE) 연결 후 저장 → 결과지 |
+| 웹 블루투스 수집 | `GET/POST /admin/canlab/live` | `obd_config`, `upload_dataset`, `create_report` | 데이터셋(live_capture), 결과지(`report=1`) | 이 페이지에서 진단기 연결 → 여러 회 수집 → 저장 |
+| 대시보드 빠른 점검 | `POST /admin/canlab/live/preview` | `preview_capture` | - | 1회 수집을 저장 없이 해석(VIN, ECU, DTC, 값). "결과지로 저장"은 `live`에 `report=1` |
 | 앱 수집 | `GET /api/canCaptureRequests`, `POST /api/canCaptures` | `capture_requests`, `store_app_capture` | 데이터셋, 결과지 | `docs/flows/api.md` |
+
+## 블루투스 진단기 연결 (웹)
+
+관리자 대시보드의 "블루투스 진단기" 카드와 수집 페이지가 같은 모듈(`static/js/components/obd-link.js`)을 씁니다. 페이지마다 연결이 따로이므로 각 페이지에서 연결합니다.
+
+- 찾기: 이름(OBD, ELM327, Vlink, vLinker, Veepeak, KONNWEI, Viecar, OBDLink 등) 또는 서비스(FFF0, FFE0, 18F0, OBDLink)로 거릅니다. 목록에 없으면 "모든 기기 보기"로 전체 기기를 고릅니다.
+- 통신 채널: 프로필을 고르면 그 UUID를 먼저 쓰고, "자동 감지"면 쓰기·알림 특성 쌍마다 `ATI`를 보내 응답하는 채널을 씁니다. OBD 프로필이 없어도 연결됩니다.
+- 초기화: `ATZ ATE0 ATL0 ATSP0`(또는 프로필 초기화 명령) 뒤 `ATH1 ATS1 ATCAF1`. 연결되면 진단기 이름, 펌웨어(`ATI`), 차량 전압(`ATRV`)을 표시합니다.
+- 다시 연결: 연결이 끊기면 5초마다 다시 붙고, 수집 중이면 연결 후 같은 요청부터 이어 갑니다. "연결 끊기"를 누르면 멈춥니다.
+- 자동 연결: 브라우저 보안상 처음 한 번은 버튼을 눌러 기기를 골라야 합니다. 이후 Chrome의 `getDevices`가 켜진 환경에서는 페이지를 열면 기억한 진단기에 자동으로 연결합니다.
+- 수집 요청: 적용 규칙의 요청, 규칙이 없으면 첫 프로필의 조회 명령. 둘 다 없으면 연결만 되고 수집 버튼은 안내 문구를 보여 줍니다.
+- 지원 브라우저: Chrome·Edge(데스크톱·Android). iPhone Safari, Firefox는 웹 블루투스가 없어 앱을 씁니다.
 
 ## 분석 엔진 (`canlab/engine/`)
 

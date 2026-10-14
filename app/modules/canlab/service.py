@@ -7,7 +7,7 @@ import time
 from datetime import UTC, datetime
 from typing import Any
 
-from flask import current_app
+from flask import current_app, url_for
 from sqlalchemy import func, select
 from sqlalchemy.orm import undefer
 from sqlalchemy.orm.exc import StaleDataError
@@ -26,6 +26,7 @@ from app.modules.canlab.models import (
     AnalysisRun, CanDataset, DatasetKind, DatasetSource, DecodeRule, DiagnosticReport,
     GroundTruthValue, RuleStatus, TruthSource,
 )
+from app.modules.obd.service import list_profiles
 
 CONFLICT = "다른 관리자가 먼저 바꿨습니다. 새로고침한 뒤 다시 시도하세요."
 TRACE_EXTENSIONS = (".trc", ".txt", ".log")
@@ -68,6 +69,13 @@ def _trace_summary(trace: Trace) -> dict:
     }
 
 
+def _responded_trace(content: bytes) -> Trace:
+    trace = load_trace(decode_text(content))
+    if not any(tx.response is not None for tx in trace.transactions):
+        raise ServiceError("진단 요청·응답을 찾지 못했습니다. PCAN TRC 또는 위카 ELM 기록인지 확인하세요.")
+    return trace
+
+
 def _pdf_reader(content: bytes):
     from pypdf import PdfReader
     from pypdf.errors import PdfReadError
@@ -100,10 +108,7 @@ def upload_dataset(actor: User, *, filename: str, content: bytes, kind: str, veh
     else:
         if not lower.endswith(TRACE_EXTENSIONS):
             raise ServiceError("통신 기록은 .trc, .txt, .log 파일이어야 합니다.")
-        trace = load_trace(decode_text(content))
-        if not any(tx.response is not None for tx in trace.transactions):
-            raise ServiceError("진단 요청·응답을 찾지 못했습니다. PCAN TRC 또는 위카 ELM 기록인지 확인하세요.")
-        summary = _trace_summary(trace)
+        summary = _trace_summary(_responded_trace(content))
 
     digest = hashlib.sha256(content).hexdigest()
     existing = db.session.scalar(select(CanDataset.id).where(CanDataset.sha256 == digest))
@@ -493,6 +498,25 @@ def capture_requests() -> list[dict]:
     return requests
 
 
+def obd_config() -> dict:
+    """웹 블루투스 연결·수집 화면 설정. 프로필이 없어도 알려진 진단기는 자동 감지로 연결한다."""
+    profiles = [p for p in list_profiles() if p.enabled and p.transport == "ble"]
+    requests, from_rules = capture_requests(), True
+    if not requests:
+        # 적용 규칙이 없을 때는 프로필의 조회 명령으로 기초데이터를 모은다.
+        requests, from_rules = [{"header": p.request_header, "command": c} for p in profiles[:1]
+                                if p.request_header for c in p.read_commands], False
+    return {
+        "profiles": [{"id": p.id, "name": p.name, "namePrefix": p.device_name_prefix, "service": p.service_uuid,
+                      "write": p.write_uuid, "notify": p.notify_uuid, "init": p.init_commands,
+                      "timeout": p.response_timeout_ms} for p in profiles],
+        "requests": requests,
+        "fromRules": from_rules,
+        "saveUrl": url_for("canlab.live"),
+        "previewUrl": url_for("canlab.live_preview"),
+    }
+
+
 HEX = re.compile(r"(?:[0-9A-Fa-f]{2})+")
 HEADER = re.compile(r"[0-9A-Fa-f]{3}|[0-9A-Fa-f]{8}")
 MAX_EXCHANGES = 2000
@@ -535,16 +559,39 @@ def _describe_dtcs(diagnosis: dict) -> None:
         dtc["desc"] = found.get(dtc["code"]) or found.get(dtc["code"][:5])
 
 
-def create_report(actor: User, dataset: CanDataset) -> DiagnosticReport:
-    if not dataset.is_trace:
-        raise ServiceError("결과지는 통신 기록(TRC·실시간 수집)으로만 만들 수 있습니다.")
-    trace = load_trace(decode_text(get_dataset(dataset.id, with_content=True).content))
-    rules = active_rule_refs()
-    values = decode_signals(trace.samples, rules)
+def _interpret(trace: Trace) -> tuple[dict, dict]:
+    """적용 중 규칙으로 값을 계산하고 VIN·ECU·고장코드를 정리한다."""
+    values = decode_signals(trace.samples, active_rule_refs())
     for value in values.values():
         value["series"] = _thin(value["series"])
     diagnosis = diagnose(trace)
     _describe_dtcs(diagnosis)
+    return values, diagnosis
+
+
+def preview_capture(content: bytes) -> dict:
+    """블루투스 빠른 점검: 기록을 저장하지 않고 해석만 한다."""
+    if not content:
+        raise ServiceError("빈 기록입니다.")
+    limit = current_app.config["CANLAB_MAX_UPLOAD_BYTES"]
+    if len(content) > limit:
+        raise ServiceError(f"기록이 너무 큽니다. {limit // (1024 * 1024)}MB 이하만 보낼 수 있습니다.", 413)
+    values, diagnosis = _interpret(_responded_trace(content))
+    return {
+        "values": [{"key": key, "label": v["label"], "value": v["value"], "unit": v["unit"]}
+                   for key, v in values.items()],
+        "vin": diagnosis["vin"],
+        "ecus": diagnosis["ecus"],
+        "dtcs": diagnosis["dtcs"],
+        "dtcCheckedEcus": diagnosis["dtc_checked_ecus"],
+    }
+
+
+def create_report(actor: User, dataset: CanDataset) -> DiagnosticReport:
+    if not dataset.is_trace:
+        raise ServiceError("결과지는 통신 기록(TRC·실시간 수집)으로만 만들 수 있습니다.")
+    trace = load_trace(decode_text(get_dataset(dataset.id, with_content=True).content))
+    values, diagnosis = _interpret(trace)
     used = sorted({(v["rule_id"], v["rule_version"]) for v in values.values()})
     report = DiagnosticReport(
         dataset_id=dataset.id, vehicle=dataset.vehicle, values=values, diagnosis=diagnosis,
