@@ -7,7 +7,7 @@ from typing import Any
 from app.core.time import iso
 from app.modules.accounts.models import Company, User
 from app.modules.canlab.models import DiagnosticReport
-from app.modules.obd.models import ObdProfile
+from app.modules.obd.models import ObdDevice, ObdProfile
 from app.modules.reports.models import Applog, CarMismatchReport
 from app.modules.scans.models import Code, Scan, ScanCode
 
@@ -202,5 +202,25 @@ def obd_profile_dict(profile: ObdProfile) -> dict[str, Any]:
         "response_header": profile.response_header,
         "read_commands": profile.read_commands,
         "response_timeout_ms": profile.response_timeout_ms,
+        "dialect": profile.dialect,
+        "can_bitrate": profile.can_bitrate,
         "updated_at": iso(profile.updated_at),
+    }
+
+
+def obd_device_dict(device: ObdDevice) -> dict[str, Any]:
+    return {
+        "id": device.id,
+        "platform": device.platform,
+        "transport": device.transport,
+        "name": device.name,
+        "dialect": device.dialect,
+        "chip": device.chip,
+        "version": device.version,
+        "service_uuid": device.service_uuid,
+        "write_uuid": device.write_uuid,
+        "notify_uuid": device.notify_uuid,
+        "protocol": device.protocol,
+        "settings": device.settings,
+        "last_connected_at": iso(device.last_connected_at),
     }

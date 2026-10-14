@@ -112,5 +112,24 @@ def test_app_api_lists_only_enabled_profiles(app, client, admin_client, make_use
         "responseHeader": "7EC",
         "readCommands": ["220101", "220102"],
         "responseTimeoutMs": 2000,
+        "dialect": "elm327",
+        "canBitrate": None,
         "updatedAt": data[0]["updatedAt"],
     }
+
+
+def test_slcan_profile_takes_bitrate_and_no_adapter_commands(app, admin_client):
+    rejected = _create(admin_client, name="WiCAN", dialect="slcan", init_commands="ATZ", can_bitrate="500000")
+    assert rejected.status_code == 200
+    assert "slcan 진단기는 AT·ST 초기화 명령을 받지 않습니다." in rejected.get_data(as_text=True)
+
+    saved = _create(admin_client, name="WiCAN", dialect="slcan", init_commands="", can_bitrate="500000")
+    assert saved.status_code == 302
+    with app.app_context():
+        profile = db.session.scalar(select(ObdProfile).where(ObdProfile.name == "WiCAN"))
+        assert profile.dialect == "slcan" and profile.can_bitrate == 500000 and profile.init_commands == []
+
+    elm = _create(admin_client, name="ELM 고정 속도", can_bitrate="500000")
+    assert elm.status_code == 302
+    with app.app_context():
+        assert db.session.scalar(select(ObdProfile.can_bitrate).where(ObdProfile.name == "ELM 고정 속도")) is None

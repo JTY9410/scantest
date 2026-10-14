@@ -30,7 +30,7 @@
   }
 
   link.addEventListener("status", ({ detail }) => {
-    startBtn.disabled = running || detail.state !== "ready";
+    startBtn.disabled = running || detail.state !== "ready" || link.busy;
     if (running && detail.state === "lost") setStatus("연결이 끊겼습니다. 다시 연결되면 하던 곳부터 이어서 수집합니다…");
   });
 
@@ -78,7 +78,7 @@
     body.append("content", `${lines.join("\n")}\n`);
     try {
       const response = await fetch(config.saveUrl, { method: "POST", body, credentials: "same-origin" });
-      const result = await response.json();
+      const result = await response.json().catch(() => ({ message: "서버 응답을 읽지 못했습니다" }));
       if (!response.ok) throw new Error(result.message || `HTTP ${response.status}`);
       statusEl.textContent = "저장했습니다. ";
       const anchor = document.createElement("a");

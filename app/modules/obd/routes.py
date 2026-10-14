@@ -7,7 +7,8 @@ from app.core.errors import ServiceError
 from app.extensions import db
 from app.modules.accounts.models import Company
 from app.modules.auth.access import admin_required
-from app.modules.obd import service, telematics
+from app.modules.api.http import api_input
+from app.modules.obd import devices, service, telematics
 from app.modules.obd.forms import ObdProfileForm, TelematicsDeviceForm
 
 bp = Blueprint("obd", __name__, url_prefix="/admin/obd")
@@ -23,13 +24,33 @@ def _device_form() -> TelematicsDeviceForm:
 def _index(device_form=None, new_token=None, status=200):
     return render_template("obd/index.html", profiles=service.list_profiles(), devices=telematics.list_devices(),
                            device_form=device_form or _device_form(), action=FlaskForm(),
-                           new_token=new_token), status
+                           new_token=new_token, remembered=devices.list_recent()), status
 
 
 @bp.get("/")
 @admin_required
 def index():
     return _index()
+
+
+@bp.post("/my-devices")
+@admin_required
+def my_device_save():
+    try:
+        device, created = devices.remember(current_user, "web", api_input())
+    except ServiceError as error:
+        return {"message": error.message, **error.extra}, error.status
+    return {"id": device.id}, 201 if created else 200
+
+
+@bp.delete("/my-devices/<int:device_id>")
+@admin_required
+def my_device_forget(device_id: int):
+    try:
+        devices.forget(current_user, device_id)
+    except ServiceError as error:
+        return {"message": error.message}, error.status
+    return {"message": "삭제되었습니다."}
 
 
 @bp.post("/devices")

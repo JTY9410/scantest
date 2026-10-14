@@ -8,6 +8,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from flask import current_app, url_for
+from flask_login import current_user
 from sqlalchemy import func, select
 from sqlalchemy.orm import undefer
 from sqlalchemy.orm.exc import StaleDataError
@@ -26,6 +27,7 @@ from app.modules.canlab.models import (
     AnalysisRun, CanDataset, DatasetKind, DatasetSource, DecodeRule, DiagnosticReport,
     GroundTruthValue, RuleStatus, TruthSource,
 )
+from app.modules.obd import devices as obd_devices
 from app.modules.obd.service import list_profiles
 
 CONFLICT = "다른 관리자가 먼저 바꿨습니다. 새로고침한 뒤 다시 시도하세요."
@@ -499,7 +501,12 @@ def capture_requests() -> list[dict]:
 
 
 def obd_config() -> dict:
-    """웹 블루투스 연결·수집 화면 설정. 프로필이 없어도 알려진 진단기는 자동 감지로 연결한다."""
+    """웹 블루투스 연결·수집 화면 설정. 프로필이 없어도 알려진 진단기는 자동 감지로 연결한다.
+    devices는 현재 사용자가 웹·앱에서 연결했던 진단기로, 이 브라우저에 기억이 없을 때 설정을 미리 채운다."""
+    # api 패키지는 이 모듈을 가져오므로 순환 import를 피해 여기서 가져온다.
+    from app.modules.api.casing import camelize
+    from app.modules.api.serializers import obd_device_dict
+
     profiles = [p for p in list_profiles() if p.enabled and p.transport == "ble"]
     requests, from_rules = capture_requests(), True
     if not requests:
@@ -509,11 +516,14 @@ def obd_config() -> dict:
     return {
         "profiles": [{"id": p.id, "name": p.name, "namePrefix": p.device_name_prefix, "service": p.service_uuid,
                       "write": p.write_uuid, "notify": p.notify_uuid, "init": p.init_commands,
-                      "timeout": p.response_timeout_ms} for p in profiles],
+                      "timeout": p.response_timeout_ms, "dialect": p.dialect, "canBitrate": p.can_bitrate}
+                     for p in profiles],
         "requests": requests,
         "fromRules": from_rules,
         "saveUrl": url_for("canlab.live"),
         "previewUrl": url_for("canlab.live_preview"),
+        "devices": camelize([obd_device_dict(d) for d in obd_devices.list_for(current_user)]),
+        "devicesUrl": url_for("obd.my_device_save"),
     }
 
 

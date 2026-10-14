@@ -111,9 +111,11 @@
 
 ## 연결 방식
 
+명령 체계(ELM327·STN·slcan)는 연결 방식과 따로 정합니다(`docs/flows/obd.md`의 "진단기 명령 체계"). 스캔 결과에는 `bms_data.dialect`와 통신 기록 머리글 `# dialect:`로 남깁니다.
+
 | 방식 | 웹 | 앱 | 비고 |
 | --- | --- | --- | --- |
-| BLE | Web Bluetooth | `flutter_blue_plus` | Vlinker, OBDLink, Veepeak, Carista 등 이름·서비스로 찾기, "모든 기기 보기" |
+| BLE | Web Bluetooth | `flutter_blue_plus` | Vlinker, OBDLink, Veepeak, Carista, WiCAN(Nordic UART) 등 이름·서비스로 찾기, "모든 기기 보기" |
 | 블루투스 클래식(SPP) | Web Serial(Chrome 117 이상, 페어링 후 "블루투스 클래식·USB") | Android `flutter_classic_bluetooth` | 38400·9600·115200·500000 bps 순서로 연결 |
 | USB | Web Serial | - | |
 | WiFi | 지원 안 함(브라우저가 TCP 연결 불가) | 소켓 `192.168.0.10:35000` | 앱 연결 화면 WiFi 탭 |

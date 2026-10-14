@@ -71,7 +71,7 @@ def run():
             current_user, car_no=data.get("carNo"), car=car if isinstance(car, dict) else None,
             steps=data.get("steps"), transport=str(data.get("transport") or ""),
             device=data.get("device"), lookup_error=data.get("lookupError"),
-            client_error=data.get("clientError"),
+            client_error=data.get("clientError"), dialect=data.get("dialect"),
         )
     except ServiceError as error:
         return {"message": error.message}, error.status

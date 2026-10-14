@@ -59,7 +59,7 @@ def test_scan_run_saves_scan_and_returns_pdf_url(app, client, make_user):
     make_user("tester1")
     headers = api_login(client, "tester1")
     body = {
-        "carNo": "12가3456", "car": DTO, "transport": "ble", "device": "vLinker MC+",
+        "carNo": "12가3456", "car": DTO, "transport": "ble", "device": "vLinker MC+", "dialect": "stn",
         "steps": [
             {"command": "ATRV", "reply": "12.4V\r\r>", "group": "device"},
             {"command": "0100", "reply": "7E8 06 41 00 98 3B 80 13\r\r>"},
@@ -81,6 +81,7 @@ def test_scan_run_saves_scan_and_returns_pdf_url(app, client, make_user):
     with app.app_context():
         scan = db.session.get(Scan, data["id"])
         assert scan.car_no == "12가3456" and scan.device_type == "ble" and scan.raw == ["P0133"]
+        assert scan.bms_data["dialect"] == "stn"
         assert db.session.scalar(select(ScanDocument.scan_id)) == scan.id
 
     pdf = client.get(data["pdfUrl"], headers=headers)

@@ -346,6 +346,9 @@ def test_live_page_connects_without_profiles(app, admin_client, trained):
     assert {"header": "7E4", "command": "220101"} in config["requests"]
     assert {"header": "7E4", "command": "1902FF"} in config["requests"]
     assert config["saveUrl"] == "/admin/canlab/live" and config["previewUrl"] == "/admin/canlab/live/preview"
+    assert config["devices"] == [] and config["devicesUrl"] == "/admin/obd/my-devices"
+    assert "js/components/obd-plan.js" in html and "js/components/obd-driver.js" in html
+    assert html.index("obd-driver.js") < html.index("obd-link.js")
 
     with app.app_context():
         db.session.add(ObdProfile(name="vLinker", transport="ble", device_name_prefix="vLinker",
@@ -355,7 +358,8 @@ def test_live_page_connects_without_profiles(app, admin_client, trained):
     config = _obd_config(admin_client.get("/admin/canlab/live").get_data(as_text=True))
     assert config["profiles"] == [{"id": config["profiles"][0]["id"], "name": "vLinker", "namePrefix": "vLinker",
                                    "service": "fff0", "write": "fff2", "notify": "fff1",
-                                   "init": ["ATZ", "ATE0"], "timeout": 2000}]
+                                   "init": ["ATZ", "ATE0"], "timeout": 2000, "dialect": "elm327",
+                                   "canBitrate": None}]
 
 
 def test_dashboard_has_bluetooth_card(app, admin_client, trained):

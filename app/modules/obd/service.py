@@ -10,7 +10,7 @@ from app.core import audit
 from app.core.errors import ServiceError
 from app.extensions import db
 from app.modules.accounts.models import User
-from app.modules.obd.models import ObdProfile, ObdTransport
+from app.modules.obd.models import ObdDialect, ObdProfile, ObdTransport
 
 CONFLICT = "다른 관리자가 먼저 이 프로필을 수정했습니다. 새로고침한 뒤 다시 저장하세요."
 
@@ -64,6 +64,8 @@ def _values(data: dict[str, Any]) -> dict[str, Any]:
         "read_commands": command_lines(data.get("read_commands")),
         "response_timeout_ms": int(data["response_timeout_ms"]),
         "enabled": bool(data.get("enabled")),
+        "dialect": data.get("dialect") or ObdDialect.ELM327,
+        "can_bitrate": (data.get("can_bitrate") or None) if data.get("dialect") == ObdDialect.SLCAN else None,
     }
 
 

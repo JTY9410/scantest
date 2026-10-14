@@ -4,9 +4,6 @@
   "use strict";
 
   const RECONNECT_WAIT_MS = 20000;
-  const PENDING_RETRIES = 2;
-  const PENDING_TIMEOUT_MS = 5000;
-  const BUSY_DELAY_MS = 200;
   const P = window.WecarObdPlan;
   const STAGES = ["connect", "lookup", "scan", "analyze"];
   const CAR_FIELDS = [
@@ -171,38 +168,11 @@
       logList.scrollTop = logList.scrollHeight;
     }
 
-    // 명령 하나를 보내고, 단말기 오류·응답 대기(NRC 78)면 한 번씩 복구해 다시 보낸다.
-    async function exchange(command, timeout, ctx) {
-      let reply = await link.send(command, timeout);
-      if (command.startsWith("AT")) return reply;
-      const action = P.recovery(reply, ctx.bus, command);
-      if (action === "stopped") {
-        reply = await link.send(command, timeout);
-      } else if (action === "buffer") {
-        await link.send("ATS0");
-        reply = await link.send(command, timeout);
-        await link.send("ATS1");
-      } else if (action === "bus") {
-        await link.send("ATPC");
-        reply = await link.send(command, timeout);
-      } else if (action === "pending") {
-        await link.send("ATSTFF");
-        for (let i = 0; i < PENDING_RETRIES && P.recovery(reply, ctx.bus, command) === "pending"; i += 1) {
-          reply = await link.send(command, Math.max(timeout || 0, PENDING_TIMEOUT_MS));
-        }
-        await link.send("ATST32");
-      } else if (action === "busy") {
-        await new Promise((resolve) => setTimeout(resolve, BUSY_DELAY_MS));
-        reply = await link.send(command, timeout);
-      }
-      return reply;
-    }
-
+    // 주소 설정·오류 복구는 진단기 드라이버(obd-driver.js)가 명령 체계에 맞게 한다.
     async function runPlan(steps, results) {
       const started = performance.now();
       const ctx = P.newContext();
       const tally = { ok: 0, failed: 0, skipped: 0 };
-      let header = null;
       const finish = (record) => {
         results.push(record);
         if (record.error === "skipped") tally.skipped += 1;
@@ -233,29 +203,25 @@
           if (!link.ready) {
             scanStatus.textContent = "진단기 연결이 끊겼습니다. 다시 연결되기를 기다리는 중…";
             const deadline = Date.now() + RECONNECT_WAIT_MS;
-            const back = await link.waitReady(() => state.stop || Date.now() > deadline);
-            header = null;
-            if (!back) record.error = "disconnected";
+            if (!(await link.waitReady(() => state.stop || Date.now() > deadline))) record.error = "disconnected";
+          }
+          if (!record.error && !link.supports(item.command)) {
+            finish({ ...record, error: "skipped", reason: "이 진단기의 명령 체계에서는 쓰지 않는 명령입니다." });
+            continue;
           }
           if (!record.error) {
             try {
-              const want = target || (header ? P.BROADCAST[ctx.bus] || "7DF" : null);
-              if (want && want !== header) {
-                for (const command of P.headerCommands(want, ctx.bus)) await link.send(command);
-                header = want;
-              }
-              const reply = await exchange(item.command, step.timeout, ctx);
+              const reply = await link.request({ header: target, command: item.command, timeoutMs: step.timeout });
               record.tMs = Math.round(performance.now() - started);
               if (reply.trim()) record.reply = reply;
               else record.error = link.ready ? "timeout" : "disconnected";
             } catch (error) {
-              header = null;
               record.error = link.ready ? `단말기 오류: ${error.message}` : "disconnected";
             }
           }
           P.observe(step, item.command, record.reply, ctx);
           if (step.probe && target && !record.reply) ctx.dead.add(target);
-          if (item.command === "ATDPN" && ctx.bus) link.rememberProtocol?.(record.reply);
+          if (item.command === "ATDPN" && ctx.bus) link.rememberProtocol(record.reply);
           finish(record);
         }
       }
@@ -287,6 +253,10 @@
         notice.textContent = "진단기 연결이 끊겼습니다. 다시 연결한 뒤 '조회 없이 스캔 계속' 또는 '스캔하기'를 누르세요.";
         return;
       }
+      if (!link.lock("scan")) {
+        notice.textContent = "빠른 점검이 진단기를 쓰는 중입니다. 끝난 뒤 다시 누르세요.";
+        return;
+      }
       Object.assign(state, { running: true, stop: false, pending: null });
       runBtn.disabled = true;
       stopBtn.disabled = false;
@@ -306,6 +276,8 @@
         await runPlan(plan.steps, results);
       } catch (error) {
         clientError = `${results.length ? `${results.length}번째 단계 뒤 ` : ""}스캔이 중단되었습니다: ${error.message}`;
+      } finally {
+        link.unlock("scan");
       }
       try {
         if (!results.length) {
@@ -315,7 +287,8 @@
         }
         state.pending = {
           carNo: state.carNo || form.elements.car_no.value.replace(/\s+/g, ""), car: state.car, steps: results,
-          transport: link.transport, device: link.info.name || "", lookupError: state.lookupError, clientError,
+          transport: link.transport, device: link.info.name || "", dialect: link.dialect, lookupError: state.lookupError,
+          clientError,
         };
         notice.textContent = "스캔을 마쳤습니다. 결과를 분석합니다.";
         await save();

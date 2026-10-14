@@ -3,6 +3,8 @@
 {% from "canlab/_obd_panel.html" import obd_panel %}
 {% block title %}블루투스 수집{% endblock %}
 {% block head %}
+<script src="{{ url_for('static', filename='js/components/obd-plan.js', v=asset_version) }}" defer></script>
+<script src="{{ url_for('static', filename='js/components/obd-driver.js', v=asset_version) }}" defer></script>
 <script src="{{ url_for('static', filename='js/components/obd-link.js', v=asset_version) }}" defer></script>
 <script src="{{ url_for('static', filename='js/components/obd-ble.js', v=asset_version) }}" defer></script>
 {% endblock %}

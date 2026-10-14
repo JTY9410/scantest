@@ -5,7 +5,7 @@ from flask_wtf import FlaskForm
 from wtforms import BooleanField, HiddenField, IntegerField, SelectField, StringField, TextAreaField
 from wtforms.validators import DataRequired, Length, NumberRange, Optional, ValidationError
 
-from app.modules.obd.models import ObdTransport
+from app.modules.obd.models import CAN_BITRATES, ObdDialect, ObdTransport
 from app.modules.obd.service import (
     ADAPTER_COMMAND_PATTERN,
     HEADER_PATTERN,
@@ -45,6 +45,9 @@ _header = _matches(HEADER_PATTERN, "7E4 같은 3자리 또는 18DA10F1 같은 8�
 class ObdProfileForm(FlaskForm):
     name = StringField("프로필 이름", validators=[DataRequired("프로필 이름을 입력하세요."), Length(max=100)])
     transport = SelectField("연결 방식", choices=[(t.value, t.label) for t in ObdTransport])
+    dialect = SelectField("명령 체계", choices=[(d.value, d.label) for d in ObdDialect], default=ObdDialect.ELM327)
+    can_bitrate = SelectField("CAN 속도(slcan)", coerce=int, default=0, filters=[lambda v: v or 0],
+                              choices=[(0, "자동 감지")] + [(b, f"{b // 1000} kbit/s") for b in CAN_BITRATES])
     device_name_prefix = StringField(
         "기기 이름 접두사",
         validators=[DataRequired("기기 이름 접두사를 입력하세요."), Length(max=50)],
@@ -78,6 +81,9 @@ class ObdProfileForm(FlaskForm):
         uuids = (self.service_uuid, self.write_uuid, self.notify_uuid)
         if self.transport.data == ObdTransport.BLE and not all((f.data or "").strip() for f in uuids):
             self.service_uuid.errors.append("BLE 연결에는 서비스·쓰기·알림 UUID가 모두 필요합니다.")
+            valid = False
+        if self.dialect.data == ObdDialect.SLCAN and command_lines(self.init_commands.data):
+            self.init_commands.errors.append("slcan 진단기는 AT·ST 초기화 명령을 받지 않습니다. 비워 두세요.")
             valid = False
         headers = [(f.data or "").strip() for f in (self.request_header, self.response_header)]
         if any(headers) and not all(headers):

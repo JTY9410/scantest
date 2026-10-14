@@ -35,6 +35,7 @@ def scan_runs_store():
         current_user(), car_no=data.get("car_no"), car=car if isinstance(car, dict) else None,
         steps=data.get("steps"), transport=str(data.get("transport") or ""), device=data.get("device"),
         lookup_error=data.get("lookup_error"), client_error=data.get("client_error"), source=DatasetSource.APP,
+        dialect=data.get("dialect"),
     )
     return respond({"message": "생성되었습니다.", "data": {
         "id": scan.id, "status": scan.bms_data["status"], "errors": scan.bms_data["errors"],

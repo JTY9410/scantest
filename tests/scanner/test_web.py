@@ -78,10 +78,20 @@ def test_run_then_result_page_shows_wescan_format(admin_client):
              for s in plan["steps"]]
     steps[-1].update(error="timeout", reason=None, reply=None)
     response = _json(admin_client, "/admin/scan/run", {"carNo": "12가3456", "car": DTO, "steps": steps,
-                                                      "transport": "serial", "device": "USB 진단기"})
+                                                      "transport": "serial", "device": "USB 진단기",
+                                                      "dialect": "slcan"})
     assert response.status_code == 201, response.get_json()
     saved = response.get_json()
     assert saved["status"] == "partial"
+    unknown = _json(admin_client, "/admin/scan/run", {"carNo": "12가3456", "car": DTO, "steps": steps,
+                                                     "transport": "serial", "dialect": "j2534"})
+    assert unknown.status_code == 201
+    from app.extensions import db
+    from app.modules.scans.models import Scan
+
+    with admin_client.application.app_context():
+        assert db.session.get(Scan, saved["id"]).bms_data["dialect"] == "slcan"
+        assert db.session.get(Scan, unknown.get_json()["id"]).bms_data["dialect"] is None
 
     html = admin_client.get(saved["url"]).get_data(as_text=True)
     assert "위스캔 결과" in html and "P0133" in html and "진단 요약" in html

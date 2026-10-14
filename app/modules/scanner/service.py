@@ -19,6 +19,7 @@ from app.modules.accounts.models import User
 from app.modules.canlab.engine.decode import diagnose
 from app.modules.canlab.models import CanDataset, DatasetKind, DatasetSource, DiagnosticReport
 from app.modules.canlab.service import _describe_dtcs, _trace_summary, active_rule_refs
+from app.modules.obd.models import ObdDialect
 from app.modules.scanner import pdf
 from app.modules.scanner.interpret import detect_protocol, interpret, record_text
 from app.modules.scanner.obd import STATUS_LABELS, SYSTEMS
@@ -121,7 +122,7 @@ def _int(value: Any) -> int | None:
 
 def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, transport: str,
              device: str | None = None, lookup_error: str | None = None, client_error: str | None = None,
-             source: str = DatasetSource.WEB) -> Scan:
+             source: str = DatasetSource.WEB, dialect: str | None = None) -> Scan:
     car_no = car_info.normalize_car_no(car_no)
     if not car_no:
         raise ServiceError("차량번호를 입력해주세요.")
@@ -130,13 +131,14 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     steps = clean_steps(steps)
     car = car_info.normalize_dto(car) if isinstance(car, dict) else {}
     device = (device or TRANSPORTS[transport]).strip()[:100]
+    dialect = dialect if dialect in tuple(ObdDialect) else None
     vehicle = " ".join(str(car.get(k)) for k in ("diag_company", "diag_model", "diag_year") if car.get(k)) \
         or "차량 미확인"
     started = _now()
 
     protocol = detect_protocol(steps)
     record = record_text(steps, protocol["bus"], {"vehicle": vehicle, "device": device, "transport": transport,
-                                                  "started": started.isoformat()})
+                                                  "dialect": dialect, "started": started.isoformat()})
     trace = None
     try:
         result, trace = interpret(steps, active_rule_refs(), record, car)
@@ -187,7 +189,7 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
         raw=[d["code"] for d in result["dtcs"]],
         bms_data={
             "source": "scanner", "report_id": report.id, "dataset_id": dataset.id, "status": result["status"],
-            "transport": transport, "device": device, "car": car,
+            "transport": transport, "device": device, "dialect": dialect, "car": car,
             "battery": {k: {"label": v["label"], "value": v["value"], "unit": v["unit"],
                             "reference": bool(v.get("reference")), "source": v.get("source"),
                             "origin": v.get("origin"), "range": v.get("range"), "outlier": bool(v.get("outlier"))}

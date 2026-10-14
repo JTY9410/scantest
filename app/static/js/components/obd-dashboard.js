@@ -23,7 +23,7 @@
   let lines = [];
   let running = false;
 
-  const canRun = () => link.ready && config.requests.length > 0 && !running;
+  const canRun = () => link.ready && config.requests.length > 0 && !running && !link.busy;
   link.addEventListener("status", () => {
     runBtn.disabled = !canRun();
   });
@@ -41,7 +41,7 @@
 
   async function post(url, fields) {
     const response = await fetch(url, { method: "POST", body: formData(fields), credentials: "same-origin" });
-    const data = await response.json();
+    const data = await response.json().catch(() => ({ message: "서버 응답을 읽지 못했습니다" }));
     if (!response.ok) throw new Error(data.message || `HTTP ${response.status}`);
     return data;
   }

@@ -17,10 +17,12 @@ from app.modules.api.serializers import (
     can_capture_dict,
     code_dict,
     mismatch_dict,
+    obd_device_dict,
     obd_profile_dict,
     scan_dict,
 )
 from app.modules.canlab import service as canlab
+from app.modules.obd import devices as obd_devices
 from app.modules.obd import service as obd
 from app.modules.reports import service as reports
 from app.modules.reports.models import CarMismatchReport
@@ -288,6 +290,28 @@ def applogs_show(log_id: int):
 @require_api_auth
 def obd_profiles_index():
     return respond({"data": [obd_profile_dict(p) for p in obd.enabled_profiles()]})
+
+
+# ---- 한 번 연결한 진단기 기억 (신규 API) -------------------------------------------------
+
+@bp.get("/obdDevices")
+@require_api_auth
+def obd_devices_index():
+    return respond({"data": [obd_device_dict(d) for d in obd_devices.list_for(current_user())]})
+
+
+@bp.post("/obdDevices")
+@require_api_auth
+def obd_devices_store():
+    device, created = obd_devices.remember(current_user(), "app", api_input())
+    return respond({"message": "저장되었습니다.", "data": obd_device_dict(device)}, 201 if created else 200)
+
+
+@bp.delete("/obdDevices/<int:device_id>")
+@require_api_auth
+def obd_devices_destroy(device_id: int):
+    obd_devices.forget(current_user(), device_id)
+    return respond({"message": "삭제되었습니다."})
 
 
 # ---- CAN 수집 (신규 API) ------------------------------------------------------------

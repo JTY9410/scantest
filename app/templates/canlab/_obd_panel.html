@@ -2,6 +2,7 @@
 {% macro obd_panel(obd) %}
 <script type="application/json" id="obd-config">{{ obd|tojson }}</script>
 <div data-obd-panel>
+  <input type="hidden" data-obd-csrf value="{{ csrf_token() }}">
   <p class="flash flash-warning" data-obd-unsupported hidden><span aria-hidden="true" class="font-bold">!</span>
     <span>이 브라우저는 블루투스·시리얼 연결을 지원하지 않습니다. 안드로이드·PC의 Chrome 또는 Edge를 쓰거나, 아이폰은 위카 앱으로 수집하세요.</span></p>
   <div class="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
@@ -23,14 +24,20 @@
   <dl class="dl mt-3" data-obd-info hidden>
     <dt>진단기</dt><dd data-obd-name>-</dd>
     <dt>연결 방식</dt><dd data-obd-transport>-</dd>
+    <dt>명령 체계</dt><dd data-obd-dialect>-</dd>
     <dt>펌웨어</dt><dd data-obd-version>-</dd>
     <dt>차량 전압</dt><dd class="tabular-nums" data-obd-voltage>-</dd>
   </dl>
+  <div class="mt-3 text-sm" data-obd-devices hidden>
+    <p class="font-medium">기억한 진단기 <span class="text-muted">(이 브라우저, 최근 5대. 다음에는 버튼 없이 연결)</span></p>
+    <ul class="mt-1 grid gap-1"></ul>
+  </div>
   <details class="mt-3 text-sm text-muted">
-    <summary class="cursor-pointer font-medium text-fg">다른 진단기(블루투스 클래식, WiFi, LTE)</summary>
+    <summary class="cursor-pointer font-medium text-fg">다른 진단기(블루투스 클래식, 원시 CAN, WiFi, LTE)</summary>
     <ul class="mt-2 grid list-disc gap-1 pl-5">
       <li>BLE(저전력 블루투스) 진단기: vLinker MC·MS·FS, OBDLink CX, Veepeak, Carista, iCar 등은 '진단기 연결(BLE)'로 찾습니다.</li>
       <li>블루투스 클래식(SPP)·USB 진단기: ELM327 v1.5·v2.1, OBDLink MX+ 등은 컴퓨터에 먼저 페어링한 뒤 '블루투스 클래식·USB'를 누르세요(Chrome·Edge의 Web Serial).</li>
+      <li>ELM327뿐 아니라 STN 칩 진단기(OBDLink)와 slcan 방식 원시 CAN 어댑터(CANable, WiCAN, ESP32·nRF BLE-CAN)도 명령 체계를 스스로 알아내 씁니다. 원시 CAN 어댑터는 CAN 차량만 지원합니다.</li>
       <li>WiFi 진단기는 브라우저에서 직접 연결할 수 없습니다. 위카 앱의 WiFi 연결을 쓰세요.</li>
       <li>LTE 단말기는 설정 &gt; OBD2 연결에서 등록하면 단말기가 스캔 결과를 직접 올립니다.</li>
     </ul>

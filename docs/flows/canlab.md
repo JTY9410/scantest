@@ -24,8 +24,10 @@
 
 - 찾기: 이름(OBD, ELM327, Vlink, vLinker, Veepeak, KONNWEI, Viecar, OBDLink, Carista, iCar, Vgate, LELink, BlueDriver 등) 또는 서비스(FFF0, FFE0, 18F0, AE30, BEEF, Nordic UART, OBDLink)로 거릅니다. 목록에 없으면 "모든 기기 보기"로 전체 기기를 고릅니다.
 - 블루투스 클래식·USB: "블루투스 클래식·USB" 버튼은 Web Serial로 페어링된 SPP 포트나 USB 진단기에 연결합니다(`SerialLink`).
-- 통신 채널: 프로필을 고르면 그 UUID를 먼저 쓰고, "자동 감지"면 쓰기·알림 특성 쌍마다 `ATI`를 보내 응답하는 채널을 씁니다. OBD 프로필이 없어도 연결됩니다.
-- 초기화: `ATZ ATE0 ATL0 ATSP0`(또는 프로필 초기화 명령) 뒤 `ATH1 ATS1 ATCAF1`. 연결되면 진단기 이름, 펌웨어(`ATI`), 차량 전압(`ATRV`)을 표시합니다.
+- 통신 채널: 프로필이나 기억한 진단기의 UUID를 먼저 쓰고, "자동 감지"면 쓰기·알림 특성 쌍마다 `ATI`(slcan은 `V`)를 보내 응답하는 채널을 씁니다. OBD 프로필이 없어도 연결됩니다.
+- 명령 체계: ELM327·STN·slcan을 가려 드라이버(`obd-driver.js`)를 고릅니다(`docs/flows/obd.md`의 "진단기 명령 체계"). 패널에 명령 체계를 표시합니다.
+- 초기화: ELM327·STN은 `ATZ ATE0 ATL0 ATSP0`(또는 프로필 초기화 명령, 기억한 `ATSPA<n>`) 뒤 `ATH1 ATS1 ATCAF1 ATAT1`, slcan은 `C V Z0` 뒤 첫 요청 때 `S<속도> O`. 연결되면 진단기 이름, 펌웨어(`ATI`·`STDI`·`V`), 차량 전압(`ATRV`, slcan은 없음)을 표시합니다.
+- 기억: 연결한 진단기는 이 브라우저와 서버 계정에 남고, 패널의 "기억한 진단기"에서 지웁니다(`docs/flows/obd.md`의 "진단기 기억").
 - 다시 연결: 연결이 끊기면 5초마다 다시 붙고, 수집 중이면 연결 후 같은 요청부터 이어 갑니다. "연결 끊기"를 누르면 멈춥니다.
 - 자동 연결: 브라우저 보안상 처음 한 번은 버튼을 눌러 기기를 골라야 합니다. 이후 Chrome의 `getDevices`가 켜진 환경에서는 페이지를 열면 기억한 진단기에 자동으로 연결합니다.
 - 수집 요청: 적용 규칙의 요청, 규칙이 없으면 첫 프로필의 조회 명령. 둘 다 없으면 연결만 되고 수집 버튼은 안내 문구를 보여 줍니다.
