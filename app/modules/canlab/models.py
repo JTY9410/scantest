@@ -35,10 +35,11 @@ class DatasetSource(enum.StrEnum):
     UPLOAD = "upload"
     WEB = "web"
     APP = "app"
+    LTE = "lte"
 
     @property
     def label(self) -> str:
-        return {"upload": "파일 업로드", "web": "웹 블루투스", "app": "모바일 앱"}[self.value]
+        return {"upload": "파일 업로드", "web": "웹 블루투스", "app": "모바일 앱", "lte": "LTE 단말기"}[self.value]
 
 
 class RuleStatus(enum.StrEnum):
@@ -66,7 +67,7 @@ class CanDataset(TimestampMixin, db.Model):
     __tablename__ = "can_datasets"
     __table_args__ = (
         CheckConstraint("kind IN ('gscan_trc', 'wecan_trc', 'live_capture', 'gscan_pdf')", name="kind_valid"),
-        CheckConstraint("source IN ('upload', 'web', 'app')", name="source_valid"),
+        CheckConstraint("source IN ('upload', 'web', 'app', 'lte')", name="source_valid"),
         Index("ix_can_datasets_created_at", "created_at"),
     )
 

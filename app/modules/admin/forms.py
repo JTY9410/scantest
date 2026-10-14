@@ -42,3 +42,16 @@ class AiSettingsForm(FlaskForm):
 
 class AiKeyForm(FlaskForm):
     api_key = PasswordField("API 키", validators=[DataRequired("API 키를 입력하세요."), Length(min=8, max=500)])
+
+
+class CarInfoUrlForm(FlaskForm):
+    url = StringField("조회 주소", validators=[DataRequired("주소를 입력하세요."), Length(max=500)])
+    version = HiddenField()
+
+
+class CarInfoKeyForm(FlaskForm):
+    api_key = PasswordField("인증키", validators=[DataRequired("인증키를 입력하세요."), Length(min=4, max=500)])
+
+
+class CarInfoTestForm(FlaskForm):
+    car_no = StringField("차량번호", validators=[DataRequired("차량번호를 입력하세요."), Length(max=20)])

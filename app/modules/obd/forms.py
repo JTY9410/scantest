@@ -84,3 +84,9 @@ class ObdProfileForm(FlaskForm):
             self.request_header.errors.append("요청·응답 헤더는 함께 입력하세요.")
             valid = False
         return valid
+
+
+class TelematicsDeviceForm(FlaskForm):
+    serial = StringField("단말기 일련번호", validators=[DataRequired("일련번호를 입력하세요."), Length(4, 64)])
+    name = StringField("이름", validators=[Optional(), Length(max=100)])
+    company_id = SelectField("소속 회사", coerce=int, default=0)

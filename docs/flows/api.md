@@ -21,6 +21,8 @@
 | 블루투스 OBD2 설정 받기 (신규) | `GET /api/obdProfiles` | `obd.enabled_profiles` | - | 사용 중인 프로필 목록 (`docs/flows/obd.md`) |
 | CAN 수집 명령 받기 (신규) | `GET /api/canCaptureRequests` | `canlab.capture_requests` | - | 적용 규칙의 `{header, command}` 목록과 DTC·VIN 조회 명령 |
 | CAN 수집 올리기 (신규) | `POST /api/canCaptures` | `canlab.store_app_capture` | 데이터셋, 결과지 | 201과 해석 값·DTC (`docs/flows/canlab.md`) |
+| LTE 단말기 스캔 계획 (신규) | `GET /api/telematics/plan` | `obd.telematics.plan_for` | 마지막 접속 시각 | 단말기 토큰(`Device`) 인증 (`docs/flows/telematics.md`) |
+| LTE 단말기 결과 올리기 (신규) | `POST /api/telematics/captures` | `obd.telematics.receive` | 통신 기록, 결과지, 스캔 | 201 `{id, status, errors}` |
 
 - 목록 API는 `search`(`필드:값||필드:연산자:값`), `order`(`필드:asc|desc`), `with`, `page`, `per_page` 파라미터를 이전과 같이 받습니다(`app/modules/api/listing.py`).
 - 가입 시 회원 유형으로 관리자를 고를 수 없습니다(이전 서버의 권한 상승 허점 수정).

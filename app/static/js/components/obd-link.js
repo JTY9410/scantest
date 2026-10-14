@@ -1,13 +1,23 @@
-// ELM327 호환 BLE OBD2 진단기 연결. 넓게 찾고, 통신 채널을 스스로 찾고, 끊기면 다시 붙는다.
-// 화면 스크립트(obd-ble.js, obd-dashboard.js)는 window.WecarObd.bindPanel()이 돌려준 연결을 쓴다.
+// ELM327 호환 OBD2 진단기 연결. BLE(Web Bluetooth)와 블루투스 클래식 SPP·USB(Web Serial)를 지원한다.
+// 넓게 찾고, 통신 채널을 스스로 찾고, 끊기면 다시 붙는다.
+// 화면 스크립트(obd-ble.js, obd-dashboard.js, obd-scan.js)는 window.WecarObd.bindPanel()이 돌려준 연결을 쓴다.
 (() => {
   "use strict";
 
   const NAME_PREFIXES = [
     "OBD", "OBDII", "OBD2", "OBDBLE", "ELM", "ELM327", "Vlink", "vLinker", "VLINK", "V-LINK",
     "IOS-Vlink", "Android-Vlink", "VEEPEAK", "Veepeak", "FMM003", "KONNWEI", "Viecar", "OBDLink",
+    "Carista", "iCar", "Vgate", "KIWI", "Kiwi", "LELink", "BlueDriver", "OBDCheck", "Bluetooth OBD",
+    "V-Checker", "Autophix", "THINKCAR", "Topdon", "Foxwell",
   ];
-  const KNOWN_SERVICES = [0xfff0, 0xffe0, 0x18f0, "e7810a71-73ae-499d-8c15-faa9aef0c3f2"];
+  // ELM327 계열 BLE UART 서비스: 일반 클론(fff0·ffe0·18f0), Nordic UART, Microchip(vLinker·OBDLink CX), 기타 클론
+  const KNOWN_SERVICES = [
+    0xfff0, 0xffe0, 0x18f0, 0xae30, 0xbeef, "6e400001-b5a3-f393-e0a9-e50e24dcca9e",
+    "e7810a71-73ae-499d-8c15-faa9aef0c3f2", "49535343-fe7d-4ae5-8fa9-9fafd205e455",
+  ];
+  const SPP_UUID = "00001101-0000-1000-8000-00805f9b34fb";
+  const SERIAL_BAUDS = [38400, 9600, 115200, 500000];
+  const TRANSPORT_KEY = "wecar.obd.transport";
   const DEFAULT_INIT = ["ATZ", "ATE0", "ATL0", "ATSP0"];
   const FORMAT_COMMANDS = ["ATH1", "ATS1", "ATCAF1"];
   const PROBE_MS = 3000;
@@ -53,6 +63,10 @@
 
     get supported() {
       return Boolean(navigator.bluetooth);
+    }
+
+    get transport() {
+      return "ble";
     }
 
     get ready() {
@@ -153,6 +167,7 @@
         voltage: clean(await this.send("ATRV")),
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ id: this.device.id, name: this.device.name || "" }));
+      localStorage.setItem(TRANSPORT_KEY, "ble");
       this._emit("ready", `${this.info.name || "진단기"} 연결됨`);
     }
 
@@ -281,6 +296,265 @@
     }
   }
 
+  // 블루투스 클래식(SPP, RFCOMM)·USB 진단기. Web Serial로 포트를 열고 통신 속도를 차례로 시험한다.
+  class SerialLink extends EventTarget {
+    constructor() {
+      super();
+      this.port = null;
+      this.state = "idle";
+      this.info = {};
+      this._buffer = "";
+      this._waiting = null;
+      this._reader = null;
+      this._reading = null;
+      this._queue = Promise.resolve();
+      this._manual = false;
+    }
+
+    get supported() {
+      return Boolean(navigator.serial);
+    }
+
+    get transport() {
+      return "serial";
+    }
+
+    get ready() {
+      return this.state === "ready";
+    }
+
+    _emit(state, message) {
+      this.state = state;
+      this.dispatchEvent(new CustomEvent("status", { detail: { state, message } }));
+    }
+
+    async find() {
+      if (!this.supported) throw new Error("이 브라우저는 Web Serial을 지원하지 않습니다.");
+      this._emit("searching", "진단기 포트를 고르세요(블루투스는 먼저 페어링)…");
+      let port;
+      try {
+        port = await navigator.serial.requestPort({ allowedBluetoothServiceClassIds: [SPP_UUID] });
+      } catch (error) {
+        this._emit("idle", error.name === "NotFoundError" ? "진단기 선택을 취소했습니다." : `찾기 실패: ${error.message}`);
+        throw error;
+      }
+      await this.open(port);
+    }
+
+    async autoConnect() {
+      if (!this.supported || localStorage.getItem(TRANSPORT_KEY) !== "serial") return false;
+      const ports = await navigator.serial.getPorts().catch(() => []);
+      if (ports.length !== 1) return false;
+      await this.open(ports[0]).catch(() => {});
+      return true;
+    }
+
+    async open(port) {
+      this._manual = false;
+      this.port = port;
+      port.addEventListener("disconnect", () => {
+        this._stopReading();
+        if (!this._manual) this._emit("idle", "진단기 연결이 끊겼습니다. 다시 연결하세요.");
+      });
+      for (const baudRate of SERIAL_BAUDS) {
+        this._emit("connecting", `진단기에 연결하는 중(${baudRate}bps)…`);
+        try {
+          await port.open({ baudRate });
+        } catch (error) {
+          if (error.name !== "InvalidStateError") continue;
+        }
+        this._startReading();
+        const reply = await this._write("ATI", PROBE_MS).catch(() => "");
+        if (/ELM|STN|OBD|v\d/i.test(reply)) {
+          this.info.baud = baudRate;
+          await this._init();
+          return;
+        }
+        await this._close();
+      }
+      this._emit("idle", "진단기가 응답하지 않습니다. ELM327 호환 진단기인지, 페어링·전원을 확인하세요.");
+      throw new Error("진단기 응답 없음");
+    }
+
+    async _init() {
+      for (const command of [...DEFAULT_INIT, ...FORMAT_COMMANDS]) {
+        await this.send(command, command === "ATZ" ? 4000 : 2000);
+      }
+      const info = this.port.getInfo ? this.port.getInfo() : {};
+      this.info = {
+        ...this.info,
+        name: info.bluetoothServiceClassId ? "블루투스 SPP 진단기" : "USB 진단기",
+        version: clean(await this.send("ATI")),
+        voltage: clean(await this.send("ATRV")),
+      };
+      localStorage.setItem(TRANSPORT_KEY, "serial");
+      this._emit("ready", `${this.info.name} 연결됨`);
+    }
+
+    _startReading() {
+      const decoder = new TextDecoder();
+      this._readActive = true;
+      this._reading = (async () => {
+        while (this._readActive && this.port?.readable) {
+          this._reader = this.port.readable.getReader();
+          try {
+            for (;;) {
+              const { value, done } = await this._reader.read();
+              if (done) break;
+              this._onText(decoder.decode(value, { stream: true }));
+            }
+          } catch {
+            break;
+          } finally {
+            this._reader.releaseLock();
+            this._reader = null;
+          }
+        }
+      })();
+    }
+
+    _onText(text) {
+      this._buffer += text;
+      const end = this._buffer.indexOf(">");
+      if (this._waiting && end >= 0) {
+        const reply = this._buffer.slice(0, end);
+        this._buffer = this._buffer.slice(end + 1);
+        this._waiting(reply);
+      }
+    }
+
+    _stopReading() {
+      this._readActive = false;
+      this._reader?.cancel().catch(() => {});
+    }
+
+    async _close() {
+      this._stopReading();
+      await this._reading?.catch(() => {});
+      await this.port?.close().catch(() => {});
+    }
+
+    async _write(command, timeoutMs) {
+      if (!this.port?.writable) throw new Error("진단기가 연결되어 있지 않습니다.");
+      this._buffer = "";
+      const reply = new Promise((resolve) => {
+        const timer = setTimeout(() => {
+          this._waiting = null;
+          resolve("");
+        }, timeoutMs);
+        this._waiting = (text) => {
+          clearTimeout(timer);
+          this._waiting = null;
+          resolve(text);
+        };
+      });
+      const writer = this.port.writable.getWriter();
+      try {
+        await writer.write(new TextEncoder().encode(`${command}\r`));
+      } finally {
+        writer.releaseLock();
+      }
+      return reply;
+    }
+
+    send(command, timeoutMs) {
+      const run = () => this._write(command, timeoutMs || 2000);
+      const result = this._queue.then(run, run);
+      this._queue = result.catch(() => {});
+      return result;
+    }
+
+    async waitReady(stop) {
+      while (!this.ready) {
+        if ((stop && stop()) || this.state === "idle") return false;
+        await sleep(300);
+      }
+      return true;
+    }
+
+    disconnect() {
+      this._manual = true;
+      this._close();
+      this._emit("idle", "연결을 끊었습니다.");
+    }
+  }
+
+  // 화면에는 연결 하나만 보인다. 어느 방식으로 붙었든 같은 send·ready·status를 쓴다.
+  class Connection extends EventTarget {
+    constructor(profiles) {
+      super();
+      this.ble = new Link(profiles);
+      this.serial = new SerialLink();
+      this.active = this.ble;
+      [this.ble, this.serial].forEach((link) => link.addEventListener("status", ({ detail }) => {
+        if (link === this.active) this.dispatchEvent(new CustomEvent("status", { detail }));
+      }));
+    }
+
+    get supported() {
+      return this.ble.supported || this.serial.supported;
+    }
+
+    get transport() {
+      return this.active.transport;
+    }
+
+    get state() {
+      return this.active.state;
+    }
+
+    get ready() {
+      return this.active.ready;
+    }
+
+    get info() {
+      return this.active.info;
+    }
+
+    get lastDeviceName() {
+      return this.ble.lastDeviceName;
+    }
+
+    set profile(value) {
+      this.ble.profile = value;
+    }
+
+    _use(link) {
+      if (this.active !== link && this.active.state !== "idle") this.active.disconnect();
+      this.active = link;
+    }
+
+    find(options) {
+      this._use(this.ble);
+      return this.ble.find(options);
+    }
+
+    findSerial() {
+      this._use(this.serial);
+      return this.serial.find();
+    }
+
+    async autoConnect() {
+      if (localStorage.getItem(TRANSPORT_KEY) === "serial") {
+        this._use(this.serial);
+        return this.serial.autoConnect();
+      }
+      return this.ble.autoConnect();
+    }
+
+    send(command, timeoutMs) {
+      return this.active.send(command, timeoutMs);
+    }
+
+    waitReady(stop) {
+      return this.active.waitReady(stop);
+    }
+
+    disconnect() {
+      this.active.disconnect();
+    }
+  }
+
   // 요청 목록을 rounds번 보내 '# WECAR-ELM 1' 기록 줄을 만든다. 끊기면 다시 연결된 뒤 같은 요청부터 잇는다.
   async function capture(link, requests, { vehicle, rounds = 1, onLog = () => {}, onRound = () => {}, stop = () => false }) {
     const started = performance.now();
@@ -334,19 +608,30 @@
 
   // _obd_panel.html의 버튼·상태 표시를 연결하고, 허락받은 진단기가 있으면 바로 연결을 시도한다.
   function bindPanel(root, config) {
-    const link = new Link(config.profiles);
+    const link = new Connection(config.profiles);
     const q = (selector) => root.querySelector(selector);
     const status = q("[data-obd-status]");
     const info = q("[data-obd-info]");
     const findBtn = q("[data-obd-find]");
+    const serialBtn = q("[data-obd-find-serial]");
     const allBtn = q("[data-obd-find-all]");
     const offBtn = q("[data-obd-disconnect]");
     const select = q("[data-obd-profile]");
+    const labels = { ble: "블루투스(BLE)", serial: "블루투스 클래식·USB(시리얼)" };
     if (!link.supported) {
       q("[data-obd-unsupported]").hidden = false;
       findBtn.disabled = true;
       allBtn.disabled = true;
+      if (serialBtn) serialBtn.disabled = true;
       return link;
+    }
+    if (!link.ble.supported) {
+      findBtn.disabled = true;
+      allBtn.disabled = true;
+    }
+    if (serialBtn && !link.serial.supported) {
+      serialBtn.disabled = true;
+      serialBtn.title = "이 브라우저는 Web Serial을 지원하지 않습니다.";
     }
     if (link.lastDeviceName) {
       status.textContent = `최근 연결한 진단기: ${link.lastDeviceName}. 시동을 켜고 '진단기 연결'을 누르세요.`;
@@ -357,17 +642,22 @@
     link.addEventListener("status", ({ detail }) => {
       status.textContent = detail.message;
       const busy = detail.state === "searching" || detail.state === "connecting";
-      findBtn.disabled = busy || detail.state === "ready";
+      const locked = busy || detail.state === "ready";
+      findBtn.disabled = locked || !link.ble.supported;
       allBtn.disabled = findBtn.disabled;
+      if (serialBtn) serialBtn.disabled = locked || !link.serial.supported;
       offBtn.disabled = detail.state === "idle";
       info.hidden = detail.state !== "ready";
       if (detail.state === "ready") {
         q("[data-obd-name]").textContent = link.info.name || "-";
+        const transport = q("[data-obd-transport]");
+        if (transport) transport.textContent = labels[link.transport] || link.transport;
         q("[data-obd-version]").textContent = link.info.version || "-";
         q("[data-obd-voltage]").textContent = link.info.voltage || "-";
       }
     });
     findBtn.addEventListener("click", () => link.find().catch(() => {}));
+    serialBtn?.addEventListener("click", () => link.findSerial().catch(() => {}));
     allBtn.addEventListener("click", () => link.find({ all: true }).catch(() => {}));
     offBtn.addEventListener("click", () => link.disconnect());
     link.autoConnect().catch(() => {});

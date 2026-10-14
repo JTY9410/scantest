@@ -1,6 +1,6 @@
 from datetime import timedelta
 
-from flask import Blueprint, flash, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 from flask_wtf import FlaskForm
 from sqlalchemy import func, select
@@ -12,13 +12,20 @@ from app.core.time import utcnow
 from app.extensions import db
 from app.modules.accounts.models import User, UserType
 from app.modules.admin import ai_service
-from app.modules.admin.forms import AiKeyForm, AiSettingsForm
+from app.modules.admin.forms import (
+    AiKeyForm,
+    AiSettingsForm,
+    CarInfoKeyForm,
+    CarInfoTestForm,
+    CarInfoUrlForm,
+)
 from app.modules.admin.models import AiProvider
 from app.modules.auth.access import admin_required
 from app.modules.canlab import service as canlab_service
 from app.modules.canlab.forms import ActionForm
 from app.modules.reports.models import Applog, CarMismatchReport
-from app.modules.scans.models import Scan
+from app.modules.scans import car_info
+from app.modules.scans.models import DEFAULT_CAR_INFO_URL, Scan
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -163,3 +170,74 @@ def ai_revoke(provider: str):
         else:
             flash("API 키를 폐기했습니다. 이 공급자를 쓰는 기능도 모두 껐습니다.", "success")
     return redirect(url_for("admin.ai_edit", provider=provider))
+
+
+@bp.route("/car-info", methods=["GET", "POST"])
+@admin_required
+def car_info_settings():
+    setting = car_info.get_setting()
+    form = CarInfoUrlForm(prefix="url")
+    if request.method == "GET":
+        form.url.data = setting.url if setting else DEFAULT_CAR_INFO_URL
+        form.version.data = setting.version if setting else ""
+    if form.validate_on_submit():
+        try:
+            car_info.save_url(current_user, form.url.data,
+                              int(form.version.data) if form.version.data else None)
+        except ServiceError as error:
+            flash(error.message, "error")
+        else:
+            flash("조회 주소를 저장했습니다.", "success")
+            return redirect(url_for("admin.car_info_settings"))
+    return render_template(
+        "admin/car_info.html",
+        setting=setting,
+        form=form,
+        key_form=CarInfoKeyForm(prefix="key"),
+        test_form=CarInfoTestForm(prefix="test"),
+        action_form=FlaskForm(),
+        encryption_ready=encryption_ready(),
+        env_key=bool(current_app.config.get("CAR_INFO_API_KEY")),
+        cache=car_info.recent_cache(),
+    )
+
+
+@bp.post("/car-info/key")
+@admin_required
+def car_info_key():
+    form = CarInfoKeyForm(prefix="key")
+    if form.validate_on_submit():
+        try:
+            car_info.replace_key(current_user, form.api_key.data)
+        except ServiceError as error:
+            flash(error.message, "error")
+        else:
+            flash("인증키를 암호화해 저장했습니다. 테스트 조회로 확인하세요.", "success")
+    else:
+        flash("인증키를 확인하세요.", "error")
+    return redirect(url_for("admin.car_info_settings"))
+
+
+@bp.post("/car-info/test")
+@admin_required
+def car_info_test():
+    form = CarInfoTestForm(prefix="test")
+    if form.validate_on_submit():
+        ok, message, _ = car_info.test_lookup(current_user, form.car_no.data)
+        flash(message, "success" if ok else "error")
+    else:
+        flash("차량번호를 입력하세요.", "error")
+    return redirect(url_for("admin.car_info_settings"))
+
+
+@bp.post("/car-info/revoke")
+@admin_required
+def car_info_revoke():
+    if FlaskForm().validate_on_submit():
+        try:
+            car_info.revoke_key(current_user)
+        except ServiceError as error:
+            flash(error.message, "error")
+        else:
+            flash("인증키를 지웠습니다.", "success")
+    return redirect(url_for("admin.car_info_settings"))

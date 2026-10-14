@@ -13,8 +13,9 @@ _TRC_V2 = re.compile(
     r"^\s*\d+\s+(?P<t>-?\d+(?:\.\d+)?)\s+(?:DT|FD)?\s*(?:\d+\s+)?(?P<id>[0-9A-Fa-f]{1,8})\s+"
     r"(?P<dir>Rx|Tx)\s+(?:-\s+)?(?P<dlc>\d{1,2})\s+(?P<data>(?:[0-9A-Fa-f]{2}\s*)*)$"
 )
+# K-Line·J1850 프레임은 'K<주소>'로 남긴다(CAN ID가 없다).
 _ELM = re.compile(
-    r"^\s*(?P<t>\d+(?:\.\d+)?)\s+(?P<dir>TX|RX)\s+(?P<id>[0-9A-Fa-f]{3}|[0-9A-Fa-f]{8})\s+"
+    r"^\s*(?P<t>\d+(?:\.\d+)?)\s+(?P<dir>TX|RX)\s+(?P<id>[0-9A-Fa-f]{3}|[0-9A-Fa-f]{8}|K[0-9A-Fa-f]{2})\s+"
     r"(?P<data>(?:[0-9A-Fa-f]{2}\s*)+)$"
 )
 
@@ -78,28 +79,67 @@ def _parse_elm(lines: list[str]) -> ParsedTrace:
         if match is None:
             skipped += 1
             continue
-        frames.append(Frame(float(match["t"]), int(match["id"], 16), _bytes(match["data"]),
+        ident = match["id"].upper()
+        if ident.startswith("K"):
+            frames.append(Frame(float(match["t"]), int(ident[1:], 16), _bytes(match["data"]), "serial"))
+            continue
+        frames.append(Frame(float(match["t"]), int(ident, 16), _bytes(match["data"]),
                             match["dir"].lower()))
     return ParsedTrace("wecar_elm", frames, meta, skipped)
 
 
 _ELM_REPLY_FRAME = re.compile(r"^([0-9A-F]{3}|[0-9A-F]{8})((?:\s[0-9A-F]{2})+)$")
+_BYTES_LINE = re.compile(r"^[0-9A-F]{2}(?:\s[0-9A-F]{2})+$")
 
 
-def elm_from_exchanges(exchanges: list[dict], meta: dict[str, str]) -> str:
+@dataclass(frozen=True)
+class ReplyFrame:
+    """ELM327(ATH1) 응답 한 줄. bus는 'can' 또는 'serial'(K-Line·J1850)."""
+    bus: str
+    source: int
+    data: bytes
+
+
+def reply_frames(reply: str, bus: str | None = None) -> list[ReplyFrame]:
+    """응답 문자열을 프레임으로 나눈다.
+
+    - CAN 11비트: '7E8 06 41 0C 1A F8', 29비트: '18DAF110 ...' 또는 ATS1에서 '18 DA F1 10 ...'
+    - K-Line(ISO 9141·14230)·J1850: '48 6B 10 41 0C 1A F8 C5' = 3바이트 헤더(셋째가 보낸 ECU) + 데이터 + 체크섬
+    bus는 'can11'·'can29'·'serial'·None(모름: 줄 모양으로 판단).
+    """
+    frames = []
+    for raw in re.split(r"[\r\n>]+", reply or ""):
+        line = raw.strip().upper()
+        if match := _ELM_REPLY_FRAME.match(line):
+            frames.append(ReplyFrame("can", int(match[1], 16), _bytes(match[2])))
+        elif _BYTES_LINE.match(line):
+            data = _bytes(line)
+            if bus == "can29" and len(data) > 4:
+                frames.append(ReplyFrame("can", int.from_bytes(data[:4], "big"), data[4:]))
+            elif bus != "can11" and len(data) >= 5:
+                frames.append(ReplyFrame("serial", data[2], data[3:-1]))
+    return frames
+
+
+def elm_from_exchanges(exchanges: list[dict], meta: dict[str, str], bus: str | None = None) -> str:
     """앱이 보낸 (시각, 헤더, 명령, ELM 응답 문자열) 목록을 '# WECAR-ELM 1' 기록으로 만든다.
 
     ELM327은 ATH1·ATS1에서 응답 프레임을 '7EC 10 3E 62 ...'처럼 한 줄씩 돌려준다.
-    요청은 ISO-TP 단일 프레임(길이 바이트 + 명령)으로 남긴다.
+    요청은 ISO-TP 단일 프레임(길이 바이트 + 명령)으로 남긴다. K-Line·J1850은 'K<주소>'로 남긴다.
     """
     lines = [ELM_HEADER, *(f"# {key}: {value}" for key, value in meta.items() if value)]
     for item in exchanges:
         t = float(item.get("t_ms") or 0)
         command = bytes.fromhex(item["command"])
-        lines.append(f"{t:.1f} TX {item['header']} {len(command):02X} {command.hex(' ').upper()}")
-        for raw in re.split(r"[\r\n]+", item.get("reply") or ""):
-            if match := _ELM_REPLY_FRAME.match(raw.strip().upper()):
-                lines.append(f"{t:.1f} RX {match[1]} {match[2].strip()}")
+        if bus == "serial":
+            lines.append(f"{t:.1f} TX K33 {command.hex(' ').upper()}")
+        else:
+            lines.append(f"{t:.1f} TX {item['header']} {len(command):02X} {command.hex(' ').upper()}")
+        for frame in reply_frames(item.get("reply") or "", bus):
+            ident = f"K{frame.source:02X}" if frame.bus == "serial" else (
+                f"{frame.source:03X}" if frame.source <= 0x7FF else f"{frame.source:08X}")
+            if frame.data:
+                lines.append(f"{t:.1f} RX {ident} {frame.data.hex(' ').upper()}")
     return "\n".join(lines) + "\n"
 
 

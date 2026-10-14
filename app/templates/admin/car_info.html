@@ -1,0 +1,98 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, field, badge, empty %}
+{% block title %}차량정보 조회{% endblock %}
+
+{% block content %}
+{% call page_header("차량정보 조회", "차량번호로 차대번호·제조사·모델·연식을 가져오는 위카 차량정보 API 연결입니다.") %}
+  {% if setting and setting.has_key %}{{ badge("키 등록됨", "success") }}
+  {% elif env_key %}{{ badge("서버 환경변수 키 사용", "warning") }}
+  {% else %}{{ badge("키 없음", "danger") }}{% endif %}
+{% endcall %}
+
+<div class="grid gap-6 lg:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
+  <div class="grid content-start gap-6">
+    <section class="card" aria-labelledby="url-title">
+      <div class="card-body">
+        <h2 id="url-title" class="text-lg font-bold">조회 주소</h2>
+        <form method="post" class="mt-4 grid gap-4" novalidate>
+          {{ form.hidden_tag() }}
+          {{ field(form.url, help="HTTPS POST, form 데이터(authkey, car_no)로 보냅니다.", autocapitalize="none", spellcheck="false") }}
+          <div><button type="submit" class="btn btn-secondary">주소 저장</button></div>
+        </form>
+      </div>
+    </section>
+
+    <section class="card overflow-hidden" aria-labelledby="cache-title">
+      <div class="card-body pb-2">
+        <h2 id="cache-title" class="text-lg font-bold">최근 조회 결과</h2>
+        <p class="mt-1 text-sm text-muted">일일 조회 한도가 있어 성공한 조회는 차량번호별로 저장해 다시 씁니다.</p>
+      </div>
+      {% if cache %}
+      <table class="rtable">
+        <thead><tr><th scope="col">차량번호</th><th scope="col">차량</th><th scope="col">조회 시각</th></tr></thead>
+        <tbody>
+          {% for c in cache %}
+          <tr>
+            <td data-primary class="font-semibold">{{ c.car_no }}</td>
+            <td data-label="차량">{{ c.dto.get("diag_company", "") }} {{ c.dto.get("diag_model", "") }} {{ c.dto.get("diag_year", "") }}</td>
+            <td data-label="조회 시각" class="tabular-nums">{{ c.fetched_at|kst }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      {{ empty("아직 조회한 차량이 없습니다.") }}
+      {% endif %}
+    </section>
+  </div>
+
+  <div class="grid content-start gap-6">
+    <section class="card" aria-labelledby="key-title">
+      <div class="card-body">
+        <h2 id="key-title" class="text-lg font-bold">인증키</h2>
+        {% if setting and setting.key_last4 %}
+        <p class="mt-2">현재 키 <span class="mono">••••{{ setting.key_last4 }}</span></p>
+        {% else %}
+        <p class="mt-2 text-muted">등록된 키가 없습니다.</p>
+        {% endif %}
+        {% if not encryption_ready %}
+        <p class="mt-4 text-sm text-danger">ENCRYPTION_KEY가 없어 키를 저장할 수 없습니다.</p>
+        {% else %}
+        <form method="post" action="{{ url_for('admin.car_info_key') }}" class="mt-4 grid gap-4" novalidate>
+          {{ key_form.hidden_tag() }}
+          {{ field(key_form.api_key, help="별도 채널로 받은 키를 입력하세요. 저장하면 암호화되고 다시 표시되지 않습니다.", autocomplete="off", spellcheck="false") }}
+          <div><button type="submit" class="btn btn-primary">{{ "키 교체" if setting and setting.has_key else "키 등록" }}</button></div>
+        </form>
+        {% endif %}
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="test-title">
+      <div class="card-body">
+        <h2 id="test-title" class="text-lg font-bold">테스트 조회</h2>
+        <p class="mt-2 text-sm text-muted">
+          저장된 결과를 쓰지 않고 실제로 조회합니다(조회 한도 1건 사용).
+          {% if setting and setting.last_tested_at %}<br>최근 테스트: {{ setting.last_tested_at|kst }}<br>{{ setting.last_test_message }}{% endif %}
+        </p>
+        <form method="post" action="{{ url_for('admin.car_info_test') }}" class="mt-4 grid gap-4" novalidate>
+          {{ test_form.hidden_tag() }}
+          {{ field(test_form.car_no, help="공백 없이 전체 번호(예: 12가3456)", autocomplete="off") }}
+          <div><button type="submit" class="btn btn-secondary">테스트 조회</button></div>
+        </form>
+      </div>
+    </section>
+
+    {% if setting and setting.has_key %}
+    <section class="card border-danger/40" aria-labelledby="revoke-title">
+      <div class="card-body">
+        <h2 id="revoke-title" class="text-lg font-bold text-danger">키 지우기</h2>
+        <form method="post" action="{{ url_for('admin.car_info_revoke') }}" class="mt-4" data-confirm="차량정보 인증키를 지우시겠습니까?">
+          {{ action_form.hidden_tag() }}
+          <button type="submit" class="btn btn-danger">키 지우기</button>
+        </form>
+      </div>
+    </section>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -36,6 +36,11 @@
         {{ nav(url_for('members.index'), "회원관리", endpoint.startswith("members."),
                '<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M16 4a4 4 0 010 8M22 21c0-3-2-5-4-5.6"/>') }}
       </ul>
+      <p class="nav-group">진단 스캔</p>
+      <ul class="grid gap-0.5">
+        {{ nav(url_for('scanner.index'), "스캔하기", endpoint.startswith("scanner."),
+               '<path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3"/><circle cx="12" cy="12" r="3"/>') }}
+      </ul>
       <p class="nav-group">운영 데이터</p>
       <ul class="grid gap-0.5">
         {{ nav(url_for('monitoring.scans'), "스캔 기록", endpoint in ("monitoring.scans", "monitoring.scan_show"),
@@ -69,6 +74,8 @@
                '<path d="M12 3v3M12 18v3M3 12h3M18 12h3"/><rect x="7" y="7" width="10" height="10" rx="2"/>') }}
         {{ nav(url_for('obd.index'), "OBD2 연결", endpoint.startswith("obd."),
                '<path d="M7 7l10 10-5 5V2l5 5L7 17"/>') }}
+        {{ nav(url_for('admin.car_info_settings'), "차량정보 조회", endpoint.startswith("admin.car_info"),
+               '<circle cx="11" cy="11" r="7"/><path d="M21 21l-5-5"/>') }}
         {{ nav(url_for('auth.account'), "내 계정·보안", endpoint == "auth.account",
                '<rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/>') }}
         <li>

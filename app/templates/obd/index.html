@@ -1,5 +1,5 @@
 {% extends "layouts/admin.html" %}
-{% from "components/ui.html" import page_header, badge, empty %}
+{% from "components/ui.html" import page_header, badge, empty, field %}
 {% block title %}OBD2 연결{% endblock %}
 
 {% block content %}
@@ -28,5 +28,57 @@
   {% else %}
   {{ empty("등록된 OBD2 프로필이 없습니다.", "진단기 제조사 문서의 BLE UUID와 초기화 명령으로 첫 프로필을 등록하세요.") }}
   {% endif %}
+</section>
+
+<section class="mt-8" aria-labelledby="devices-title">
+  <h2 id="devices-title" class="text-lg font-bold">LTE 단말기</h2>
+  <p class="mt-1 text-sm text-muted">차량에 꽂아 두는 LTE OBD2 단말기는 서버에서 스캔 계획을 받아(<span class="mono">GET /api/telematics/plan</span>) 명령을 보내고, 응답을 그대로 올립니다(<span class="mono">POST /api/telematics/captures</span>). 인증은 <span class="mono">Authorization: Device &lt;토큰&gt;</span>입니다.</p>
+
+  {% if new_token %}
+  <div class="flash flash-warning mt-4" role="alert"><span aria-hidden="true" class="font-bold">!</span>
+    <div>
+      <p><strong>{{ new_token.device.name }}</strong> 단말기 토큰입니다. 이 화면을 벗어나면 다시 볼 수 없습니다. 단말기 설정에 바로 넣으세요.</p>
+      <p class="mono mt-2 break-all select-all" data-device-token>{{ new_token.token }}</p>
+    </div>
+  </div>
+  {% endif %}
+
+  <form class="card card-body mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end" method="post" action="{{ url_for('obd.device_register') }}" novalidate>
+    {{ device_form.csrf_token }}
+    {{ field(device_form.serial, autocomplete="off") }}
+    {{ field(device_form.name) }}
+    {{ field(device_form.company_id) }}
+    <button class="btn btn-primary" type="submit">단말기 등록</button>
+  </form>
+
+  <div class="card mt-4 overflow-hidden">
+    {% if devices %}
+    <table class="rtable">
+      <thead><tr><th scope="col">이름</th><th scope="col">일련번호</th><th scope="col">회사</th><th scope="col">토큰</th><th scope="col">마지막 접속</th><th scope="col">상태</th><th scope="col"><span class="sr-only">관리</span></th></tr></thead>
+      <tbody>
+        {% for d in devices %}
+        <tr>
+          <td data-primary class="font-semibold">{{ d.name }}</td>
+          <td data-label="일련번호" class="mono">{{ d.serial }}</td>
+          <td data-label="회사">{{ d.company.name if d.company else "-" }}</td>
+          <td data-label="토큰" class="mono">…{{ d.token_last4 }}</td>
+          <td data-label="마지막 접속" class="tabular-nums">{{ d.last_seen_at|kst if d.last_seen_at else "-" }}</td>
+          <td data-label="상태">{{ badge("사용", "success") if d.enabled else badge("중지") }}</td>
+          <td data-label="관리">
+            <div class="flex flex-wrap gap-2">
+              <form method="post" action="{{ url_for('obd.device_token', device_id=d.id) }}">{{ action.csrf_token }}
+                <button class="btn btn-secondary" type="submit">토큰 재발급<span class="sr-only"> ({{ d.name }})</span></button></form>
+              <form method="post" action="{{ url_for('obd.device_toggle', device_id=d.id) }}">{{ action.csrf_token }}
+                <button class="btn btn-secondary" type="submit">{{ "중지" if d.enabled else "사용" }}<span class="sr-only"> ({{ d.name }})</span></button></form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    {{ empty("등록된 LTE 단말기가 없습니다.") }}
+    {% endif %}
+  </div>
 </section>
 {% endblock %}

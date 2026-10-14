@@ -1,18 +1,70 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user
+from flask_wtf import FlaskForm
+from sqlalchemy import select
 
 from app.core.errors import ServiceError
+from app.extensions import db
+from app.modules.accounts.models import Company
 from app.modules.auth.access import admin_required
-from app.modules.obd import service
-from app.modules.obd.forms import ObdProfileForm
+from app.modules.obd import service, telematics
+from app.modules.obd.forms import ObdProfileForm, TelematicsDeviceForm
 
 bp = Blueprint("obd", __name__, url_prefix="/admin/obd")
+
+
+def _device_form() -> TelematicsDeviceForm:
+    form = TelematicsDeviceForm(prefix="device")
+    companies = db.session.scalars(select(Company).where(Company.deleted_at.is_(None)).order_by(Company.name))
+    form.company_id.choices = [(0, "없음")] + [(c.id, c.name) for c in companies]
+    return form
+
+
+def _index(device_form=None, new_token=None, status=200):
+    return render_template("obd/index.html", profiles=service.list_profiles(), devices=telematics.list_devices(),
+                           device_form=device_form or _device_form(), action=FlaskForm(),
+                           new_token=new_token), status
 
 
 @bp.get("/")
 @admin_required
 def index():
-    return render_template("obd/index.html", profiles=service.list_profiles())
+    return _index()
+
+
+@bp.post("/devices")
+@admin_required
+def device_register():
+    form = _device_form()
+    if not form.validate_on_submit():
+        return _index(form, status=400)
+    try:
+        device, token = telematics.register(current_user, serial=form.serial.data, name=form.name.data,
+                                            company_id=form.company_id.data)
+    except ServiceError as error:
+        flash(error.message, "error")
+        return _index(form, status=error.status)
+    return _index(new_token={"device": device, "token": token}, status=201)
+
+
+@bp.post("/devices/<int:device_id>/token")
+@admin_required
+def device_token(device_id: int):
+    if not FlaskForm().validate_on_submit():
+        return redirect(url_for("obd.index"))
+    device = telematics.get_device(device_id)
+    token = telematics.rotate_token(current_user, device)
+    return _index(new_token={"device": device, "token": token})
+
+
+@bp.post("/devices/<int:device_id>/toggle")
+@admin_required
+def device_toggle(device_id: int):
+    if FlaskForm().validate_on_submit():
+        device = telematics.get_device(device_id)
+        telematics.set_enabled(current_user, device, not device.enabled)
+        flash(f"{device.name} 단말기를 {'사용' if device.enabled else '중지'}로 바꿨습니다.", "success")
+    return redirect(url_for("obd.index", _anchor="devices-title"))
 
 
 @bp.route("/new", methods=["GET", "POST"])

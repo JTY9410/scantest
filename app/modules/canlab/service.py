@@ -664,17 +664,26 @@ def template_summary(report: DiagnosticReport) -> str:
         verdict = "양호" if t_hi - t_lo <= 5 else "편차 큼"
         lines.append(f"3. 배터리 온도: 최고 {_fmt(t_hi, '°C')} / 최저 {_fmt(t_lo, '°C')}({verdict}).")
 
-    dtcs = [d for codes in report.diagnosis.get("dtcs", {}).values() for d in codes]
+    obd = report.diagnosis.get("obd") or {}
+    dtcs = [d for codes in report.diagnosis.get("dtcs", {}).values() for d in codes] + obd.get("dtcs", [])
+    codes = list(dict.fromkeys(d["code"] for d in dtcs))
     checked = report.diagnosis.get("dtc_checked_ecus", [])
-    if dtcs:
-        lines.append("4. 고장코드: " + ", ".join(d["code"] for d in dtcs[:10]) + " — 정비소 점검을 권장합니다.")
-    elif checked:
-        lines.append(f"4. 고장코드: 조회한 ECU {len(checked)}곳에서 고장코드가 없습니다.")
+    if codes:
+        lines.append("4. 고장코드: " + ", ".join(codes[:10]) + " — 정비소 점검을 권장합니다.")
+    elif checked or any(s.get("command") == "03" and s.get("status") == "ok" for s in obd.get("steps", [])):
+        lines.append("4. 고장코드: 조회한 제어기에서 고장코드가 없습니다.")
     else:
         lines.append("4. 고장코드: 이 기록에는 고장코드 조회가 없습니다.")
-    low_confidence = [v["label"] for v in report.values.values() if v["confidence"] < 0.8]
+    errors = report.diagnosis.get("errors") or []
+    if errors:
+        lines.append(f"5. 스캔 오류 {len(errors)}건: " + ", ".join(f"{e['label']}({e['status_label']})"
+                                                         for e in errors[:5]))
+    references = [v["label"] for v in report.values.values() if not v.get("rule_id")]
+    low_confidence = [v["label"] for v in report.values.values() if v.get("rule_id") and v["confidence"] < 0.8]
     if low_confidence:
         lines.append("※ 신뢰도가 낮은 수식으로 읽은 항목: " + ", ".join(low_confidence))
+    if references:
+        lines.append("※ 공개 자료로 읽은 참고 값(미검증): " + ", ".join(references))
     return "\n".join(lines)
 
 

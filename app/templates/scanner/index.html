@@ -1,0 +1,53 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, csrf %}
+{% from "canlab/_obd_panel.html" import obd_panel %}
+{% block title %}스캔하기{% endblock %}
+{% block head %}
+<script src="{{ url_for('static', filename='js/components/obd-link.js', v=asset_version) }}" defer></script>
+<script src="{{ url_for('static', filename='js/components/obd-scan.js', v=asset_version) }}" defer></script>
+{% endblock %}
+
+{% block content %}
+{{ page_header("스캔하기", "차량번호로 차량 정보를 조회하고, 진단기로 고장코드와 차량 상태를 읽어 위스캔 결과로 저장합니다.") }}
+<script type="application/json" id="scanner-config">{{ config|tojson }}</script>
+
+<div id="scanner" class="grid gap-6">
+  <section class="card card-body" aria-labelledby="lookup-title">
+    <h2 id="lookup-title" class="text-lg font-bold">1. 차량번호 조회</h2>
+    <form class="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end" data-lookup-form novalidate>
+      {{ csrf() }}
+      <div class="field">
+        <label class="field-label" for="scan-car-no">차량번호</label>
+        <input class="input" id="scan-car-no" name="car_no" maxlength="20" autocomplete="off" placeholder="예: 12가3456" value="{{ car_no }}">
+      </div>
+      <button class="btn btn-primary" type="submit">차량번호 조회하기</button>
+    </form>
+    <p class="mt-3 font-semibold" role="status" aria-live="polite" data-lookup-status></p>
+    <div class="mt-4" data-lookup-result hidden>
+      <dl class="dl"></dl>
+      <p class="mt-2 text-sm text-muted" data-lookup-cache></p>
+    </div>
+    <p class="flash flash-warning mt-4" data-lookup-warning hidden><span aria-hidden="true" class="font-bold">!</span>
+      <span>차량 정보 없이도 스캔할 수 있습니다. 조회 오류는 스캔 결과의 오류 기록에 함께 남습니다.</span></p>
+
+    <div class="mt-6 border-t border-line pt-6" data-scan-start hidden>
+      <h2 class="text-lg font-bold">2. 진단기 연결과 스캔</h2>
+      <div class="mt-3">{{ obd_panel(obd) }}</div>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <button class="btn btn-primary" type="button" data-scan-run disabled>스캔하기</button>
+        <button class="btn btn-secondary" type="button" data-scan-stop disabled>중지</button>
+      </div>
+      <p class="mt-2 text-sm text-muted">시동을 ON(또는 엔진 시동) 상태로 두세요. 고장코드, 실시간 데이터, 차대번호, 제어기별 고장코드(UDS)와 전기차 배터리 데이터를 차례로 읽습니다. 차량에 따라 1~3분 걸립니다.</p>
+    </div>
+  </section>
+
+  <section class="card card-body" aria-labelledby="progress-title" data-scan-progress hidden>
+    <h2 id="progress-title" class="text-lg font-bold">3. 스캔 진행</h2>
+    <progress class="mt-3 h-2 w-full" max="100" value="0" data-scan-bar aria-label="스캔 진행률"></progress>
+    <p class="mt-3 font-semibold" role="status" aria-live="polite" data-scan-status></p>
+    <p class="mt-1 text-sm text-muted tabular-nums" data-scan-counts></p>
+    <button class="btn btn-secondary mt-3" type="button" data-scan-retry hidden>저장 다시 시도</button>
+    <ol class="mono mt-4 grid max-h-80 gap-1 overflow-y-auto rounded-md border border-line p-3 text-sm" data-scan-log aria-label="단계별 응답"></ol>
+  </section>
+</div>
+{% endblock %}

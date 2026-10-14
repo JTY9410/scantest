@@ -1,10 +1,11 @@
 import enum
+from datetime import datetime
 
-from sqlalchemy import JSON, BigInteger, Boolean, CheckConstraint, Integer, String
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import JSON, BigInteger, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
-from app.modules.accounts.models import TimestampMixin
+from app.modules.accounts.models import Company, TimestampMixin, User
 
 
 class ObdTransport(enum.StrEnum):
@@ -44,3 +45,23 @@ class ObdProfile(TimestampMixin, db.Model):
     @property
     def transport_label(self) -> str:
         return ObdTransport(self.transport).label
+
+
+class TelematicsDevice(TimestampMixin, db.Model):
+    """차량에 꽂아 두는 LTE OBD2 단말기. 토큰은 해시만 저장하고 등록할 때 한 번만 보여 준다."""
+
+    __tablename__ = "telematics_devices"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    serial: Mapped[str] = mapped_column(String(64), unique=True)
+    name: Mapped[str] = mapped_column(String(100))
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    token_last4: Mapped[str] = mapped_column(String(4))
+    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="SET NULL"), index=True)
+    # 단말기가 올린 스캔의 검사자(Scan.tester_id). 등록한 관리자다.
+    registered_by: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    company: Mapped[Company | None] = relationship()
+    registrar: Mapped[User] = relationship()

@@ -52,9 +52,10 @@ class Config:
     # Fernet 키. AI 연결 키와 관리자 OTP 비밀값 암호화에 쓰며 DB와 분리해 보관한다.
     ENCRYPTION_KEY = os.environ.get("ENCRYPTION_KEY")
 
+    # 관리자 화면(설정 > 차량정보 조회)에 키를 등록하면 그 값을 먼저 쓴다.
     CAR_INFO_API_URL = os.environ.get("CAR_INFO_API_URL")
     CAR_INFO_API_KEY = os.environ.get("CAR_INFO_API_KEY")
-    CAR_INFO_TIMEOUT_SECONDS = 10
+    CAR_INFO_TIMEOUT_SECONDS = 15
 
     # 설정하면 SMS를 보내지 않고 이 값을 인증번호로 쓴다. 운영에서는 비워 둔다.
     SMS_DEV_CODE = os.environ.get("SMS_DEV_CODE") or None

@@ -11,6 +11,7 @@ VERSIONED_FILES = (
     "js/components/obd-link.js",
     "js/components/obd-ble.js",
     "js/components/obd-dashboard.js",
+    "js/components/obd-scan.js",
     "service-worker.js",
 )
 

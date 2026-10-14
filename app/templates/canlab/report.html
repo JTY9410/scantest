@@ -89,7 +89,7 @@
         <td data-label="값" class="num">{{ "{:,}".format(v.value) }} {{ v.unit }}</td>
         <td data-label="수식" class="mono text-sm">{{ v.formula }}</td>
         <td data-label="출처" class="mono text-sm">{{ v.source }}</td>
-        <td data-label="규칙">v{{ v.rule_version }} {{ badge("신뢰 " ~ "%.2f"|format(v.confidence), "success" if v.confidence >= 0.8 else "warning") }}</td>
+        <td data-label="규칙">{% if v.rule_id %}v{{ v.rule_version }} {{ badge("신뢰 " ~ "%.2f"|format(v.confidence), "success" if v.confidence >= 0.8 else "warning") }}{% else %}{{ badge("참고 해석(미검증)", "warning") }}{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>

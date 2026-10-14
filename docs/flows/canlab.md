@@ -16,12 +16,14 @@
 | 웹 블루투스 수집 | `GET/POST /admin/canlab/live` | `obd_config`, `upload_dataset`, `create_report` | 데이터셋(live_capture), 결과지(`report=1`) | 이 페이지에서 진단기 연결 → 여러 회 수집 → 저장 |
 | 대시보드 빠른 점검 | `POST /admin/canlab/live/preview` | `preview_capture` | - | 1회 수집을 저장 없이 해석(VIN, ECU, DTC, 값). "결과지로 저장"은 `live`에 `report=1` |
 | 앱 수집 | `GET /api/canCaptureRequests`, `POST /api/canCaptures` | `capture_requests`, `store_app_capture` | 데이터셋, 결과지 | `docs/flows/api.md` |
+| 스캔하기·LTE 단말기 | `/admin/scan/run`, `/api/telematics/captures` | `scanner.run_scan` | 데이터셋(`live_capture`, `lte`), 결과지, 스캔 | `docs/flows/scanner.md`, `docs/flows/telematics.md` |
 
 ## 블루투스 진단기 연결 (웹)
 
 관리자 대시보드의 "블루투스 진단기" 카드와 수집 페이지가 같은 모듈(`static/js/components/obd-link.js`)을 씁니다. 페이지마다 연결이 따로이므로 각 페이지에서 연결합니다.
 
-- 찾기: 이름(OBD, ELM327, Vlink, vLinker, Veepeak, KONNWEI, Viecar, OBDLink 등) 또는 서비스(FFF0, FFE0, 18F0, OBDLink)로 거릅니다. 목록에 없으면 "모든 기기 보기"로 전체 기기를 고릅니다.
+- 찾기: 이름(OBD, ELM327, Vlink, vLinker, Veepeak, KONNWEI, Viecar, OBDLink, Carista, iCar, Vgate, LELink, BlueDriver 등) 또는 서비스(FFF0, FFE0, 18F0, AE30, BEEF, Nordic UART, OBDLink)로 거릅니다. 목록에 없으면 "모든 기기 보기"로 전체 기기를 고릅니다.
+- 블루투스 클래식·USB: "블루투스 클래식·USB" 버튼은 Web Serial로 페어링된 SPP 포트나 USB 진단기에 연결합니다(`SerialLink`).
 - 통신 채널: 프로필을 고르면 그 UUID를 먼저 쓰고, "자동 감지"면 쓰기·알림 특성 쌍마다 `ATI`를 보내 응답하는 채널을 씁니다. OBD 프로필이 없어도 연결됩니다.
 - 초기화: `ATZ ATE0 ATL0 ATSP0`(또는 프로필 초기화 명령) 뒤 `ATH1 ATS1 ATCAF1`. 연결되면 진단기 이름, 펌웨어(`ATI`), 차량 전압(`ATRV`)을 표시합니다.
 - 다시 연결: 연결이 끊기면 5초마다 다시 붙고, 수집 중이면 연결 후 같은 요청부터 이어 갑니다. "연결 끊기"를 누르면 멈춥니다.

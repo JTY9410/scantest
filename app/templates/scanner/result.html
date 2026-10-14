@@ -1,0 +1,212 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge, empty %}
+{% block title %}위스캔 결과 {{ scan.car_no }}{% endblock %}
+{% block head %}
+<script src="{{ url_for('static', filename='js/components/canlab-report.js', v=asset_version) }}" defer></script>
+{% endblock %}
+
+{% macro num(value) -%}
+{{ "{:,}".format(value) if value is number else value }}
+{%- endmacro %}
+
+{% macro status_badge(status, label) -%}
+{{ badge(label, {"ok": "success", "unsupported": "", "skipped": ""}.get(status, "danger")) }}
+{%- endmacro %}
+
+{% block content %}
+{% set car = result.car or {} %}
+{% set protocol = result.protocol or {} %}
+{% call page_header("위스캔 결과 · " ~ scan.car_no, scan.created_at|kst ~ " · " ~ transports.get(result.transport, result.transport),
+                    back=(url_for('scanner.index'), "스캔하기")) %}
+  <button type="button" class="btn btn-secondary print:hidden" data-print>인쇄·PDF 저장</button>
+  {% if result.report_id %}<a class="btn btn-secondary print:hidden" href="{{ url_for('canlab.report', report_id=result.report_id) }}">결과지</a>{% endif %}
+  <a class="btn btn-secondary print:hidden" href="{{ url_for('monitoring.scan_show', scan_id=scan.id) }}">스캔 기록</a>
+  <a class="btn btn-primary print:hidden" href="{{ url_for('scanner.index', car_no=scan.car_no) }}">다시 스캔</a>
+{% endcall %}
+
+{% if result.status == "ok" %}
+<div class="flash flash-success mb-6"><span aria-hidden="true" class="font-bold">✓</span><p>스캔을 정상적으로 마쳤습니다.</p></div>
+{% elif result.status == "partial" %}
+<div class="flash flash-warning mb-6"><span aria-hidden="true" class="font-bold">!</span>
+  <p>일부 항목에서 오류가 있었습니다({{ result.errors|length }}건). <a class="underline" href="#errors-title">오류 기록</a>을 확인하세요.</p></div>
+{% else %}
+<div class="flash flash-error mb-6"><span aria-hidden="true" class="font-bold">!</span>
+  <p>스캔에 실패했습니다. <a class="underline" href="#errors-title">오류 기록</a>에서 원인을 확인하세요.</p></div>
+{% endif %}
+
+<div class="grid gap-6 lg:grid-cols-2">
+  <section class="card card-body" aria-labelledby="car-title">
+    <h2 id="car-title" class="text-lg font-bold">차량 정보</h2>
+    <dl class="dl mt-4">
+      <dt>차량번호</dt><dd>{{ scan.car_no }}</dd>
+      <dt>제조사·모델</dt><dd>{{ scan.car_maker or "-" }} {{ scan.car_model }} {{ scan.car_submodel or "" }}</dd>
+      <dt>등급</dt><dd>{{ car.diag_grade or "-" }}</dd>
+      <dt>연식</dt><dd class="tabular-nums">{{ scan.car_year or "-" }}</dd>
+      <dt>연료</dt><dd>{{ scan.car_fuel or "-" }}</dd>
+      <dt>배기량</dt><dd class="tabular-nums">{{ "{:,} cc".format(scan.car_cc) if scan.car_cc is not none else "-" }}</dd>
+      <dt>차대번호(조회)</dt><dd class="mono">{{ car.diag_car_id or "-" }}</dd>
+      <dt>차대번호(차량)</dt><dd class="mono">{{ result.vin or "읽지 못함" }}
+        {% if result.vin_match is true %}{{ badge("일치", "success") }}{% elif result.vin_match is false %}{{ badge("불일치", "danger") }}{% endif %}</dd>
+      <dt>주행거리</dt><dd class="tabular-nums">{{ "{:,} km".format(scan.car_distance) if scan.car_distance is not none else "-" }}</dd>
+    </dl>
+  </section>
+
+  <section class="card card-body" aria-labelledby="scan-title">
+    <h2 id="scan-title" class="text-lg font-bold">검사 정보</h2>
+    <dl class="dl mt-4">
+      <dt>검사일</dt><dd class="tabular-nums">{{ scan.created_at|kst }}</dd>
+      <dt>검사자</dt><dd>{{ scan.tester.name if scan.tester else "-" }}</dd>
+      <dt>연결 방식</dt><dd>{{ transports.get(result.transport, result.transport) }}</dd>
+      <dt>단말기</dt><dd>{{ result.device or "-" }}</dd>
+      <dt>통신 방식</dt><dd>{{ protocol.name or "알 수 없음" }}</dd>
+      <dt>차량 전압</dt><dd class="tabular-nums">{{ "%.1f V"|format(result.voltage) if result.voltage is not none else "-" }}</dd>
+      <dt>경고등(MIL)</dt><dd>{% if result.monitor %}{{ badge("켜짐", "danger") if result.monitor.mil else badge("꺼짐", "success") }} · 저장 고장코드 {{ result.monitor.dtc_count }}개{% else %}-{% endif %}</dd>
+      <dt>응답한 제어기</dt><dd class="tabular-nums">{{ result.ecus|length }}곳</dd>
+      <dt>단계</dt><dd class="tabular-nums">성공 {{ result.counts.ok }} · 지원 안 함 {{ result.counts.unsupported }} · 오류 {{ result.counts.errors }} / 전체 {{ result.counts.total }}</dd>
+    </dl>
+  </section>
+</div>
+
+<section class="mt-6" aria-labelledby="summary-title">
+  <h2 id="summary-title" class="text-lg font-bold">진단 요약</h2>
+  <div class="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+    {% for key, label in systems.items() %}
+    {% set count = result.systems.get(key, 0) %}
+    <div class="card card-body">
+      <p class="text-sm font-medium text-muted">{{ label }}</p>
+      <p class="mt-2 text-xl font-bold {{ 'text-danger' if count else 'text-success' }}">{{ "고장 " ~ count ~ "건" if count else "정상" }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</section>
+
+<section class="card mt-6 overflow-hidden" aria-labelledby="dtc-title">
+  <h2 id="dtc-title" class="card-body pb-0 text-lg font-bold">고장코드 상세 <span class="text-muted">{{ result.dtcs|length }}</span></h2>
+  {% if result.dtcs %}
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">코드</th><th scope="col">시스템</th><th scope="col">상태</th><th scope="col">제어기</th><th scope="col">설명·원인·조치</th></tr></thead>
+    <tbody>
+      {% for d in result.dtcs %}
+      <tr>
+        <td data-primary class="mono font-semibold">{{ d.code }}</td>
+        <td data-label="시스템">{{ systems.get(d.system, d.system) }}</td>
+        <td data-label="상태">{{ badge(d.kind, "danger" if d.kind in ("현재", "확정") else "warning") }}</td>
+        <td data-label="제어기" class="mono">{{ d.ecu }} <span class="text-sm text-muted">{{ d.source }}</span></td>
+        <td data-label="설명" class="text-sm">
+          <p class="font-semibold">{{ d.desc or "고장코드 마스터에 설명이 없습니다." }}</p>
+          {% if d.root_cause %}<p class="mt-1">원인: {{ d.root_cause }}</p>{% endif %}
+          {% if d.howto %}<ol class="mt-1 list-decimal pl-5">{% for h in d.howto %}<li>{{ h }}</li>{% endfor %}</ol>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="card-body text-sm">{{ "읽은 고장코드가 없습니다." if result.counts.ok else "고장코드를 읽지 못했습니다. 오류 기록을 확인하세요." }}</p>
+  {% endif %}
+</section>
+
+{% if result.battery %}
+<section class="card mt-6 overflow-hidden" aria-labelledby="battery-title">
+  <h2 id="battery-title" class="card-body pb-0 text-lg font-bold">고전압 배터리</h2>
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">항목</th><th scope="col" class="num">값</th><th scope="col">근거</th></tr></thead>
+    <tbody>
+      {% for key, v in result.battery.items() %}
+      <tr>
+        <td data-primary class="font-semibold">{{ v.label }}</td>
+        <td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}</td>
+        <td data-label="근거">{{ badge("참고 해석(미검증)", "warning") if v.reference else badge("적용 규칙", "success") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<div class="mt-6 grid gap-6 lg:grid-cols-2">
+  <section class="card overflow-hidden" aria-labelledby="values-title">
+    <h2 id="values-title" class="card-body pb-0 text-lg font-bold">실시간 데이터</h2>
+    {% if result["values"] %}
+    <table class="rtable mt-3">
+      <thead><tr><th scope="col">항목</th><th scope="col" class="num">값</th></tr></thead>
+      <tbody>
+        {% for v in result["values"] %}
+        <tr><td data-primary class="font-semibold">{{ v.label }}</td><td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    {{ empty("읽은 실시간 데이터가 없습니다.") }}
+    {% endif %}
+  </section>
+
+  <section class="card overflow-hidden" aria-labelledby="ecus-title">
+    <h2 id="ecus-title" class="card-body pb-0 text-lg font-bold">응답한 제어기</h2>
+    {% if result.ecus %}
+    <table class="rtable mt-3">
+      <thead><tr><th scope="col">주소</th><th scope="col">제어기</th><th scope="col">응답한 서비스</th></tr></thead>
+      <tbody>
+        {% for e in result.ecus %}
+        <tr><td data-primary class="mono font-semibold">{{ e.address }}</td><td data-label="제어기">{{ e.label or "-" }}</td>
+          <td data-label="서비스" class="mono">{{ e.services|join(", ") }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    {{ empty("응답한 제어기가 없습니다.") }}
+    {% endif %}
+    {% if result.ecu_names or result.calibration_ids %}
+    <dl class="dl card-body">
+      {% if result.ecu_names %}<dt>ECU 이름</dt><dd>{{ result.ecu_names|join(", ") }}</dd>{% endif %}
+      {% if result.calibration_ids %}<dt>소프트웨어 보정 ID</dt><dd class="mono">{{ result.calibration_ids|join(", ") }}</dd>{% endif %}
+    </dl>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card mt-6 overflow-hidden" aria-labelledby="errors-title">
+  <h2 id="errors-title" class="card-body pb-0 text-lg font-bold">오류 기록 <span class="text-muted">{{ result.errors|length }}</span></h2>
+  {% if result.errors %}
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">단계</th><th scope="col">명령</th><th scope="col">상태</th><th scope="col">내용</th><th scope="col">원응답</th></tr></thead>
+    <tbody>
+      {% for e in result.errors %}
+      <tr>
+        <td data-primary class="font-semibold">{{ e.label }}</td>
+        <td data-label="명령" class="mono">{{ e.header or "" }} {{ e.command or "-" }}</td>
+        <td data-label="상태">{{ badge(e.status_label, "danger") }}</td>
+        <td data-label="내용" class="text-sm">{{ e.message }}</td>
+        <td data-label="원응답" class="mono text-sm">{{ e.raw or "-" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="card-body text-sm">오류 없이 완료했습니다. 차량이 지원하지 않는 항목은 아래 전체 단계에서 '지원 안 함'으로 볼 수 있습니다.</p>
+  {% endif %}
+</section>
+
+<details class="card mt-6 overflow-hidden">
+  <summary class="card-body cursor-pointer font-bold">전체 단계 {{ result.steps|length }}개</summary>
+  <table class="rtable">
+    <thead><tr><th scope="col">단계</th><th scope="col">명령</th><th scope="col">상태</th><th scope="col">내용</th></tr></thead>
+    <tbody>
+      {% for s in result.steps %}
+      <tr>
+        <td data-primary>{{ s.label }}</td>
+        <td data-label="명령" class="mono">{{ s.header or "" }} {{ s.command or "-" }}</td>
+        <td data-label="상태">{{ status_badge(s.status, s.status_label) }}</td>
+        <td data-label="내용" class="text-sm">{{ s.message }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</details>
+
+{% if result.notes %}
+<ul class="mt-6 grid list-disc gap-1 pl-5 text-sm text-muted">
+  {% for note in result.notes %}<li>{{ note }}</li>{% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

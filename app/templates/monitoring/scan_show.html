@@ -1,11 +1,25 @@
 {% extends "layouts/admin.html" %}
 {% from "components/ui.html" import page_header, badge, empty %}
 {% block title %}스캔 {{ scan.car_no }}{% endblock %}
+{% set scanned = scan.bms_data if scan.bms_data is mapping and scan.bms_data.source == "scanner" else none %}
 
 {% block content %}
 {% call page_header(scan.car_no, (scan.car_maker or "") ~ " " ~ scan.car_model, back=(url_for('monitoring.scans'), "스캔 기록")) %}
   {{ badge(scan.type_label, "info" if scan.type == "ev" else "") }}
+  {% if scanned %}
+  <a class="btn btn-primary" href="{{ url_for('scanner.result', scan_id=scan.id) }}">위스캔 결과</a>
+  {% if scanned.report_id %}<a class="btn btn-secondary" href="{{ url_for('canlab.report', report_id=scanned.report_id) }}">결과지</a>{% endif %}
+  {% endif %}
 {% endcall %}
+
+{% if scanned and scanned.errors %}
+<div class="flash flash-warning mb-6"><span aria-hidden="true" class="font-bold">!</span>
+  <p>스캔 오류 {{ scanned.errors|length }}건:
+    {% for e in scanned.errors[:3] %}{{ e.label }}({{ e.status_label }}){{ ", " if not loop.last }}{% endfor %}
+    {% if scanned.errors|length > 3 %}외 {{ scanned.errors|length - 3 }}건{% endif %}.
+    <a class="underline" href="{{ url_for('scanner.result', scan_id=scan.id, _anchor='errors-title') }}">오류 기록 보기</a></p>
+</div>
+{% endif %}
 
 <div class="grid gap-6 lg:grid-cols-2">
   <section class="card" aria-labelledby="car-title">

@@ -20,7 +20,8 @@ class Trace:
 
 def load_trace(text: str) -> Trace:
     parsed = parse_trace(text)
-    transactions = uds.pair_transactions(reassemble(parsed.frames))
+    can_frames = [frame for frame in parsed.frames if frame.direction != "serial"]
+    transactions = uds.pair_transactions(reassemble(can_frames))
     return Trace(parsed.format, len(parsed.frames), parsed.skipped_lines, transactions,
                  uds.did_samples(transactions), parsed.meta)
 

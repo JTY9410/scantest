@@ -16,7 +16,9 @@
 {%- endmacro %}
 
 {% block content %}
-{{ page_header("대시보드", current_user.name ~ "님, 오늘의 현황입니다.") }}
+{% call page_header("대시보드", current_user.name ~ "님, 오늘의 현황입니다.") %}
+  <a class="btn btn-primary" href="{{ url_for('scanner.index') }}">스캔하기</a>
+{% endcall %}
 
 <section aria-label="주요 지표" class="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 xl:grid-cols-4">
   {{ stat("이용 중인 회원", stats.members, url_for('members.index'), "테스터 " ~ "{:,}".format(stats.testers) ~ " · 소유자 " ~ "{:,}".format(stats.owners)) }}
@@ -28,7 +30,10 @@
 <section class="card card-body mt-6" aria-labelledby="obd-title" id="obd-quick">
   <div class="flex flex-wrap items-center justify-between gap-2">
     <h2 id="obd-title" class="text-lg font-bold">블루투스 진단기</h2>
-    <a class="inline-flex min-h-11 items-center text-sm font-medium underline" href="{{ url_for('canlab.live') }}">반복 수집</a>
+    <div class="flex flex-wrap items-center gap-3">
+      <a class="inline-flex min-h-11 items-center text-sm font-medium underline" href="{{ url_for('canlab.live') }}">반복 수집</a>
+      <a class="btn btn-primary" href="{{ url_for('scanner.index') }}">스캔하기</a>
+    </div>
   </div>
   <div class="mt-3">{{ obd_panel(obd) }}</div>
   <form class="mt-4 grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end" data-quick-form novalidate>

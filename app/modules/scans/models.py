@@ -1,4 +1,5 @@
 import enum
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -6,6 +7,7 @@ from sqlalchemy import (
     JSON,
     BigInteger,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     Integer,
@@ -113,3 +115,37 @@ class ScanCode(TimestampMixin, SoftDeleteMixin, db.Model):
 
     scan: Mapped[Scan] = relationship()
     code: Mapped[Code] = relationship()
+
+
+DEFAULT_CAR_INFO_URL = "https://diag.wecarmobility.co.kr/api/get_car_info"
+
+
+class CarInfoSetting(TimestampMixin, db.Model):
+    """위카 차량정보 조회 API 연결. 한 행만 쓴다. 인증키 평문은 저장하지 않는다."""
+
+    __tablename__ = "car_info_settings"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    url: Mapped[str] = mapped_column(String(500), default=DEFAULT_CAR_INFO_URL)
+    key_enc: Mapped[str | None] = mapped_column(Text)
+    key_last4: Mapped[str | None] = mapped_column(String(4))
+    last_tested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_test_message: Mapped[str | None] = mapped_column(String(500))
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+
+    __mapper_args__ = {"version_id_col": version}
+
+    @property
+    def has_key(self) -> bool:
+        return bool(self.key_enc)
+
+
+class CarInfoCache(TimestampMixin, db.Model):
+    """차량번호별 조회 결과. 원천 데이터에 일일 조회 한도가 있어 성공한 조회는 재사용한다."""
+
+    __tablename__ = "car_info_cache"
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    car_no: Mapped[str] = mapped_column(String(20), unique=True)
+    dto: Mapped[dict[str, Any]] = mapped_column(JSON)
+    fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))

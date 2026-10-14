@@ -47,6 +47,8 @@ PAGES = [
     ("/admin/ai/gemini", "Google Gemini"),
     ("/admin/obd/", "OBD2 연결"),
     ("/admin/obd/new", "OBD2 프로필 등록"),
+    ("/admin/car-info", "차량정보 조회"),
+    ("/admin/scan/", "차량번호 조회하기"),
     ("/admin/account", "2단계 인증"),
 ]
 
