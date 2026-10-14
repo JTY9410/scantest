@@ -9,6 +9,8 @@
 /node_modules/
 /public/
 /can_reverse_engineer/
+*.trc
+*.pdf
 /tests/
 /docs/
 /compose*.yaml

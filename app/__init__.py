@@ -76,7 +76,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.modules.members.routes import bp as members_bp
     from app.modules.monitoring.routes import bp as monitoring_bp
     from app.modules.obd.routes import bp as obd_bp
-    from app.modules.public.routes import bp as public_bp
+    from app.modules.site.routes import bp as public_bp
 
     csrf.exempt(api_bp)
     for blueprint in (public_bp, api_bp, auth_bp, admin_bp, members_bp, catalog_bp, monitoring_bp,
