@@ -74,6 +74,10 @@ class Config:
     PERMANENT_SESSION_LIFETIME = timedelta(hours=8)
 
     AI_TEST_TIMEOUT_SECONDS = 10
+    # 결과지 이미지 판독은 오래 걸린다. Vercel 함수 제한 시간(60초)보다 짧게 둔다.
+    AI_REQUEST_TIMEOUT_SECONDS = _int("AI_REQUEST_TIMEOUT_SECONDS", 50)
+    # Vercel 요청 본문 한도가 4.5MB라서 그보다 작게 둔다.
+    CANLAB_MAX_UPLOAD_BYTES = _int("CANLAB_MAX_UPLOAD_BYTES", 4 * 1024 * 1024)
     PAGE_SIZE_DEFAULT = 15
     PAGE_SIZE_MAX = 100
     ADMIN_PAGE_SIZE = 20

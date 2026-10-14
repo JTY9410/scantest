@@ -1,0 +1,45 @@
+{
+  "note": "정답이 아니라 순위 힌트다. 실제 TRC와 G-Scan 정답값으로 맞는 것만 채택한다. byte는 DID 에코(62 01 01) 다음 첫 바이트를 0으로 센다. 비공개·유출 자료는 넣지 않는다.",
+  "sources": [
+    {
+      "id": "wecar_scan_app",
+      "title": "위카 스캔 앱(Flutter) lib/utils/obd_parser.dart",
+      "url": "https://github.com/evolsraet/wecar_scan",
+      "access": "자사 비공개 저장소"
+    },
+    {
+      "id": "jejusoul_hkmc",
+      "title": "OBD-PIDs-for-HKMC-EVs: Kona & Niro EV BMS 확장 PID",
+      "url": "https://github.com/JejuSoul/OBD-PIDs-for-HKMC-EVs",
+      "access": "공개"
+    }
+  ],
+  "hypotheses": [
+    {"signal": "soc", "request_id": "7E4", "did": "0101", "start": 4, "width": 1, "endian": "big", "signed": false, "scale": 0.5, "offset": 0, "sources": ["wecar_scan_app", "jejusoul_hkmc"]},
+    {"signal": "max_charge_power_kw", "request_id": "7E4", "did": "0101", "start": 5, "width": 2, "endian": "big", "signed": false, "scale": 0.01, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "max_discharge_power_kw", "request_id": "7E4", "did": "0101", "start": 7, "width": 2, "endian": "big", "signed": false, "scale": 0.01, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "pack_current", "request_id": "7E4", "did": "0101", "start": 10, "width": 2, "endian": "big", "signed": true, "scale": 0.1, "offset": 0, "sources": ["wecar_scan_app", "jejusoul_hkmc"]},
+    {"signal": "pack_voltage", "request_id": "7E4", "did": "0101", "start": 12, "width": 2, "endian": "big", "signed": false, "scale": 0.1, "offset": 0, "sources": ["wecar_scan_app", "jejusoul_hkmc"]},
+    {"signal": "max_temp", "request_id": "7E4", "did": "0101", "start": 14, "width": 1, "endian": "big", "signed": true, "scale": 1, "offset": 0, "sources": ["wecar_scan_app", "jejusoul_hkmc"]},
+    {"signal": "min_temp", "request_id": "7E4", "did": "0101", "start": 15, "width": 1, "endian": "big", "signed": true, "scale": 1, "offset": 0, "sources": ["wecar_scan_app", "jejusoul_hkmc"]},
+    {"signal": "module_temp_1", "request_id": "7E4", "did": "0101", "start": 16, "width": 1, "endian": "big", "signed": true, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "module_temp_2", "request_id": "7E4", "did": "0101", "start": 17, "width": 1, "endian": "big", "signed": true, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "module_temp_3", "request_id": "7E4", "did": "0101", "start": 18, "width": 1, "endian": "big", "signed": true, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "module_temp_4", "request_id": "7E4", "did": "0101", "start": 19, "width": 1, "endian": "big", "signed": true, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "inlet_temp", "request_id": "7E4", "did": "0101", "start": 22, "width": 1, "endian": "big", "signed": true, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "max_cell_v", "request_id": "7E4", "did": "0101", "start": 23, "width": 1, "endian": "big", "signed": false, "scale": 0.02, "offset": 0, "sources": ["wecar_scan_app", "jejusoul_hkmc"]},
+    {"signal": "max_cell_no", "request_id": "7E4", "did": "0101", "start": 24, "width": 1, "endian": "big", "signed": false, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "min_cell_v", "request_id": "7E4", "did": "0101", "start": 25, "width": 1, "endian": "big", "signed": false, "scale": 0.02, "offset": 0, "sources": ["wecar_scan_app", "jejusoul_hkmc"]},
+    {"signal": "min_cell_no", "request_id": "7E4", "did": "0101", "start": 26, "width": 1, "endian": "big", "signed": false, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "aux_voltage", "request_id": "7E4", "did": "0101", "start": 29, "width": 1, "endian": "big", "signed": false, "scale": 0.1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "cum_charge_ah", "request_id": "7E4", "did": "0101", "start": 30, "width": 4, "endian": "big", "signed": false, "scale": 0.1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "cum_discharge_ah", "request_id": "7E4", "did": "0101", "start": 34, "width": 4, "endian": "big", "signed": false, "scale": 0.1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "cum_charge_kwh", "request_id": "7E4", "did": "0101", "start": 38, "width": 4, "endian": "big", "signed": false, "scale": 0.1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "cum_discharge_kwh", "request_id": "7E4", "did": "0101", "start": 42, "width": 4, "endian": "big", "signed": false, "scale": 0.1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "operating_time_s", "request_id": "7E4", "did": "0101", "start": 46, "width": 4, "endian": "big", "signed": false, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "inverter_cap_voltage", "request_id": "7E4", "did": "0101", "start": 51, "width": 2, "endian": "big", "signed": false, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "isolation_kohm", "request_id": "7E4", "did": "0101", "start": 57, "width": 2, "endian": "big", "signed": false, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "soh", "request_id": "7E4", "did": "0105", "start": 25, "width": 2, "endian": "big", "signed": false, "scale": 0.1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "soc_display", "request_id": "7E4", "did": "0105", "start": 31, "width": 1, "endian": "big", "signed": false, "scale": 0.5, "offset": 0, "sources": ["jejusoul_hkmc"]}
+  ]
+}

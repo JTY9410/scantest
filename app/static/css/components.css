@@ -534,6 +534,24 @@
   .mono {
     font-family: var(--wc-font-mono);
   }
+
+  /* 인쇄(결과지 PDF 저장): 메뉴·안내를 빼고 카드가 쪽 사이에서 잘리지 않게 한다. */
+  @media print {
+    .sidebar,
+    .backdrop,
+    .install-hint,
+    .site-footer,
+    .skip-link {
+      display: none !important;
+    }
+    body {
+      background: var(--wc-color-surface);
+    }
+    .card {
+      box-shadow: none;
+      break-inside: avoid;
+    }
+  }
   .qr svg {
     width: 100%;
     height: auto;

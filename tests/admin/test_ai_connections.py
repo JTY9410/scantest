@@ -38,7 +38,7 @@ def test_key_is_encrypted_and_only_last4_is_shown(app, admin_client):
         assert decrypt(connection.key_enc) == SECRET_KEY
     assert connection.key_last4 == "WXYZ"
     assert str(connection.monthly_budget) == "50.00"
-    assert connection.features == {"explain": True, "search": False, "draft": False}
+    assert connection.features == {"explain": True, "search": False, "draft": False, "canlab": False}
 
     for url in ("/admin/ai", "/admin/ai/openai"):
         html = admin_client.get(url).get_data(as_text=True)

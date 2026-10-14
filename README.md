@@ -87,10 +87,11 @@ docker push wecarmobility/wecarscan_dh:latest && docker push wecarmobility/wecar
 - AI 연결: `docs/flows/ai.md`
 - 블루투스 OBD2 연결 프로필: `docs/flows/obd.md`
 - 모바일 앱 API: `docs/flows/api.md`
+- CAN 역분석·운영 결과지·블루투스 수집: `docs/flows/canlab.md`
 
 ## CAN/UDS/BMS 역분석 도구
 
-`can_reverse_engineer/`는 TRC 트레이스와 G-Scan 결과를 교차 분석하는 별도 Python 도구입니다. 요구사항은 `CAN_UDS_BMS_Reverse_Engineering_Cursor_통합_개별요구사항 (1).md`이고, 단계(REQ)마다 사용자 승인 후 진행합니다. 현재는 REQ-01(입력 Inventory)까지 구현했습니다. 웹 이미지에는 포함하지 않습니다.
+웹 관리자 화면의 역분석·결과지는 `app/modules/canlab/`에 있습니다(`docs/flows/canlab.md`). 아래 `can_reverse_engineer/`는 TRC 트레이스와 G-Scan 결과를 교차 분석하는 별도 Python 도구입니다. 요구사항은 `CAN_UDS_BMS_Reverse_Engineering_Cursor_통합_개별요구사항 (1).md`이고, 단계(REQ)마다 사용자 승인 후 진행합니다. 현재는 REQ-01(입력 Inventory)까지 구현했습니다. 웹 이미지에는 포함하지 않습니다.
 
 ```bash
 # 입력 파일을 can_reverse_engineer/dataset/ 아래에 둔다(저장소에 올리지 않음)

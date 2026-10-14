@@ -1,0 +1,41 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge, empty, field %}
+{% block title %}운영 결과지{% endblock %}
+
+{% block content %}
+{{ page_header("운영 결과지", "위스캔 TRC나 블루투스 수집 기록에 지금 적용 중인 수식을 써서 결과지를 만듭니다.") }}
+
+<section class="card card-body mb-6" aria-labelledby="new-title">
+  <h2 id="new-title" class="text-lg font-bold">결과지 만들기</h2>
+  {% if form.dataset_id.choices %}
+  <form method="post" class="mt-4 flex flex-wrap items-end gap-3" novalidate>
+    {{ form.csrf_token }}
+    {{ field(form.dataset_id, class_="min-w-0 flex-1") }}
+    <button class="btn btn-primary" type="submit">결과지 만들기</button>
+  </form>
+  {% else %}
+  {{ empty("통신 기록이 없습니다.", "위스캔 TRC를 올리거나 블루투스로 수집하세요.") }}
+  {% endif %}
+</section>
+
+<section class="card overflow-hidden" aria-label="결과지 목록">
+  {% if reports %}
+  <table class="rtable">
+    <thead><tr><th scope="col">결과지</th><th scope="col">차량</th><th scope="col">기록</th><th scope="col" class="num">항목</th><th scope="col">AI 요약</th></tr></thead>
+    <tbody>
+      {% for r in reports %}
+      <tr>
+        <td data-primary><a class="font-semibold underline" href="{{ url_for('canlab.report', report_id=r.id) }}">#{{ r.id }} · {{ r.created_at|kst }}</a></td>
+        <td data-label="차량">{{ r.vehicle }}</td>
+        <td data-label="기록" class="text-sm">{{ r.dataset.filename if r.dataset else "삭제됨" }}</td>
+        <td data-label="항목" class="num">{{ r.values|length }}</td>
+        <td data-label="AI 요약">{{ badge("있음", "success") if r.ai_summary else badge("기본 요약") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("만든 결과지가 없습니다.") }}
+  {% endif %}
+</section>
+{% endblock %}

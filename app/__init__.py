@@ -63,6 +63,7 @@ def _import_models() -> None:
     from app.core import audit  # noqa: F401
     from app.modules.accounts import models as accounts  # noqa: F401
     from app.modules.admin import models as admin  # noqa: F401
+    from app.modules.canlab import models as canlab  # noqa: F401
     from app.modules.obd import models as obd  # noqa: F401
     from app.modules.reports import models as reports  # noqa: F401
     from app.modules.scans import models as scans  # noqa: F401
@@ -72,6 +73,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.modules.admin.routes import bp as admin_bp
     from app.modules.api import bp as api_bp
     from app.modules.auth.routes import bp as auth_bp
+    from app.modules.canlab.routes import bp as canlab_bp
     from app.modules.catalog.routes import bp as catalog_bp
     from app.modules.members.routes import bp as members_bp
     from app.modules.monitoring.routes import bp as monitoring_bp
@@ -80,7 +82,7 @@ def _register_blueprints(app: Flask) -> None:
 
     csrf.exempt(api_bp)
     for blueprint in (public_bp, api_bp, auth_bp, admin_bp, members_bp, catalog_bp, monitoring_bp,
-                      obd_bp):
+                      obd_bp, canlab_bp):
         app.register_blueprint(blueprint)
 
 

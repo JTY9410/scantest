@@ -1,0 +1,125 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge, empty, field %}
+{% block title %}{{ dataset.filename }}{% endblock %}
+
+{% block content %}
+{% call page_header("#" ~ dataset.id ~ " " ~ dataset.filename, dataset.kind_label ~ " · " ~ dataset.vehicle, back=(url_for('canlab.datasets'), "데이터 목록")) %}
+  {% if dataset.is_trace %}
+  <a class="btn btn-primary" href="{{ url_for('canlab.reports', dataset_id=dataset.id) }}">운영 결과지 만들기</a>
+  {% endif %}
+{% endcall %}
+
+<div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+  <section class="card card-body" aria-labelledby="info-title">
+    <h2 id="info-title" class="text-lg font-bold">파일 정보</h2>
+    <dl class="dl mt-3">
+      <dt>종류</dt><dd>{{ dataset.kind_label }} ({{ dataset.source_label }})</dd>
+      <dt>차량</dt><dd>{{ dataset.vehicle }}</dd>
+      <dt>크기</dt><dd class="tabular-nums">{{ "{:,}".format(dataset.size) }} 바이트</dd>
+      <dt>지문(SHA-256)</dt><dd class="mono text-sm">{{ dataset.sha256[:16] }}…</dd>
+      <dt>등록</dt><dd>{{ dataset.created_at|kst }}{% if dataset.uploader %} · {{ dataset.uploader.name }}{% endif %}</dd>
+      {% if dataset.note %}<dt>메모</dt><dd>{{ dataset.note }}</dd>{% endif %}
+      {% if dataset.is_trace %}
+      {% set s = dataset.summary %}
+      <dt>형식</dt><dd>{{ "PCAN TRC" if s.format.startswith("pcan") else "위카 ELM 기록" }} · 프레임 {{ "{:,}".format(s.frames) }}개{% if s.skipped_lines %} · 읽지 못한 줄 {{ s.skipped_lines }}{% endif %}</dd>
+      <dt>요청·응답</dt><dd class="tabular-nums">{{ s.transactions }}건 · 데이터 표본 {{ s.samples }}개 · {{ s.duration_s }}초</dd>
+      <dt>차대번호</dt><dd class="mono">{{ s.vin or "기록 없음" }}</dd>
+      <dt>고장코드</dt><dd>{{ s.dtc_count }}개</dd>
+      {% endif %}
+    </dl>
+  </section>
+
+  {% if dataset.is_trace %}
+  <section class="card overflow-hidden" aria-labelledby="ecu-title">
+    <h2 id="ecu-title" class="card-body pb-0 text-lg font-bold">응답한 제어기(ECU)</h2>
+    <table class="rtable mt-3">
+      <thead><tr><th scope="col">제어기</th><th scope="col">요청→응답</th><th scope="col">데이터(DID)</th><th scope="col">거부 응답</th></tr></thead>
+      <tbody>
+        {% for ecu in dataset.summary.ecus %}
+        <tr>
+          <td data-primary class="font-semibold">{{ ecu.label }}</td>
+          <td data-label="요청→응답" class="mono">{{ ecu.request_id }} → {{ ecu.response_id }}</td>
+          <td data-label="데이터(DID)" class="mono text-sm">{{ ecu.dids|join(", ") or "-" }}</td>
+          <td data-label="거부 응답" class="text-sm">{% for n in ecu.negative[:3] %}{{ n.did }} {{ n.meaning }}{% if not loop.last %}, {% endif %}{% else %}-{% endfor %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% else %}
+  <section class="card card-body" aria-labelledby="pages-title">
+    <h2 id="pages-title" class="text-lg font-bold">결과지 쪽</h2>
+    <p class="mt-1 text-sm text-muted">쪽마다 AI 판독을 누르면 표 값을 미확인 정답값으로 넣습니다. 한 번에 한 쪽씩 처리합니다.
+      {% if not ai_ready %}지금은 사용할 AI 연결이 없어 직접 입력만 할 수 있습니다.{% endif %}</p>
+    <ol class="mt-4 grid gap-4 sm:grid-cols-2">
+      {% for page in range(1, dataset.summary.pages + 1) %}
+      <li class="rounded-md border border-line p-2">
+        <a href="{{ url_for('canlab.page_image', dataset_id=dataset.id, page=page) }}" target="_blank" rel="noopener">
+          <img class="w-full rounded-sm border border-line" loading="lazy" alt="{{ page }}쪽 결과지"
+               src="{{ url_for('canlab.page_image', dataset_id=dataset.id, page=page) }}">
+        </a>
+        <form method="post" action="{{ url_for('canlab.ocr', dataset_id=dataset.id, page=page) }}" class="mt-2 flex items-center justify-between gap-2">
+          {{ action.csrf_token }}
+          <span class="text-sm font-semibold">{{ page }}쪽</span>
+          <button class="btn btn-secondary" type="submit" {% if not ai_ready %}disabled{% endif %}>AI 판독</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
+  {% endif %}
+</div>
+
+<section id="truths" class="card mt-6 overflow-hidden" aria-labelledby="truths-title">
+  <div class="card-body pb-0">
+    <h2 id="truths-title" class="text-lg font-bold">정답값</h2>
+    <p class="mt-1 text-sm text-muted">확인(체크)한 숫자 값 중 신호가 지정된 것만 역산에 씁니다. 항목명이 결과지와 같으면 신호가 자동으로 정해집니다.</p>
+  </div>
+  {% if dataset.truths %}
+  <form method="post" action="{{ url_for('canlab.update_truths', dataset_id=dataset.id) }}">
+    {{ action.csrf_token }}
+    <table class="rtable mt-3">
+      <thead><tr><th scope="col">항목(결과지)</th><th scope="col">신호</th><th scope="col">값</th><th scope="col">출처</th><th scope="col">확인</th><th scope="col">삭제</th></tr></thead>
+      <tbody>
+        {% for t in dataset.truths %}
+        <tr>
+          <td data-primary>{{ t.label }}{% if t.page %} <span class="text-sm text-muted">({{ t.page }}쪽)</span>{% endif %}</td>
+          <td data-label="신호">
+            <label class="sr-only" for="key-{{ t.id }}">{{ t.label }} 신호</label>
+            <select class="input" id="key-{{ t.id }}" name="key-{{ t.id }}">
+              <option value="">(분석 안 함)</option>
+              {% for s in signals %}<option value="{{ s.key }}" {% if s.key == t.signal_key %}selected{% endif %}>{{ s.label }}</option>{% endfor %}
+            </select>
+          </td>
+          <td data-label="값">
+            <label class="sr-only" for="value-{{ t.id }}">{{ t.label }} 값</label>
+            <span class="flex items-center gap-2"><input class="input max-w-36 tabular-nums" id="value-{{ t.id }}" name="value-{{ t.id }}" value="{{ t.value_text }}" inputmode="decimal"> <span class="text-sm">{{ t.unit or "" }}</span></span>
+          </td>
+          <td data-label="출처">{{ badge(t.source_label, "info" if t.source == "ai_ocr" else "") }}</td>
+          <td data-label="확인"><input type="checkbox" class="size-5 accent-ink" name="confirmed-{{ t.id }}" aria-label="{{ t.label }} 확인" {% if t.confirmed %}checked{% endif %}></td>
+          <td data-label="삭제"><input type="checkbox" class="size-5" name="delete-{{ t.id }}" aria-label="{{ t.label }} 삭제"></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="card-body"><button class="btn btn-primary" type="submit">정답값 저장</button></div>
+  </form>
+  {% else %}
+  {{ empty("정답값이 없습니다.", "결과지 AI 판독을 하거나 아래에 직접 붙여 넣으세요.") }}
+  {% endif %}
+</section>
+
+<section class="card card-body mt-6" aria-labelledby="add-title">
+  <h2 id="add-title" class="text-lg font-bold">정답값 직접 입력</h2>
+  <form method="post" action="{{ url_for('canlab.add_truths', dataset_id=dataset.id) }}" class="mt-3 grid gap-3">
+    {{ truth_form.csrf_token }}
+    {{ field(truth_form.text, help="한 줄에 하나씩 '항목명 | 값 | 단위' (탭 구분도 됨). 예: 배터리 팩 전압 | 263.2 | V", rows=6) }}
+    <div><button class="btn btn-secondary" type="submit">추가</button></div>
+  </form>
+</section>
+
+<form method="post" action="{{ url_for('canlab.delete_dataset', dataset_id=dataset.id) }}" class="mt-6" data-confirm="이 데이터와 정답값을 삭제할까요? 되돌릴 수 없습니다.">
+  {{ action.csrf_token }}
+  <button class="btn btn-danger" type="submit">데이터 삭제</button>
+</form>
+{% endblock %}

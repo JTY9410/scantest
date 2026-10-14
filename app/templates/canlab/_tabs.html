@@ -1,0 +1,12 @@
+{% set tabs = [
+  ("canlab.index", "개요", ("canlab.index",)),
+  ("canlab.datasets", "데이터·정답값", ("canlab.datasets", "canlab.dataset")),
+  ("canlab.analysis", "역산 분석", ("canlab.analysis", "canlab.run")),
+  ("canlab.rules", "디코딩 규칙", ("canlab.rules", "canlab.activate_rule", "canlab.retire_rule")),
+] %}
+<nav class="mb-6 flex flex-wrap gap-2 print:hidden" aria-label="CAN 역분석 메뉴">
+  {% for endpoint_name, label, actives in tabs %}
+  <a class="btn {{ 'btn-primary' if request.endpoint in actives else 'btn-secondary' }}"
+     href="{{ url_for(endpoint_name) }}"{% if request.endpoint in actives %} aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</nav>

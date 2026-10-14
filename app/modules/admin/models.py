@@ -42,6 +42,7 @@ AI_FEATURES = {
     "explain": "진단 결과 설명",
     "search": "승인 문서 검색",
     "draft": "안내문 초안",
+    "canlab": "CAN 분석(결과지 판독·보고서)",
 }
 
 

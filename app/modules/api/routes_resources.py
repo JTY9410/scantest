@@ -12,11 +12,13 @@ from app.modules.api.http import api_input, respond
 from app.modules.api.listing import eager, list_payload, load_options, parse_with
 from app.modules.api.serializers import (
     applog_dict,
+    can_capture_dict,
     code_dict,
     mismatch_dict,
     obd_profile_dict,
     scan_dict,
 )
+from app.modules.canlab import service as canlab
 from app.modules.obd import service as obd
 from app.modules.reports import service as reports
 from app.modules.reports.models import CarMismatchReport
@@ -279,3 +281,24 @@ def applogs_show(log_id: int):
 @require_api_auth
 def obd_profiles_index():
     return respond({"data": [obd_profile_dict(p) for p in obd.enabled_profiles()]})
+
+
+# ---- CAN 수집 (신규 API) ------------------------------------------------------------
+
+@bp.get("/canCaptureRequests")
+@require_api_auth
+def can_capture_requests():
+    return respond({"data": canlab.capture_requests()})
+
+
+@bp.post("/canCaptures")
+@require_api_auth
+def can_captures_store():
+    data = validate(api_input(), {
+        "vehicle": ["required", "string", ("max", 100)],
+        "device_name": ["nullable", "string", ("max", 100)],
+        "exchanges": ["required", "array"],
+    })
+    report = canlab.store_app_capture(current_user(), data["vehicle"], data["exchanges"],
+                                      data.get("device_name"))
+    return respond({"message": "생성되었습니다.", "data": can_capture_dict(report)}, 201)

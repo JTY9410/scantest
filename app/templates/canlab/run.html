@@ -1,0 +1,64 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge %}
+{% block title %}역산 #{{ run.id }}{% endblock %}
+
+{% macro status_badge(status) -%}
+{{ badge(status, {"확정": "success", "가설": "warning", "UNKNOWN": "danger"}.get(status, "")) }}
+{%- endmacro %}
+
+{% block content %}
+{{ page_header("역산 결과 #" ~ run.id,
+               run.created_at|kst ~ " · " ~ run.duration_ms ~ "ms · 새로 적용 " ~ run.activated_count ~ "개",
+               back=(url_for('canlab.analysis'), "역산 분석")) }}
+{% include "canlab/_tabs.html" %}
+
+<p class="mb-4 text-sm text-muted">
+  <strong class="text-fg">확정</strong>: 정답과 일치하고 모든 검증을 통과해 운영에 적용됨 ·
+  <strong class="text-fg">가설</strong>: 맞는 해석은 있으나 검증 미통과(규칙 화면에서 수동 적용 가능) ·
+  <strong class="text-fg">UNKNOWN</strong>: 맞는 바이트를 찾지 못함
+</p>
+
+<div class="grid gap-4">
+  {% for key, item in run.result.items() %}
+  <section class="card overflow-hidden" aria-labelledby="sig-{{ key }}">
+    <div class="card-body flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h2 id="sig-{{ key }}" class="font-bold">{{ item.label }}</h2>
+        <p class="mt-1 text-sm text-muted">정답 <strong class="tabular-nums text-fg">{{ item.truth }} {{ item.unit }}</strong>
+          {% if item.decoded is defined %} · 해석 <strong class="tabular-nums text-fg">{{ item.decoded }} {{ item.unit }}</strong>{% endif %}
+          {% if item.outcome %} · {{ item.outcome }}{% endif %}</p>
+        <ul class="mt-2 grid gap-1 text-sm">
+          {% for reason in item.reasons %}<li>· {{ reason }}</li>{% endfor %}
+        </ul>
+      </div>
+      <div class="flex flex-wrap gap-1">
+        {{ status_badge(item.status) }}
+        {% if item.matches_active %}{{ badge("적용 중 수식과 같음", "info") }}{% endif %}
+      </div>
+    </div>
+    {% if item.candidates %}
+    <table class="rtable">
+      <thead><tr><th scope="col">후보 수식</th><th scope="col">출처</th><th scope="col" class="num">해석값</th><th scope="col" class="num">오차</th><th scope="col" class="num">일치율</th><th scope="col" class="num">점수</th><th scope="col">참고</th></tr></thead>
+      <tbody>
+        {% for c in item.candidates %}
+        <tr>
+          <td data-primary class="mono text-sm">{{ c.formula }}</td>
+          <td data-label="출처" class="mono text-sm">{{ c.source }}</td>
+          <td data-label="해석값" class="num">{{ c.decoded }}</td>
+          <td data-label="오차" class="num">{{ c.error }}</td>
+          <td data-label="일치율" class="num">{{ (c.support * 100)|round|int }}%</td>
+          <td data-label="점수" class="num">{{ c.score }}</td>
+          <td data-label="참고" class="text-sm">
+            {% if c.references %}{{ badge("참고자료 일치", "info") }}{% endif %}
+            {% if c.rivals %}{{ badge("경합 " ~ c.rivals, "warning") }}{% endif %}
+            {% if c.conflict %}{{ badge("바이트 겹침", "danger") }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% endblock %}

@@ -1,0 +1,59 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, empty %}
+{% block title %}블루투스 수집{% endblock %}
+{% block head %}
+<script src="{{ url_for('static', filename='js/components/obd-ble.js', v=asset_version) }}" defer></script>
+{% endblock %}
+
+{% block content %}
+{{ page_header("블루투스 수집", "BLE OBD2 진단기(ELM327 호환)에 브라우저로 바로 연결해 차량 CAN 응답을 기록합니다.") }}
+
+<div class="flash flash-info mb-6"><span aria-hidden="true" class="font-bold">i</span>
+  <p>안드로이드·PC의 Chrome 또는 Edge에서만 동작합니다(아이폰 사파리는 Web Bluetooth 미지원 — 위카 앱으로 수집하세요). 시동을 켜고 진단기를 OBD2 단자에 꽂은 뒤 시작하세요.</p></div>
+
+{% if not profiles %}
+<section class="card">{{ empty("사용할 BLE 프로필이 없습니다.", "OBD2 연결 화면에서 BLE 프로필(서비스·쓰기·알림 UUID)을 등록하고 '앱에 제공'을 켜세요.") }}</section>
+{% elif not requests %}
+<section class="card">{{ empty("보낼 조회 명령이 없습니다.", "역산 분석으로 규칙을 적용하거나, BLE 프로필에 요청 헤더와 조회 명령을 넣으세요.") }}</section>
+{% else %}
+<section class="card card-body" aria-labelledby="capture-title" id="ble-capture"
+         data-save-url="{{ url_for('canlab.live') }}">
+  <h2 id="capture-title" class="text-lg font-bold">수집 설정</h2>
+  <form class="mt-4 grid gap-4 md:grid-cols-2" data-ble-form novalidate>
+    {{ action.csrf_token }}
+    <div class="field">
+      <label class="field-label" for="ble-profile">OBD2 프로필</label>
+      <select class="input" id="ble-profile" name="profile">
+        {% for p in profiles %}
+        <option value="{{ p.id }}" data-name-prefix="{{ p.device_name_prefix }}" data-service="{{ p.service_uuid }}"
+                data-write="{{ p.write_uuid }}" data-notify="{{ p.notify_uuid }}" data-init="{{ p.init_commands|join('|') }}"
+                data-timeout="{{ p.response_timeout_ms }}">{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label class="field-label" for="ble-vehicle">차량<span class="field-req" aria-hidden="true">*</span></label>
+      <input class="input" id="ble-vehicle" name="vehicle" required maxlength="100" placeholder="예: 그랜저 HEV 2024">
+    </div>
+    <div class="field">
+      <label class="field-label" for="ble-rounds">반복 횟수</label>
+      <input class="input" id="ble-rounds" name="rounds" type="number" min="1" max="30" value="3" inputmode="numeric">
+      <p class="field-help">같은 명령을 여러 번 읽으면 움직이는 값(전류 등)의 변화가 남습니다.</p>
+    </div>
+    <div class="field">
+      <span class="field-label">보낼 명령 ({{ requests|length }}개, {{ "적용 중 규칙 기준" if from_rules else "프로필 조회 명령" }})</span>
+      <ul class="mono text-sm" data-ble-requests>
+        {% for r in requests %}<li data-header="{{ r.header }}" data-command="{{ r.command }}">{{ r.header }} · {{ r.command }}</li>{% endfor %}
+      </ul>
+    </div>
+    <div class="flex flex-wrap gap-2 md:col-span-2">
+      <button class="btn btn-primary" type="button" data-ble-start>연결하고 수집 시작</button>
+      <button class="btn btn-secondary" type="button" data-ble-stop disabled>중지</button>
+      <button class="btn btn-secondary" type="button" data-ble-save disabled>기록 저장</button>
+    </div>
+  </form>
+  <p class="mt-4 font-semibold" role="status" aria-live="polite" data-ble-status>대기 중</p>
+  <pre class="mono mt-3 max-h-80 overflow-auto rounded-md bg-surface-2 p-3 text-xs" data-ble-log aria-label="수집 기록"></pre>
+</section>
+{% endif %}
+{% endblock %}

@@ -6,6 +6,7 @@ from typing import Any
 
 from app.core.time import iso
 from app.modules.accounts.models import Company, User
+from app.modules.canlab.models import DiagnosticReport
 from app.modules.obd.models import ObdProfile
 from app.modules.reports.models import Applog, CarMismatchReport
 from app.modules.scans.models import Code, Scan, ScanCode
@@ -163,6 +164,27 @@ def applog_dict(log: Applog, requested: set[str] | None = None) -> dict[str, Any
         "desc": log.desc,
         "created_at": iso(log.created_at),
         "updated_at": iso(log.updated_at),
+    }
+
+
+def can_capture_dict(report: DiagnosticReport) -> dict[str, Any]:
+    dataset = report.dataset
+    summary = dataset.summary
+    return {
+        "id": dataset.id,
+        "kind": dataset.kind,
+        "vehicle": dataset.vehicle,
+        "transactions": summary["transactions"],
+        "dids": summary["dids"],
+        "vin": summary["vin"],
+        "created_at": iso(dataset.created_at),
+        "report": {
+            "id": report.id,
+            "values": {key: {"label": v["label"], "value": v["value"], "unit": v["unit"]}
+                       for key, v in report.values.items()},
+            "dtcs": [dict(d, ecu=ecu) for ecu, codes in report.diagnosis["dtcs"].items() for d in codes],
+            "dtc_checked_ecus": report.diagnosis["dtc_checked_ecus"],
+        },
     }
 
 

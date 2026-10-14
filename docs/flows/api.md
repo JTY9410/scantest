@@ -19,7 +19,11 @@
 | 차량 불일치 신고 | `/api/carMismatchReports` | `reports` | 신고 | 본인 것만(관리자는 전체) |
 | 앱 로그 | `/api/applogs` | `reports` | 앱 로그 | 본인 것만(관리자는 전체) |
 | 블루투스 OBD2 설정 받기 (신규) | `GET /api/obdProfiles` | `obd.enabled_profiles` | - | 사용 중인 프로필 목록 (`docs/flows/obd.md`) |
+| CAN 수집 명령 받기 (신규) | `GET /api/canCaptureRequests` | `canlab.capture_requests` | - | 적용 규칙의 `{header, command}` 목록과 DTC·VIN 조회 명령 |
+| CAN 수집 올리기 (신규) | `POST /api/canCaptures` | `canlab.store_app_capture` | 데이터셋, 결과지 | 201과 해석 값·DTC (`docs/flows/canlab.md`) |
 
 - 목록 API는 `search`(`필드:값||필드:연산자:값`), `order`(`필드:asc|desc`), `with`, `page`, `per_page` 파라미터를 이전과 같이 받습니다(`app/modules/api/listing.py`).
 - 가입 시 회원 유형으로 관리자를 고를 수 없습니다(이전 서버의 권한 상승 허점 수정).
 - 진단서 PDF(`/api/scans/<id>/pdf`)와 이메일(`/api/scans/<id>/email`)은 이전 서버처럼 성공 응답만 돌려줍니다.
+- `POST /api/canCaptures` 본문: `vehicle`(필수, 100자 이하), `deviceName`(선택), `exchanges`(필수, 1~2000개의 `{header, command, reply}`; header·command는 16진수, reply는 진단기가 돌려준 줄 그대로). 응답이 하나도 없으면 400입니다.
+- 앱 저장소(`evolsraet/wecar_scan`)가 실제로 호출하는 경로는 모두 이 서버에 있습니다. 앱 저장소의 `API_SPECIFICATION.md`는 앱이 쓰지 않는 다른 경로를 적고 있으니 기준으로 삼지 않습니다.

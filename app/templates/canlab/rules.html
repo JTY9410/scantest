@@ -1,0 +1,52 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge, empty %}
+{% block title %}디코딩 규칙{% endblock %}
+
+{% block content %}
+{{ page_header("디코딩 규칙", "신호마다 적용 중인 수식은 하나입니다. 이전 버전을 다시 적용하면 되돌리기가 됩니다. 운영 결과지에는 즉시 반영됩니다.") }}
+{% include "canlab/_tabs.html" %}
+
+{% if groups %}
+<div class="grid gap-4">
+  {% for key, rules in groups.items() %}
+  {% set signal = signals.get(key) %}
+  <section class="card overflow-hidden" aria-labelledby="rule-{{ key }}">
+    <h2 id="rule-{{ key }}" class="card-body pb-0 font-bold">{{ signal.label if signal else key }}{% if signal and signal.unit %} <span class="text-sm font-normal text-muted">({{ signal.unit }})</span>{% endif %}</h2>
+    <table class="rtable mt-3">
+      <thead><tr><th scope="col">버전</th><th scope="col">수식</th><th scope="col">출처</th><th scope="col" class="num">신뢰도</th><th scope="col">상태</th><th scope="col"><span class="sr-only">관리</span></th></tr></thead>
+      <tbody>
+        {% for rule in rules %}
+        <tr>
+          <td data-primary class="font-semibold">v{{ rule.revision }}</td>
+          <td data-label="수식" class="mono text-sm">{{ rule.formula }}</td>
+          <td data-label="출처" class="mono text-sm">{{ rule.request_id }} 22 {{ rule.did }}</td>
+          <td data-label="신뢰도" class="num">{{ "%.2f"|format(rule.confidence) }}</td>
+          <td data-label="상태">
+            {{ badge(rule.status_label, {"active": "success", "candidate": "warning"}.get(rule.status, "")) }}
+            {% if rule.analysis_run_id %}<a class="ml-1 text-sm underline" href="{{ url_for('canlab.run', run_id=rule.analysis_run_id) }}">근거 #{{ rule.analysis_run_id }}</a>{% endif %}
+          </td>
+          <td data-label="관리">
+            {% if rule.status == RuleStatus.ACTIVE %}
+            <form method="post" action="{{ url_for('canlab.retire_rule', rule_id=rule.id) }}" data-confirm="이 규칙 적용을 해제할까요? 운영 결과지에서 이 값이 빠집니다.">
+              {{ action.csrf_token }}<input type="hidden" name="version" value="{{ rule.version }}">
+              <button class="btn btn-secondary" type="submit">해제<span class="sr-only"> (v{{ rule.revision }})</span></button>
+            </form>
+            {% else %}
+            <form method="post" action="{{ url_for('canlab.activate_rule', rule_id=rule.id) }}"
+                  data-confirm="{{ '검증을 통과하지 못한 가설 수식입니다. 그래도 적용할까요?' if rule.status == RuleStatus.CANDIDATE else '이 버전으로 되돌릴까요?' }}">
+              {{ action.csrf_token }}<input type="hidden" name="version" value="{{ rule.version }}">
+              <button class="btn btn-secondary" type="submit">{{ "되돌리기" if rule.status == RuleStatus.RETIRED else "적용" }}<span class="sr-only"> (v{{ rule.revision }})</span></button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endfor %}
+</div>
+{% else %}
+<section class="card">{{ empty("규칙이 없습니다.", "역산 분석을 실행하면 검증을 통과한 수식이 여기에 생깁니다.") }}</section>
+{% endif %}
+{% endblock %}
