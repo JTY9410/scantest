@@ -26,10 +26,6 @@ class Frame:
     data: bytes
     direction: str = "rx"
 
-    @property
-    def id_hex(self) -> str:
-        return f"{self.can_id:03X}"
-
 
 @dataclass(frozen=True)
 class ParsedTrace:

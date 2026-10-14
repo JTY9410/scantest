@@ -24,11 +24,8 @@ htmlcov/
 /_storage/
 /instance/
 
-# CAN 역분석 입력·산출물(VIN 등 차량 정보 포함)
-/can_reverse_engineer/dataset/*
-/can_reverse_engineer/output/*
-!/can_reverse_engineer/dataset/.gitkeep
-!/can_reverse_engineer/output/.gitkeep
+# 실제 차량 데이터(TRC·결과지 PDF, VIN 등 포함)
+/data/
 /*.trc
 /*.pdf
 

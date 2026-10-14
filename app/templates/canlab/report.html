@@ -2,7 +2,7 @@
 {% from "components/ui.html" import page_header, badge, empty %}
 {% block title %}위스캔 결과지 #{{ report.id }}{% endblock %}
 {% block head %}
-<script src="{{ url_for('static', filename='vendor/chart.umd.min.js') }}" defer></script>
+<script src="{{ url_for('static', filename='vendor/chart.umd.min.js', v=asset_version) }}" defer></script>
 <script src="{{ url_for('static', filename='js/components/canlab-report.js', v=asset_version) }}" defer></script>
 {% endblock %}
 

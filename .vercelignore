@@ -4,11 +4,10 @@
 
 # 배포에 필요 없는 파일
 /_storage/
-/_doc/
+/data/
 /instance/
 /node_modules/
 /public/
-/can_reverse_engineer/
 *.trc
 *.pdf
 /tests/

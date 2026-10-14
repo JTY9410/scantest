@@ -5,8 +5,7 @@
 .env.*
 !.env.example
 _storage
-_doc
-can_reverse_engineer
+data
 docs
 tests
 node_modules

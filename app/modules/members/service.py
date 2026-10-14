@@ -17,7 +17,6 @@ from app.modules.reports.models import Applog, CarMismatchReport
 from app.modules.scans.models import Scan
 
 CONFLICT = "다른 관리자가 먼저 이 회원 정보를 수정했습니다. 최신 내용을 확인한 뒤 다시 저장하세요."
-EDITABLE = ("name", "type", "company_id", "mobile", "email", "biz_no")
 SORTS = {
     "-created_at": (User.created_at.desc(), User.id.desc()),
     "created_at": (User.created_at.asc(), User.id.asc()),

@@ -112,6 +112,7 @@ def test_pdf_page_image_and_manual_truths(app, admin_client):
 
     image = admin_client.get(f"{page}/pages/1.jpg")
     assert image.status_code == 200 and image.mimetype == "image/jpeg"
+    assert image.headers["Cache-Control"] == "private, max-age=600"
     assert admin_client.get(f"{page}/pages/9.jpg").status_code == 404
 
     _post(admin_client, f"{page}/truths/add", page, text=TRUTHS)

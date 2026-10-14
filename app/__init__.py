@@ -17,12 +17,21 @@ CSP = (
     "frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'"
 )
 mimetypes.add_type("application/manifest+json", ".webmanifest")
+VERSIONED_MAX_AGE = 365 * 24 * 3600
+
+
+class WecarFlask(Flask):
+    def get_send_file_max_age(self, filename: str | None) -> int | None:
+        # ?v=는 내용 해시라서 파일이 바뀌면 주소도 바뀐다
+        if request.args.get("v"):
+            return VERSIONED_MAX_AGE
+        return super().get_send_file_max_age(filename)
 
 
 def create_app(config_name: str | None = None) -> Flask:
     load_dotenv()
     config_name = config_name or os.environ.get("APP_ENV", "development")
-    app = Flask(__name__)
+    app = WecarFlask(__name__)
     app.config.from_object(CONFIGS[config_name])
     _check_required_settings(app)
 
@@ -98,7 +107,7 @@ def _register_security(app: Flask) -> None:
         if app.config["APP_ENV"] == "production":
             headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         if request.path.startswith("/admin"):
-            headers["Cache-Control"] = "no-store"
+            headers.setdefault("Cache-Control", "no-store")
         return response
 
 

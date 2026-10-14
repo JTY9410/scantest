@@ -113,6 +113,10 @@ def test_public_endpoints(client):
     manifest = client.get("/static/manifest.webmanifest")
     assert manifest.status_code == 200
     assert manifest.get_json()["scope"] == "/admin/"
+    assert "max-age=31536000" not in manifest.headers.get("Cache-Control", "")
+
+    versioned = client.get("/static/js/app.js?v=abc")
+    assert "max-age=31536000" in versioned.headers["Cache-Control"]
 
 
 def test_install_hint_flag_only_on_first_page_after_login(admin_client):

@@ -91,20 +91,9 @@ docker push wecarmobility/wecarscan_dh:latest && docker push wecarmobility/wecar
 
 ## CAN/UDS/BMS 역분석 도구
 
-웹 관리자 화면의 역분석·결과지는 `app/modules/canlab/`에 있습니다(`docs/flows/canlab.md`). 아래 `can_reverse_engineer/`는 TRC 트레이스와 G-Scan 결과를 교차 분석하는 별도 Python 도구입니다. 요구사항은 `CAN_UDS_BMS_Reverse_Engineering_Cursor_통합_개별요구사항 (1).md`이고, 단계(REQ)마다 사용자 승인 후 진행합니다. 현재는 REQ-01(입력 Inventory)까지 구현했습니다. 웹 이미지에는 포함하지 않습니다.
+TRC 트레이스와 G-Scan 결과지를 교차 분석하는 역분석·결과지는 관리자 메뉴 "CAN 분석"(`app/modules/canlab/`)에서 합니다(`docs/flows/canlab.md`). 요구사항은 `CAN_UDS_BMS_Reverse_Engineering_Cursor_통합_개별요구사항 (1).md`입니다.
 
-```bash
-# 입력 파일을 can_reverse_engineer/dataset/ 아래에 둔다(저장소에 올리지 않음)
-docker run --rm -v "$PWD":/w -w /w/can_reverse_engineer python:3.12-slim sh -c \
-  "pip install -q -r requirements.txt && python main.py inventory ./dataset/inbox"
-# 결과: can_reverse_engineer/output/file_inventory.json, file_analysis.md
-
-# 테스트(저장소 루트에서)
-docker run --rm -v "$PWD":/w -w /w python:3.12-slim sh -c \
-  "pip install -q -r can_reverse_engineer/requirements.txt && python -m pytest -o addopts='' can_reverse_engineer/tests"
-```
-
-`dataset/`과 `output/`에는 VIN 같은 차량 정보가 들어가므로 git에서 제외합니다.
+실제 차량 데이터(TRC·PDF)는 VIN 같은 차량 정보가 들어 있어 로컬 `data/can/`에만 두고 git·Docker·Vercel에서 제외합니다. 화면에서 올리면 DB에 저장됩니다.
 
 ## 남은 제약
 

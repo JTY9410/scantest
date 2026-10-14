@@ -3,5 +3,12 @@
   "framework": "flask",
   "regions": ["icn1"],
   "installCommand": null,
-  "buildCommand": "npm ci --no-audit --no-fund && npm run build:css && rm -rf public && mkdir public && cp -R app/static public/static"
+  "buildCommand": "npm ci --no-audit --no-fund && npm run build:css && rm -rf public && mkdir public && cp -R app/static public/static",
+  "headers": [
+    {
+      "source": "/static/(.*)",
+      "has": [{ "type": "query", "key": "v" }],
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    }
+  ]
 }
