@@ -100,6 +100,19 @@ class ReplyFrame:
     data: bytes
 
 
+def _spaced(line: str, bus: str | None) -> str:
+    """ATS0(공백 없음) 응답 '7E8064100983B8013'을 ATS1 모양으로 바꾼다. 11비트는 길이가 홀수다."""
+    if not re.fullmatch(r"[0-9A-F]{6,}", line):
+        return line
+    if len(line) % 2:
+        head, body = line[:3], line[3:]
+    elif bus == "can29":
+        head, body = line[:8], line[8:]
+    else:
+        head, body = "", line
+    return " ".join(([head] if head else []) + re.findall("..", body))
+
+
 def reply_frames(reply: str, bus: str | None = None) -> list[ReplyFrame]:
     """응답 문자열을 프레임으로 나눈다.
 
@@ -109,7 +122,7 @@ def reply_frames(reply: str, bus: str | None = None) -> list[ReplyFrame]:
     """
     frames = []
     for raw in re.split(r"[\r\n>]+", reply or ""):
-        line = raw.strip().upper()
+        line = _spaced(raw.strip().upper(), bus)
         if match := _ELM_REPLY_FRAME.match(line):
             frames.append(ReplyFrame("can", int(match[1], 16), _bytes(match[2])))
         elif _BYTES_LINE.match(line):

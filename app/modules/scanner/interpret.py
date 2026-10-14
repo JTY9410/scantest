@@ -3,7 +3,7 @@
 import re
 from typing import Any
 
-from app.modules.canlab.engine import signals
+from app.modules.canlab.engine import obdb, signals
 from app.modules.canlab.engine.decode import Trace, decode_signals, load_trace
 from app.modules.canlab.engine.frames import elm_from_exchanges
 from app.modules.canlab.engine.search import Layout, load_references
@@ -11,14 +11,62 @@ from app.modules.scanner import obd
 from app.modules.scanner.plan import DOIP_NOTE
 
 # 지원하지 않아도 문제가 아닌 상태. 오류 목록이 아니라 '지원 안 함'으로 보여 준다.
-INFO_STATUSES = {"ok", "unsupported", "skipped"}
+# 응답 지연(NRC 78)은 ECU가 살아 있다는 뜻이라 오류로 세지 않는다.
+INFO_STATUSES = {"ok", "unsupported", "skipped", "pending"}
 BROADCAST = {"can11": "7DF", "can29": "18DB33F1"}
 REFERENCE_CONFIDENCE = 0.5
-_ECU_LABEL = re.compile(r" (?:차대번호|고장코드|부품번호|소프트웨어 버전|BMS 배터리)")
+CELL_RANGE = (1.5, 4.6)
+_ECU_LABEL = re.compile(r" (?:차대번호|고장코드|고장 당시|부품번호|소프트웨어 버전|BMS 배터리)")
+# 같은 고장코드를 여러 서비스로 읽었을 때 대표로 보여 줄 종류 순서
+KIND_ORDER = ("현재", "확정", "영구", "대기", "기록")
+PRIMARY_ECU = "7E8"
 
 
 def _ecu_address(ecu: int) -> str:
+    """ECU는 응답 주소로 부른다(11비트 7E8, 29비트 18DAF110, K-Line 10)."""
+    if ecu > 0x7FF:
+        return f"{ecu:08X}"
     return f"{ecu:03X}" if ecu > 0xFF else f"{ecu:02X}"
+
+
+def _request_of(address: str) -> str | None:
+    """응답 주소 → 물리 요청 주소. 11비트는 -8, 29비트는 18DA F1xx → 18DA xxF1."""
+    if len(address) == 8 and address.startswith("18DAF1"):
+        return f"18DA{address[6:]}F1"
+    if len(address) == 3:
+        return f"{int(address, 16) - 8:03X}"
+    return None
+
+
+def _merge_dtcs(dtcs: list[dict]) -> list[dict]:
+    """(코드 앞 5자, ECU)가 같으면 한 건으로 합치고, 읽은 종류·출처를 모두 남긴다."""
+    merged: dict[tuple[str, str], dict] = {}
+    for dtc in dtcs:
+        key = (dtc["code"][:5], dtc["ecu"])
+        if key not in merged:
+            merged[key] = dtc | {"kinds": [dtc["kind"]], "sources": [dtc["source"]]}
+            continue
+        entry = merged[key]
+        if dtc["kind"] not in entry["kinds"]:
+            entry["kinds"].append(dtc["kind"])
+        if dtc["source"] not in entry["sources"]:
+            entry["sources"].append(dtc["source"])
+        entry["active"] = entry.get("active") or dtc.get("active")
+        entry["confirmed"] = entry.get("confirmed") or dtc.get("confirmed")
+        if len(dtc["code"]) > len(entry["code"]):
+            entry["code"] = dtc["code"]
+    result = []
+    for entry in merged.values():
+        entry["kinds"].sort(key=lambda k: KIND_ORDER.index(k) if k in KIND_ORDER else len(KIND_ORDER))
+        result.append(entry | {"kind": entry["kinds"][0], "system": obd.dtc_system(entry["code"])})
+    return result
+
+
+def _primary(candidates: dict[str, set[int]]) -> str | None:
+    """대표 ECU: 엔진(7E8)이 있으면 그것, 없으면 지원 PID가 가장 많은 ECU."""
+    if PRIMARY_ECU in candidates:
+        return PRIMARY_ECU
+    return max(candidates, key=lambda a: len(candidates[a]), default=None)
 
 
 def _row(step: dict, status: str, message: str) -> dict:
@@ -35,30 +83,68 @@ def _voltage(reply: str | None) -> float | None:
     return float(match[1]) if match else None
 
 
-def battery_values(trace: Trace, rules: list) -> dict[str, dict]:
-    """적용 규칙으로 읽고, 규칙이 없는 신호는 공개 참고 해석으로 읽어 '미검증'으로 표시한다."""
+def _rows(trace: Trace, kwp: dict | None, layout: Layout) -> tuple[list, str]:
+    """22 DID 응답, 없으면 같은 번호의 구형 KWP 21 응답."""
+    rows = trace.samples.get((layout.request_id, layout.did))
+    if rows:
+        return rows, f"{layout.request_id:03X} 22 {layout.did:04X}"
+    rows = (kwp or {}).get((layout.request_id, layout.did)) or []
+    return rows, f"{layout.request_id:03X} 21 {layout.did & 0xFF:02X}"
+
+
+def battery_values(trace: Trace, rules: list, kwp: dict | None = None, model: dict | None = None) -> dict[str, dict]:
+    """적용 규칙 → OBDb 차종 정의 → 공개 참고 해석 순서로 읽는다. 규칙이 아닌 값은 '미검증'으로 표시한다.
+
+    kwp: 구형 KWP 21 01·21 05 응답 데이터((요청 ID, 01xx) → [(시각, 데이터)]). 22 01xx 응답이 없을 때만
+    같은 배치로 읽는다. model: obdb.match(car) 결과.
+    """
     values = decode_signals(trace.samples, rules)
     for value in values.values():
         value["series"] = [list(p) for p in value["series"][-50:]]
-    for item in load_references()["hypotheses"]:
-        key = item["signal"]
-        if key in values:
-            continue
-        layout = Layout.from_dict(item)
-        rows = trace.samples.get((layout.request_id, layout.did))
+    candidates = [(key, layout, f"OBDb {model['repo']}", normal)
+                  for key, layout, normal in obdb.signal_layouts(model)] if model else []
+    candidates += [(item["signal"], Layout.from_dict(item), "공개 참고 해석", None)
+                   for item in load_references()["hypotheses"]]
+    for key, layout, origin, normal in candidates:
         signal = signals.BY_KEY.get(key)
-        if not rows or signal is None:
+        if key in values or signal is None:
             continue
-        value = layout.value(rows[-1][1])
+        rows, source = _rows(trace, kwp, layout)
+        value = layout.value(rows[-1][1]) if rows else None
         if value is None or not signal.minimum <= value <= signal.maximum:
             continue
         values[key] = {
             "value": value, "series": [[round(rows[-1][0], 1), value]], "label": signal.label,
             "unit": signal.unit, "rule_id": None, "rule_version": None, "confidence": REFERENCE_CONFIDENCE,
-            "formula": layout.formula(), "source": f"{layout.request_id:03X} 22 {layout.did:04X}",
-            "reference": True,
+            "formula": layout.formula(), "source": source, "origin": origin, "reference": True,
         }
+        if normal:
+            values[key].update(range=list(normal), outlier=not normal[0] <= value <= normal[1])
     return values
+
+
+def cell_voltages(trace: Trace, model: dict | None) -> dict | None:
+    """OBDb 셀 배치로 읽은 셀 전압. 0 V 등 범위 밖 값(셀이 없는 자리)은 뺀다.
+
+    OBDb 정상 범위를 벗어난 셀은 '이상값'(outliers)으로 따로 두고 최저·최고·편차·합 계산에서 뺀다.
+    """
+    if not model or not model["cells"]:
+        return None
+    cells, outliers, normal = [], [], None
+    for number, layout, limits in obdb.cell_layouts(model):
+        rows = trace.samples.get((layout.request_id, layout.did))
+        value = layout.value(rows[-1][1]) if rows else None
+        if value is None or not CELL_RANGE[0] <= value <= CELL_RANGE[1]:
+            continue
+        cell = {"no": number, "voltage": round(value, 3)}
+        normal = normal or limits
+        (outliers if limits and not limits[0] <= value <= limits[1] else cells).append(cell)
+    if not cells:
+        return None
+    voltages = [c["voltage"] for c in cells]
+    return {"values": cells, "count": len(cells), "min": min(voltages), "max": max(voltages),
+            "spread_mv": round((max(voltages) - min(voltages)) * 1000), "sum": round(sum(voltages), 1),
+            "range": list(normal) if normal else None, "outliers": outliers, "origin": f"OBDb {model['repo']}"}
 
 
 def record_text(steps: list[dict], bus: str | None, meta: dict[str, str]) -> str:
@@ -83,9 +169,9 @@ def detect_protocol(steps: list[dict]) -> dict:
     return protocol
 
 
-def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, Any], Trace]:
+def interpret(steps: list[dict], rules: list, record: str, car: dict | None = None) -> tuple[dict[str, Any], Trace]:
     """steps: 계획 단계에 reply(응답 문자열), error(클라이언트 오류), t_ms를 붙인 목록.
-    record: record_text로 만든 ELM 기록. 결과와 함께 다시 읽은 Trace를 돌려준다.
+    record: record_text로 만든 ELM 기록. car: 차량정보(OBDb 차종 선택용). 결과와 함께 다시 읽은 Trace를 돌려준다.
     """
     rows: list[dict] = []
     protocol = detect_protocol(steps)
@@ -93,8 +179,14 @@ def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, An
 
     voltage = None
     supported: set[int] = set()
-    values: list[dict] = []
-    monitor: dict | None = None
+    supported_by_ecu: dict[str, set[int]] = {}
+    ecu_values: dict[str, dict[str, dict]] = {}
+    readiness: dict[str, dict] = {}
+    drive_readiness: dict[str, dict] = {}
+    monitor_tests: list[dict] = []
+    iumpr: dict | None = None
+    snapshots: list[dict] = []
+    kwp: dict[tuple[int, int], list[tuple[float, bytes]]] = {}
     dtcs: list[dict] = []
     vins: dict[str, str] = {}
     calids: list[str] = []
@@ -138,8 +230,8 @@ def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, An
 
         service = int(command[:2], 16)
         for ecu, payloads in outcome.positive.items():
-            address = f"{ecu:03X}" if ecu > 0xFF else f"{ecu:02X}"
-            entry = ecus.setdefault(address, {"address": address, "request": step.get("header"),
+            address = _ecu_address(ecu)
+            entry = ecus.setdefault(address, {"address": address, "request": _request_of(address) or step.get("header"),
                                               "label": None, "services": []})
             if step.get("header") and step.get("group") in ("uds", "maker"):
                 entry["label"] = entry["label"] or _ECU_LABEL.split(step.get("label") or "")[0]
@@ -147,19 +239,29 @@ def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, An
                 entry["services"].append(command[:2])
 
         first = next(iter(outcome.positive.values()))
-        all_payloads = [p for ps in outcome.positive.values() for p in ps]
-        if service == 0x01:
-            pid = int(command[2:4], 16)
-            if pid in obd.SUPPORT_PIDS:
-                supported |= obd.supported_pids(all_payloads)
-            elif pid == 0x01:
-                states = [s for p in all_payloads if (s := obd.monitor_status(p))]
-                if states:
-                    monitor = {"mil": any(s["mil"] for s in states),
-                               "dtc_count": sum(s["dtc_count"] for s in states)}
-            elif value := obd.mode01(first[0]):
-                values.append(value)
-        elif service == 0x02:
+        for ecu, payloads in outcome.positive.items():
+            address = _ecu_address(ecu)
+            for payload in payloads:
+                if service == 0x01:
+                    pid = payload[1] if len(payload) > 1 else None
+                    if pid in obd.SUPPORT_PIDS:
+                        found = obd.supported_pids([payload])
+                        supported |= found
+                        supported_by_ecu.setdefault(address, set()).update(found)
+                    elif pid in (0x01, 0x41) and (state := obd.readiness(payload)):
+                        (readiness if pid == 0x01 else drive_readiness)[address] = state
+                    else:
+                        for value in obd.mode01_values(payload):
+                            ecu_values.setdefault(address, {})[value["key"]] = value
+                elif service == 0x06:
+                    monitor_tests += [t | {"ecu": address} for t in obd.mode06_tests(payload)]
+                elif service == 0x19 and command[2:4] == "04" and (snapshot := obd.uds_snapshot(payload)):
+                    snapshots.append(snapshot | {"ecu": address})
+                elif service == 0x21 and step.get("header"):
+                    kwp.setdefault((int(step["header"], 16), 0x0100 | payload[1]), []).append(
+                        (float(step.get("t_ms") or 0), payload[2:]))
+
+        if service == 0x02:
             if command[2:4] == "02":
                 freeze["dtc"] = freeze["dtc"] or obd.freeze_dtc(first[0])
             elif value := obd.freeze_value(first[0]):
@@ -168,8 +270,8 @@ def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, An
             kind = {0x03: "확정", 0x07: "대기", 0x0A: "영구"}[service]
             for ecu, payloads in outcome.positive.items():
                 for code in obd.obd_dtcs(payloads, bus):
-                    dtcs.append({"code": code, "kind": kind, "ecu": f"{ecu:03X}" if ecu > 0xFF else f"{ecu:02X}",
-                                 "source": f"OBD {command}", "active": service == 0x03, "confirmed": service != 0x07})
+                    dtcs.append({"code": code, "kind": kind, "ecu": _ecu_address(ecu), "source": f"OBD {command}",
+                                 "active": service == 0x03, "confirmed": service != 0x07})
         elif service == 0x09:
             info = command[2:4]
             if info == "02" and (vin := obd.vin_from(command, first)):
@@ -180,6 +282,8 @@ def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, An
                 ecu_names.append(name)
             elif info == "06":
                 cvns += [c for c in obd.cvns(first) if c not in cvns]
+            elif info in ("08", "0B"):
+                iumpr = iumpr or obd.iumpr(info, first)
         elif command == "22F190":
             if vin := obd.vin_from(command, first):
                 vins.setdefault(vin, f"{step.get('header')} 22 F190")
@@ -187,31 +291,39 @@ def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, An
             field_name = obd.ECU_IDENT_DIDS[command[2:]][0]
             for ecu, payloads in outcome.positive.items():
                 if text := obd.ecu_ident(payloads[0]):
-                    ecus[f"{ecu:03X}" if ecu > 0xFF else f"{ecu:02X}"][field_name] = text
-        elif service == 0x19:
+                    ecus[_ecu_address(ecu)][field_name] = text
+        elif service == 0x19 and command[2:4] in ("02", "15"):
             permanent = command[2:4] == "15"
             for ecu, payloads in outcome.positive.items():
                 for payload in payloads:
                     for dtc in obd.uds_dtcs(payload):
                         kind = "영구" if permanent else (
                             "현재" if dtc["active"] else ("확정" if dtc["confirmed"] else "기록"))
-                        dtcs.append(dtc | {"kind": kind, "ecu": step.get("header") or _ecu_address(ecu),
+                        dtcs.append(dtc | {"kind": kind, "ecu": _ecu_address(ecu),
                                            "source": f"UDS 19 {command[2:4]}"})
 
     trace = load_trace(record)
-    battery = battery_values(trace, rules)
+    model = obdb.match(car)
+    battery = battery_values(trace, rules, kwp, model)
+    cells = cell_voltages(trace, model)
 
-    seen: set[tuple[str, str]] = set()
-    unique_dtcs = []
-    for dtc in dtcs:
-        key = (dtc["code"][:5], dtc["ecu"])
-        if key in seen:
-            continue
-        seen.add(key)
-        unique_dtcs.append(dtc | {"system": obd.dtc_system(dtc["code"])})
+    unique_dtcs = _merge_dtcs(dtcs)
     systems = {key: 0 for key in obd.SYSTEMS}
     for dtc in unique_dtcs:
         systems[dtc["system"]] += 1
+
+    primary = _primary(supported_by_ecu | {a: supported_by_ecu.get(a, set()) for a in ecu_values})
+    values = list(ecu_values.get(primary, {}).values())
+    other_values = [{"ecu": a, "label": (ecus.get(a) or {}).get("label"), "values": list(v.values())}
+                    for a, v in ecu_values.items() if a != primary and v]
+    monitor = None
+    if readiness:
+        main = readiness.get(primary) or next(iter(readiness.values()))
+        monitor = {"mil": any(s["mil"] for s in readiness.values()),
+                   "dtc_count": sum(s["dtc_count"] for s in readiness.values()),
+                   "ignition": main["ignition"], "tests": main["tests"],
+                   "drive_tests": (drive_readiness.get(primary) or next(iter(drive_readiness.values()), {})
+                                   ).get("tests", [])}
 
     obd_rows = [r for r in rows if r["group"] not in ("device",)]
     errors = [r for r in rows if r["status"] not in INFO_STATUSES]
@@ -222,6 +334,8 @@ def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, An
         notes.append("K-Line·J1850 차량이라 UDS(CAN) 조회는 하지 않았습니다.")
     if any(v.get("reference") for v in battery.values()):
         notes.append("'참고 해석' 값은 공개 자료의 수식으로 읽은 미검증 값입니다. CAN 분석에서 검증하면 확정 값으로 바뀝니다.")
+    if model and (cells or any(v.get("origin", "").startswith("OBDb") for v in battery.values())):
+        notes.append(f"차종별 배터리 신호 정의: {obdb.ATTRIBUTION} ({model['repo']}).")
 
     return {
         "status": status,
@@ -230,7 +344,9 @@ def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, An
         "vin": next(iter(vins), None),
         "vin_sources": vins,
         "monitor": monitor,
+        "primary_ecu": primary,
         "values": values,
+        "ecu_values": other_values,
         "dtcs": unique_dtcs,
         "systems": systems,
         "ecus": list(ecus.values()),
@@ -238,7 +354,11 @@ def interpret(steps: list[dict], rules: list, record: str) -> tuple[dict[str, An
         "cvns": cvns,
         "ecu_names": ecu_names,
         "freeze_frame": freeze if freeze["dtc"] or freeze["values"] else None,
+        "monitor_tests": monitor_tests,
+        "iumpr": iumpr,
+        "snapshots": snapshots,
         "battery": battery,
+        "cells": cells,
         "steps": rows,
         "errors": errors,
         "counts": {"total": len(rows), "ok": sum(r["status"] == "ok" for r in rows),

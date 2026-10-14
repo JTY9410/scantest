@@ -139,7 +139,7 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
                                                   "started": started.isoformat()})
     trace = None
     try:
-        result, trace = interpret(steps, active_rule_refs(), record)
+        result, trace = interpret(steps, active_rule_refs(), record, car)
     except Exception as exc:  # 해석 오류도 스캔 기록으로 남긴다
         current_app.logger.exception("스캔 결과 해석 실패")
         result = _failed_result(steps, f"결과를 해석하지 못했습니다({type(exc).__name__}). 통신 기록은 저장했습니다.")
@@ -189,7 +189,9 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
             "source": "scanner", "report_id": report.id, "dataset_id": dataset.id, "status": result["status"],
             "transport": transport, "device": device, "car": car,
             "battery": {k: {"label": v["label"], "value": v["value"], "unit": v["unit"],
-                            "reference": bool(v.get("reference"))} for k, v in result["battery"].items()},
+                            "reference": bool(v.get("reference")), "source": v.get("source"),
+                            "origin": v.get("origin"), "range": v.get("range"), "outlier": bool(v.get("outlier"))}
+                        for k, v in result["battery"].items()},
             **{k: v for k, v in result.items() if k != "battery"},
         },
     )

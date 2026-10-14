@@ -54,8 +54,10 @@ STATUS_LABELS = {
     "ok": "성공", "no_data": "응답 없음", "unsupported": "지원 안 함", "negative": "부정 응답",
     "timeout": "시간 초과", "device_error": "단말기 오류", "parse_error": "해석 오류",
     "server_error": "서버 오류", "skipped": "건너뜀", "disconnected": "연결 끊김",
-    "lookup_error": "조회 실패", "client_error": "화면 오류", "pdf_error": "PDF 오류",
+    "lookup_error": "조회 실패", "client_error": "화면 오류", "pdf_error": "PDF 오류", "pending": "응답 지연",
 }
+# 이 ECU가 그 요청을 지원하지 않는다는 뜻의 NRC(지원 안 함 서비스·하위기능·DID, 기본 세션에서 지원 안 함)
+UNSUPPORTED_NRC = {0x11, 0x12, 0x31, 0x7E, 0x7F}
 
 
 def protocol_of(reply: str | None) -> tuple[str | None, str, str | None]:
@@ -109,11 +111,20 @@ class Outcome:
 def _echo(command: bytes) -> bytes:
     """긍정 응답이 되풀이하는 요청 바이트(서비스 다음). 모드 03·07·0A는 없다."""
     service = command[0]
-    if service in (0x01, 0x09, 0x21, 0x19):
+    if service in (0x01, 0x06, 0x09, 0x21, 0x19):
         return command[1:2]
     if service in (0x02, 0x22):
         return command[1:3]
     return b""
+
+
+def _answers(command: bytes, payload: bytes) -> bool:
+    if payload[:1] != bytes([command[0] + 0x40]):
+        return False
+    if command[0] == 0x01 and len(command) > 2:
+        return len(payload) > 1 and payload[1] in command[1:]
+    echo = _echo(command)
+    return payload[1 : 1 + len(echo)] == echo
 
 
 def evaluate(command_hex: str, reply: str | None, bus: str | None, client_error: str | None = None) -> Outcome:
@@ -126,24 +137,30 @@ def evaluate(command_hex: str, reply: str | None, bus: str | None, client_error:
         return Outcome("device_error", f"전송 실패: {client_error}")
 
     command = bytes.fromhex(command_hex)
-    service, echo = command[0], _echo(command)
+    service = command[0]
     found, incomplete = messages(reply, bus)
     outcome = Outcome("no_data", "")
+    pending = False
     for ecu, payloads in found.items():
         for payload in payloads:
-            if payload[:1] == bytes([service + 0x40]) and payload[1 : 1 + len(echo)] == echo:
+            if _answers(command, payload):
                 outcome.positive.setdefault(ecu, []).append(payload)
-            elif len(payload) >= 3 and payload[0] == 0x7F and payload[1] == service \
-                    and payload[2] != RESPONSE_PENDING:
-                outcome.negative[ecu] = payload[2]
+            elif len(payload) >= 3 and payload[0] == 0x7F and payload[1] == service:
+                if payload[2] == RESPONSE_PENDING:
+                    pending = True
+                else:
+                    outcome.negative[ecu] = payload[2]
 
     if outcome.positive:
         outcome.status, outcome.message = "ok", f"{len(outcome.positive)}개 ECU 응답"
     elif outcome.negative:
-        outcome.status = "negative"
+        outcome.status = "unsupported" if set(outcome.negative.values()) <= UNSUPPORTED_NRC else "negative"
         outcome.message = ", ".join(
             f"{_ecu(ecu)} NRC {code:02X} {NEGATIVE_CODES.get(code, '기타 거부')}"
             for ecu, code in outcome.negative.items())
+    elif pending:
+        outcome.status = "pending"
+        outcome.message = "ECU가 '응답 대기(NRC 78)'만 보내고 정해진 시간 안에 최종 응답을 주지 않았습니다."
     elif error := elm_error(reply):
         outcome.status, outcome.message = error
     elif incomplete:
@@ -261,7 +278,9 @@ PIDS: dict[int, Pid] = {
 }
 # 고장코드가 저장될 때 함께 남는 값(모드 02 프리즈 프레임)으로 읽을 PID
 FREEZE_PIDS = (0x04, 0x05, 0x06, 0x07, 0x0B, 0x0C, 0x0D, 0x0F, 0x11)
-SUPPORT_PIDS = (0x00, 0x20, 0x40, 0x60, 0x80, 0xA0)
+SUPPORT_PIDS = (0x00, 0x20, 0x40, 0x60, 0x80, 0xA0, 0xC0)
+# 모드 06 지원 MID 비트맵 요청(06 00·20·…·E0)
+MODE06_RANGES = (0x00, 0x20, 0x40, 0x60, 0x80, 0xA0, 0xC0, 0xE0)
 
 
 def supported_pids(payloads: list[bytes]) -> set[int]:
@@ -282,6 +301,102 @@ def mode01(payload: bytes) -> dict | None:
     if pid is None or len(data) < pid.size:
         return None
     return {"key": pid.key, "label": pid.label, "unit": pid.unit, "value": pid.decode(data)}
+
+
+# PIDS에 없지만 묶음 응답을 나눌 때 길이를 알아야 하는 PID
+_PID_SIZES = {pid: 4 for pid in SUPPORT_PIDS} | {0x01: 4, 0x41: 4}
+
+
+def mode01_values(payload: bytes) -> list[dict]:
+    """'41 PID 데이터 [PID 데이터…]'. CAN 묶음 요청(최대 6개)의 응답은 PID와 데이터가 이어서 온다."""
+    values = []
+    i = 1
+    while i < len(payload):
+        pid = payload[i]
+        size = PIDS[pid].size if pid in PIDS else _PID_SIZES.get(pid)
+        if size is None or i + 1 + size > len(payload):
+            break
+        if value := mode01(b"\x41" + payload[i : i + 1 + size]):
+            values.append(value)
+        i += 1 + size
+    return values
+
+
+# 01 01·01 41 배출 점검(레디니스). 바이트 B 아래 3비트는 공통, C(지원)·D(미완료)는 점화 방식마다 다르다.
+_COMMON_MONITORS = ("실화", "연료 계통", "종합 부품")
+_SPARK_MONITORS = ("촉매", "가열 촉매", "증발가스", "2차 공기", "에어컨 냉매", "산소센서", "산소센서 히터", "EGR·VVT")
+_COMPRESSION_MONITORS = ("NMHC 촉매", "NOx·SCR 후처리", None, "과급 압력", None, "배기가스 센서", "PM 필터", "EGR·VVT")
+
+
+def readiness(payload: bytes) -> dict | None:
+    """'41 01 A B C D'. A: 경고등·고장코드 수, B bit3: 압축 착화(디젤), 지원 비트가 1이고 미완료 비트가 0이면 완료."""
+    if len(payload) < 6:
+        return None
+    a, b, c, d = payload[2:6]
+    compression = bool(b & 0x08)
+    tests = [{"name": name, "complete": not b & (1 << (i + 4))}
+             for i, name in enumerate(_COMMON_MONITORS) if b & (1 << i)]
+    tests += [{"name": name, "complete": not d & (1 << i)}
+              for i, name in enumerate(_COMPRESSION_MONITORS if compression else _SPARK_MONITORS)
+              if name and c & (1 << i)]
+    return {"mil": bool(a & 0x80), "dtc_count": a & 0x7F,
+            "ignition": "압축 착화(디젤)" if compression else "불꽃 점화(가솔린)", "tests": tests}
+
+
+# ---- 모드 06 배출 부품 점검 결과(CAN) -----------------------------------------
+
+# SAE J1979 부록 E 단위·배율(UAS): ID → (배율, 오프셋, 단위). 0x80 이상은 부호 있는 값이다.
+UAS = {
+    0x01: (1, 0, ""), 0x02: (0.1, 0, ""), 0x03: (0.01, 0, ""), 0x04: (0.001, 0, ""),
+    0x05: (0.0000305, 0, ""), 0x06: (0.000305, 0, ""), 0x07: (0.25, 0, "rpm"), 0x08: (0.01, 0, "km/h"),
+    0x09: (1, 0, "km/h"), 0x0A: (0.122, 0, "mV"), 0x0B: (0.001, 0, "V"), 0x0C: (0.01, 0, "V"),
+    0x0D: (0.00390625, 0, "mA"), 0x0E: (0.001, 0, "A"), 0x0F: (0.01, 0, "A"), 0x10: (1, 0, "ms"),
+    0x11: (100, 0, "ms"), 0x12: (1, 0, "s"), 0x13: (1, 0, "mΩ"), 0x14: (1, 0, "Ω"), 0x15: (1, 0, "kΩ"),
+    0x16: (0.1, -40, "°C"), 0x17: (0.01, 0, "kPa"), 0x18: (0.0117, 0, "kPa"), 0x19: (0.079, 0, "kPa"),
+    0x1A: (1, 0, "kPa"), 0x1B: (10, 0, "kPa"), 0x1C: (0.01, 0, "°"), 0x1D: (0.5, 0, "°"),
+    0x1E: (0.0000305, 0, "λ"), 0x1F: (0.05, 0, ""), 0x20: (0.0039062, 0, ""), 0x21: (1, 0, "mHz"),
+    0x22: (1, 0, "Hz"), 0x23: (1, 0, "kHz"), 0x24: (1, 0, "회"), 0x25: (1, 0, "km"), 0x26: (0.1, 0, "mV/ms"),
+    0x27: (0.01, 0, "g/s"), 0x28: (1, 0, "g/s"), 0x29: (0.25, 0, "Pa/s"), 0x2A: (0.001, 0, "kg/h"),
+    0x2B: (1, 0, "회"), 0x2C: (0.01, 0, "g/cyl"), 0x2D: (0.01, 0, "mg/stroke"), 0x2E: (1, 0, ""),
+    0x2F: (0.01, 0, "%"), 0x30: (0.001526, 0, "%"), 0x31: (0.001, 0, "L"), 0x34: (1, 0, "분"),
+    0x35: (10, 0, "ms"), 0x36: (0.01, 0, "g"), 0x37: (0.1, 0, "g"), 0x38: (1, 0, "g"),
+    0x39: (0.01, -327.68, "%"), 0x3C: (0.1, 0, "µs"), 0x3D: (0.01, 0, "mA"), 0x3F: (0.01, 0, "L"),
+    0x40: (1, 0, "ppm"), 0x41: (0.01, 0, "µA"),
+    0x81: (1, 0, ""), 0x82: (0.1, 0, ""), 0x83: (0.01, 0, ""), 0x84: (0.001, 0, ""), 0x85: (0.0000305, 0, ""),
+    0x86: (0.000305, 0, ""), 0x8A: (0.122, 0, "mV"), 0x8B: (0.001, 0, "V"), 0x8C: (0.01, 0, "V"),
+    0x8D: (0.00390625, 0, "mA"), 0x8E: (0.001, 0, "A"), 0x90: (1, 0, "ms"), 0x96: (0.1, 0, "°C"),
+    0x9C: (0.01, 0, "°"), 0x9D: (0.5, 0, "°"), 0xA8: (1, 0, "g/s"), 0xA9: (0.25, 0, "Pa/s"),
+    0xAD: (0.01, 0, "mg/stroke"), 0xAE: (0.1, 0, "mg/stroke"), 0xAF: (0.01, 0, "%"), 0xB0: (0.003052, 0, "%"),
+    0xB1: (2, 0, "mV/s"), 0xFC: (0.01, 0, "kPa"), 0xFD: (0.001, 0, "kPa"), 0xFE: (0.25, 0, "Pa"),
+}
+_O2 = ("B1S1", "B1S2", "B1S3", "B1S4", "B2S1", "B2S2", "B2S3", "B2S4")
+# 점검 항목(MID). 없는 번호는 'MID xx'로 표시한다.
+MIDS = ({0x01 + i: f"산소센서 {s}" for i, s in enumerate(_O2)}
+        | {0x41 + i: f"산소센서 히터 {s}" for i, s in enumerate(_O2)}
+        | {0x21: "촉매 뱅크1", 0x22: "촉매 뱅크2", 0x31: "EGR", 0x35: "VVT 뱅크1", 0x36: "VVT 뱅크2",
+           0x39: "증발가스 누설(0.150\")", 0x3A: "증발가스 누설(0.090\")", 0x3B: "증발가스 누설(0.040\")",
+           0x3C: "증발가스 누설(0.020\")", 0x3D: "퍼지 흐름", 0x61: "가열 촉매 뱅크1", 0x62: "가열 촉매 뱅크2",
+           0x71: "2차 공기 1", 0x72: "2차 공기 2", 0x81: "연료 계통 뱅크1", 0x82: "연료 계통 뱅크2",
+           0x85: "과급 압력 뱅크1", 0x86: "과급 압력 뱅크2", 0x90: "NOx 흡착 뱅크1", 0x91: "NOx 흡착 뱅크2",
+           0x98: "NOx 촉매 뱅크1", 0x99: "NOx 촉매 뱅크2", 0xA1: "실화(전체)", 0xB0: "PM 필터 뱅크1",
+           0xB1: "PM 필터 뱅크2"}
+        | {0xA2 + i: f"실화 {i + 1}번 실린더" for i in range(12)})
+
+
+def mode06_tests(payload: bytes) -> list[dict]:
+    """'46 [MID TID UAS 값(2) 최소(2) 최대(2)]…'. 최소 ≤ 값 ≤ 최대이면 합격."""
+    records = payload[1:]
+    tests = []
+    for i in range(0, len(records) - 8, 9):
+        mid, tid, uas = records[i : i + 3]
+        if mid % 0x20 == 0:
+            continue
+        scale, offset, unit = UAS.get(uas, (1, 0, ""))
+        raw = [int.from_bytes(records[i + 3 + 2 * k : i + 5 + 2 * k], "big", signed=uas >= 0x80) for k in range(3)]
+        value, low, high = (round(r * scale + offset, 4) for r in raw)
+        tests.append({"mid": f"{mid:02X}", "name": MIDS.get(mid, f"MID {mid:02X}"), "tid": f"{tid:02X}",
+                      "value": value, "min": low, "max": high, "unit": unit, "passed": low <= value <= high})
+    return tests
 
 
 def freeze_value(payload: bytes) -> dict | None:
@@ -338,6 +453,17 @@ def uds_dtcs(payload: bytes) -> list[dict]:
     return result
 
 
+def uds_snapshot(payload: bytes) -> dict | None:
+    """19 04 응답 '59 04 DTC(3) 상태 [기록번호 식별자수 DID(2) 데이터…]'. DID별 길이는 제조사 정의라 원값으로 둔다."""
+    if len(payload) < 6 or payload[1] != 0x04:
+        return None
+    rest = payload[6:]
+    snapshot = {"code": format_dtc(*payload[2:5]), "status": payload[5], "record": None, "did": None, "raw": ""}
+    if len(rest) >= 4:
+        snapshot |= {"record": rest[0], "did": rest[2:4].hex().upper(), "raw": rest[4:].hex(" ").upper()[:180]}
+    return snapshot
+
+
 SYSTEMS = {"engine": "엔진", "transmission": "변속기", "chassis": "섀시", "network": "통신", "body": "바디"}
 
 
@@ -384,6 +510,28 @@ def cvns(payloads: list[bytes]) -> list[str]:
     """09 06: 보정 검증 번호(CVN) 4바이트씩."""
     data = _mode09_data(payloads)
     return [data[i : i + 4].hex().upper() for i in range(0, len(data) - 3, 4)]
+
+
+# 09 08(가솔린)·09 0B(디젤) 주행 중 진단 실행 비율(IUMPR): 진단 조건 횟수, 시동 횟수 다음에 (완료, 조건) 짝
+_IUMPR = {"08": ("촉매 뱅크1", "촉매 뱅크2", "산소센서 뱅크1", "산소센서 뱅크2", "EGR·VVT", "2차 공기", "증발가스",
+                 "후방 산소센서 뱅크1", "후방 산소센서 뱅크2"),
+          "0B": ("NMHC 촉매", "NOx 촉매", "NOx 흡착", "PM 필터", "배기가스 센서", "EGR·VVT", "과급 압력", "연료 계통")}
+
+
+def iumpr(info: str, payloads: list[bytes]) -> dict | None:
+    data = _mode09_data(payloads)
+    counts = [int.from_bytes(data[i : i + 2], "big") for i in range(0, len(data) - 1, 2)]
+    if len(counts) < 2 or info not in _IUMPR:
+        return None
+    monitors = []
+    for k, name in enumerate(_IUMPR[info]):
+        pair = counts[2 + 2 * k : 4 + 2 * k]
+        if len(pair) < 2:
+            break
+        done, conditions = pair
+        monitors.append({"name": name, "completed": done, "conditions": conditions,
+                         "ratio": round(done / conditions, 3) if conditions else None})
+    return {"conditions": counts[0], "ignitions": counts[1], "monitors": monitors}
 
 
 # UDS 22 제어기 식별 DID(ISO 14229 부록 C)

@@ -1,4 +1,6 @@
-from flask import request
+from io import BytesIO
+
+from flask import request, send_file
 from sqlalchemy import select
 
 from app.core.errors import ServiceError
@@ -22,6 +24,7 @@ from app.modules.canlab import service as canlab
 from app.modules.obd import service as obd
 from app.modules.reports import service as reports
 from app.modules.reports.models import CarMismatchReport
+from app.modules.scanner import service as scanner
 from app.modules.scans import service as scans
 from app.modules.scans.car_info import fetch_car_info
 from app.modules.scans.models import Code, Scan, ScanCode
@@ -142,8 +145,12 @@ def scans_email(scan_id: int):
 @bp.get("/scans/<int:scan_id>/pdf")
 @require_api_auth
 def scans_pdf(scan_id: int):
-    scans.get_visible_scan(current_user(), scan_id)
-    # PDF 생성은 기존 서버에서도 미구현이었다. 앱 호환을 위해 같은 응답을 유지한다.
+    scan = scans.get_visible_scan(current_user(), scan_id)
+    if api_input().get("download"):
+        document = scanner.scan_document(scan)
+        return send_file(BytesIO(document.content), mimetype="application/pdf", as_attachment=True,
+                         download_name=document.filename, max_age=0)
+    # 기존 서버는 PDF를 만들지 않고 이 응답만 줬다. 앱 호환을 위해 download 없이는 같은 응답을 유지한다.
     return respond({"message": "PDF가 성공적으로 생성되었습니다. [테스트!]", "scan_id": str(scan_id)})
 
 

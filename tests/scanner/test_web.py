@@ -72,7 +72,7 @@ def test_run_then_result_page_shows_wescan_format(admin_client):
     plan = _json(admin_client, "/admin/scan/plan", {"car": DTO}).get_json()
     assert plan["steps"][0]["command"] == "ATRV"
     replies = {"ATRV": "12.3V", "0100": "7E8 06 41 00 98 3B 80 13", "ATDPN": "A6",
-               "03": "7E8 04 43 01 01 33"}
+               "0101": "7E8 06 41 01 81 07 65 04", "03": "7E8 04 43 01 01 33"}
     steps = [dict(s, reply=replies.get(s["command"]), error=None if s["command"] in replies else "skipped",
                   reason=None if s["command"] in replies else "사용자가 스캔을 중지했습니다.")
              for s in plan["steps"]]
@@ -86,6 +86,7 @@ def test_run_then_result_page_shows_wescan_format(admin_client):
     html = admin_client.get(saved["url"]).get_data(as_text=True)
     assert "위스캔 결과" in html and "P0133" in html and "진단 요약" in html
     assert "오류 기록" in html and "시간 초과" in html and "ISO 15765-4 CAN" in html
+    assert "분석 요약" in html and "배출 점검(레디니스)" in html and "불꽃 점화" in html
     show = admin_client.get(f"/admin/scans/{saved['id']}").get_data(as_text=True)
     assert "위스캔 결과" in show and "스캔 오류 1건" in show and f"/admin/scan/{saved['id']}/pdf" in show
 

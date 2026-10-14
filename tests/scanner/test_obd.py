@@ -61,11 +61,51 @@ def test_errors_are_classified():
     assert obd.evaluate("0100", None, None).status == "timeout"
     assert obd.evaluate("0100", "", None, client_error="disconnected").status == "disconnected"
 
-    negative = obd.evaluate("22F190", "7EC 03 7F 22 31\r\r", "can11")
-    assert negative.status == "negative" and "NRC 31" in negative.message and "지원하지 않는 DID" in negative.message
+    unsupported = obd.evaluate("22F190", "7EC 03 7F 22 31\r\r", "can11")
+    assert unsupported.status == "unsupported" and "NRC 31" in unsupported.message \
+        and "지원하지 않는 DID" in unsupported.message
+    assert obd.evaluate("1902FF", "7E8 03 7F 19 7F\r\r", "can11").status == "unsupported"
 
-    pending = obd.evaluate("220101", "7EC 03 7F 22 78\r7EC 03 7F 22 22\r", "can11")
-    assert pending.negative == {0x7EC: 0x22}
+    negative = obd.evaluate("220101", "7EC 03 7F 22 78\r7EC 03 7F 22 22\r", "can11")
+    assert negative.negative == {0x7EC: 0x22} and negative.status == "negative"
+
+    pending = obd.evaluate("220101", "7EC 03 7F 22 78\r7EC 03 7F 22 78\r", "can11")
+    assert pending.status == "pending" and not pending.negative
+
+
+def test_batched_mode01_and_unspaced_frames():
+    outcome = obd.evaluate("010C0D05", "7E8 08 41 0C 1A F8 0D 32 05 7B\r\r", "can11")
+    assert outcome.status == "ok"
+    values = obd.mode01_values(outcome.positive[0x7E8][0])
+    assert [(v["key"], v["value"]) for v in values] == [("rpm", 1726.0), ("speed", 50), ("coolant_temp", 83)]
+    assert obd.evaluate("010D0C", "7E8 04 41 0C 1A F8\r\r", "can11").positive
+
+    assert reply_frames("7E8064100983B8013", "can11")[0].data == bytes.fromhex("064100983B8013")
+    assert reply_frames("18DAF110034100", "can29")[0].source == 0x18DAF110
+
+
+def test_readiness_mode06_iumpr_and_snapshot():
+    spark = obd.readiness(bytes.fromhex("4101" "81" "07" "65" "21"))
+    assert spark["mil"] and spark["dtc_count"] == 1 and spark["ignition"] == "불꽃 점화(가솔린)"
+    names = {t["name"]: t["complete"] for t in spark["tests"]}
+    assert names == {"실화": True, "연료 계통": True, "종합 부품": True, "촉매": False, "증발가스": True,
+                     "산소센서": False, "산소센서 히터": True}
+    diesel = obd.readiness(bytes.fromhex("4101" "00" "0F" "C0" "40"))
+    assert diesel["ignition"] == "압축 착화(디젤)"
+    assert {t["name"]: t["complete"] for t in diesel["tests"]}["PM 필터"] is False
+
+    tests = obd.mode06_tests(bytes.fromhex("46" "21" "80" "0B" "0190" "0064" "03E8" "21" "81" "16" "0640" "0000" "0500"))
+    assert tests[0] == {"mid": "21", "name": "촉매 뱅크1", "tid": "80", "value": 0.4, "min": 0.1, "max": 1.0,
+                        "unit": "V", "passed": True}
+    assert tests[1]["unit"] == "°C" and tests[1]["value"] == 120.0 and tests[1]["passed"] is False
+
+    rate = obd.iumpr("08", [bytes.fromhex("4908" "14" "0010" "0020" "0005" "000A" "0000" "0000")])
+    assert rate["conditions"] == 16 and rate["ignitions"] == 32
+    assert rate["monitors"][0] == {"name": "촉매 뱅크1", "completed": 5, "conditions": 10, "ratio": 0.5}
+    assert rate["monitors"][1]["ratio"] is None
+
+    snapshot = obd.uds_snapshot(bytes.fromhex("5904" "0A7F00" "09" "01" "01" "DD01" "0012"))
+    assert snapshot == {"code": "P0A7F00", "status": 9, "record": 1, "did": "DD01", "raw": "00 12"}
 
 
 def test_uds_dtcs_and_systems():

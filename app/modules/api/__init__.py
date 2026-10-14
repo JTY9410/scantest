@@ -27,4 +27,4 @@ def handle_http_error(error: HTTPException):
     return respond({"message": message, "path": request.path}, error.code or 500)
 
 
-from app.modules.api import routes_auth, routes_resources, routes_telematics  # noqa: E402,F401
+from app.modules.api import routes_auth, routes_resources, routes_scan_runs, routes_telematics  # noqa: E402,F401

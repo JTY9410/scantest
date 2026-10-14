@@ -4,9 +4,10 @@
   "use strict";
 
   const RECONNECT_WAIT_MS = 20000;
-  const BROADCAST = { can11: "7DF", can29: "18DB33F1" };
-  const BUS = { 1: "serial", 2: "serial", 3: "serial", 4: "serial", 5: "serial", 6: "can11", 7: "can29",
-    8: "can11", 9: "can29", A: "can29", B: "can11", C: "can11" };
+  const PENDING_RETRIES = 2;
+  const PENDING_TIMEOUT_MS = 5000;
+  const BUSY_DELAY_MS = 200;
+  const P = window.WecarObdPlan;
   const STAGES = ["connect", "lookup", "scan", "analyze"];
   const CAR_FIELDS = [
     ["diag_company", "제조사"], ["diag_model", "모델"], ["diag_submodel", "세부모델"], ["diag_grade", "등급"],
@@ -15,44 +16,6 @@
     ["diag_car_id", "차대번호"],
   ];
   const STATUS_TEXT = { ok: "성공", timeout: "시간 초과", disconnected: "연결 끊김", skipped: "건너뜀" };
-  const SUPPORT_RANGE = /^01(00|20|40|60|80|A0|C0)$/;
-
-  const byteTokens = (line) => line.trim().toUpperCase().split(/\s+/).filter((t) => /^[0-9A-F]{2}$/.test(t));
-
-  // '41 <base> A B C D' 비트맵 → 지원 PID 번호. 여러 제어기가 답하면 합친다.
-  function supportedFrom(reply, base) {
-    const found = new Set();
-    for (const line of (reply || "").split(/[\r\n]+/)) {
-      const bytes = byteTokens(line);
-      for (let i = 0; i + 5 < bytes.length; i += 1) {
-        if (bytes[i] !== "41" || parseInt(bytes[i + 1], 16) !== base) continue;
-        bytes.slice(i + 2, i + 6).forEach((value, k) => {
-          for (let bit = 0; bit < 8; bit += 1) {
-            if (parseInt(value, 16) & (0x80 >> bit)) found.add(base + k * 8 + bit + 1);
-          }
-        });
-        break;
-      }
-    }
-    return found;
-  }
-
-  // '41 01 A ...'의 A 하위 7비트 = 저장된 고장코드 수. 답이 없으면 null.
-  function dtcCountFrom(reply) {
-    let count = null;
-    for (const line of (reply || "").split(/[\r\n]+/)) {
-      const bytes = byteTokens(line);
-      const i = bytes.findIndex((b, k) => b === "41" && bytes[k + 1] === "01");
-      if (i >= 0 && bytes[i + 2]) count = (count || 0) + (parseInt(bytes[i + 2], 16) & 0x7f);
-    }
-    return count;
-  }
-
-  function busOf(reply) {
-    const tokens = (reply || "").toUpperCase().split(/[\s>]+/).reverse();
-    const token = tokens.find((t) => /^A?[1-9A-C]$/.test(t));
-    return token ? BUS[token.slice(-1)] : null;
-  }
 
   function mount(root, link) {
     if (!root || !link || root.dataset.mounted) return null;
@@ -208,36 +171,65 @@
       logList.scrollTop = logList.scrollHeight;
     }
 
-    function skipReason(step, ctx) {
-      if (state.stop) return "사용자가 스캔을 중지했습니다.";
-      if (step.header && ctx.dead.has(step.header)) return `${step.header} 제어기가 응답하지 않아 건너뛰었습니다.`;
-      if (step.bus === "can" && ctx.bus === "serial") return "K-Line·J1850 차량이라 CAN 전용 조회를 건너뛰었습니다.";
-      if (step.header && step.header.length === 3 && ctx.bus === "can29") return "29비트 CAN 차량이라 11비트 주소 조회를 건너뛰었습니다.";
-      const mode01 = /^01([0-9A-F]{2})$/.exec(step.command);
-      if (mode01 && ctx.supported.size && step.command !== "0100") {
-        if (!ctx.supported.has(parseInt(mode01[1], 16))) return "차량이 지원하지 않는 항목입니다(지원 PID 목록에 없음).";
+    // 명령 하나를 보내고, 단말기 오류·응답 대기(NRC 78)면 한 번씩 복구해 다시 보낸다.
+    async function exchange(command, timeout, ctx) {
+      let reply = await link.send(command, timeout);
+      if (command.startsWith("AT")) return reply;
+      const action = P.recovery(reply, ctx.bus, command);
+      if (action === "stopped") {
+        reply = await link.send(command, timeout);
+      } else if (action === "buffer") {
+        await link.send("ATS0");
+        reply = await link.send(command, timeout);
+        await link.send("ATS1");
+      } else if (action === "bus") {
+        await link.send("ATPC");
+        reply = await link.send(command, timeout);
+      } else if (action === "pending") {
+        await link.send("ATSTFF");
+        for (let i = 0; i < PENDING_RETRIES && P.recovery(reply, ctx.bus, command) === "pending"; i += 1) {
+          reply = await link.send(command, Math.max(timeout || 0, PENDING_TIMEOUT_MS));
+        }
+        await link.send("ATST32");
+      } else if (action === "busy") {
+        await new Promise((resolve) => setTimeout(resolve, BUSY_DELAY_MS));
+        reply = await link.send(command, timeout);
       }
-      if (step.group === "freeze") {
-        if (ctx.dtcCount === 0) return "저장된 고장코드가 없어 고장 당시 값이 없습니다.";
-        const pid = parseInt(step.command.slice(2, 4), 16);
-        if (pid !== 2 && ctx.supported.size && !ctx.supported.has(pid)) return "차량이 지원하지 않는 항목입니다(지원 PID 목록에 없음).";
-      }
-      return null;
+      return reply;
     }
 
     async function runPlan(steps, results) {
       const started = performance.now();
-      const ctx = { dead: new Set(), supported: new Set(), bus: null, dtcCount: null };
+      const ctx = P.newContext();
       const tally = { ok: 0, failed: 0, skipped: 0 };
       let header = null;
+      const finish = (record) => {
+        results.push(record);
+        if (record.error === "skipped") tally.skipped += 1;
+        else if (record.error) tally.failed += 1;
+        else tally.ok += 1;
+        counts.textContent = `응답 ${tally.ok} · 실패 ${tally.failed} · 건너뜀 ${tally.skipped}`;
+        logStep(record);
+      };
       for (const [index, step] of steps.entries()) {
         bar.value = Math.round((index / steps.length) * 100);
         scanStatus.textContent = `${index + 1}/${steps.length} ${step.label} 읽는 중…`;
-        const record = { ...step, reply: null, error: null, reason: null, tMs: Math.round(performance.now() - started) };
-        const reason = skipReason(step, ctx);
-        if (reason) {
-          Object.assign(record, { error: "skipped", reason });
-        } else {
+        const base = { ...step, reply: null, error: null, reason: null, tMs: Math.round(performance.now() - started) };
+        delete base.expand;
+        delete base.pids;
+        const reason = state.stop ? "사용자가 스캔을 중지했습니다." : P.skipReason(step, ctx);
+        const planned = reason ? { items: [] } : P.requests(step, ctx);
+        if (reason || !planned.items.length) {
+          finish({ ...base, error: "skipped", reason: reason || planned.reason });
+          continue;
+        }
+        const target = P.headerFor(step, ctx);
+        for (const item of planned.items) {
+          const record = { ...base, command: item.command, label: item.label, header: target };
+          if (state.stop) {
+            finish({ ...record, error: "skipped", reason: "사용자가 스캔을 중지했습니다." });
+            continue;
+          }
           if (!link.ready) {
             scanStatus.textContent = "진단기 연결이 끊겼습니다. 다시 연결되기를 기다리는 중…";
             const deadline = Date.now() + RECONNECT_WAIT_MS;
@@ -247,17 +239,12 @@
           }
           if (!record.error) {
             try {
-              const want = step.header || (header ? BROADCAST[ctx.bus] || "7DF" : null);
+              const want = target || (header ? P.BROADCAST[ctx.bus] || "7DF" : null);
               if (want && want !== header) {
-                if (want.length === 8) {
-                  await link.send(`ATCP${want.slice(0, 2)}`);
-                  await link.send(`ATSH${want.slice(2)}`);
-                } else {
-                  await link.send(`ATSH${want}`);
-                }
+                for (const command of P.headerCommands(want, ctx.bus)) await link.send(command);
                 header = want;
               }
-              const reply = await link.send(step.command, step.timeout);
+              const reply = await exchange(item.command, step.timeout, ctx);
               record.tMs = Math.round(performance.now() - started);
               if (reply.trim()) record.reply = reply;
               else record.error = link.ready ? "timeout" : "disconnected";
@@ -266,21 +253,11 @@
               record.error = link.ready ? `단말기 오류: ${error.message}` : "disconnected";
             }
           }
-          if (step.command === "ATDPN" && record.reply) ctx.bus = busOf(record.reply);
-          if (SUPPORT_RANGE.test(step.command) && record.reply) {
-            supportedFrom(record.reply, parseInt(step.command.slice(2), 16)).forEach((pid) => ctx.supported.add(pid));
-          }
-          if (step.command === "0101" && record.reply) ctx.dtcCount = dtcCountFrom(record.reply);
-          if (step.probe && step.header && (!record.reply || /NO DATA|CAN ERROR|UNABLE/i.test(record.reply))) {
-            ctx.dead.add(step.header);
-          }
+          P.observe(step, item.command, record.reply, ctx);
+          if (step.probe && target && !record.reply) ctx.dead.add(target);
+          if (item.command === "ATDPN" && ctx.bus) link.rememberProtocol?.(record.reply);
+          finish(record);
         }
-        results.push(record);
-        if (record.error === "skipped") tally.skipped += 1;
-        else if (record.error) tally.failed += 1;
-        else tally.ok += 1;
-        counts.textContent = `응답 ${tally.ok} · 실패 ${tally.failed} · 건너뜀 ${tally.skipped}`;
-        logStep(record);
       }
       bar.value = 100;
     }

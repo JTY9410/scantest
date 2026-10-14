@@ -4,6 +4,7 @@ from sqlalchemy import select
 from app.core.errors import ServiceError
 from app.extensions import db
 from app.modules.accounts.models import User
+from app.modules.canlab.engine import obdb
 from app.modules.canlab.models import CanDataset, DiagnosticReport
 from app.modules.scanner import service
 from app.modules.scanner.plan import build_plan
@@ -77,12 +78,14 @@ def test_successful_scan_saves_scan_report_and_codes(app, admin):
     assert scan.scan_vin == "KNADH812345678901" and data["vin_match"] is False
     assert data["status"] == "ok" and data["errors"] == []
     assert data["protocol"]["bus"] == "can11" and data["voltage"] == 12.4
-    assert data["monitor"] == {"mil": True, "dtc_count": 1}
+    assert data["monitor"]["mil"] is True and data["monitor"]["dtc_count"] == 1
     assert {"key": "rpm", "label": "엔진 회전수", "unit": "rpm", "value": 1726.0} in data["values"]
     dtc = data["dtcs"][0]
     assert dtc["code"] == "P0133" and dtc["system"] == "engine" and dtc["desc"] == "O2 센서 응답 느림"
     assert dtc["howto"] == ["센서 교체"] and data["systems"]["engine"] == 1
-    assert data["battery"]["soc"] == {"label": "배터리 충전 상태(BMS)", "value": 37.5, "unit": "%", "reference": True}
+    assert data["battery"]["soc"] == {"label": "배터리 충전 상태(BMS)", "value": 37.5, "unit": "%", "reference": True,
+                                      "source": "7E4 22 0101", "origin": "OBDb Hyundai-Kona-Electric",
+                                      "range": [0, 100], "outlier": False}
     assert data["counts"]["unsupported"] == 2 and scan.raw == ["P0133"]
 
     report = db.session.get(DiagnosticReport, data["report_id"])
@@ -152,6 +155,32 @@ def test_plan_has_freeze_cvn_and_app_uds_steps(app):
     assert all(s["group"] == "freeze" and s["optional"] for s in steps if s["command"].startswith("02"))
 
 
+def test_plan_conditions_and_expansion(app):
+    with app.app_context():
+        legacy = build_plan(AVANTE)["steps"]
+        steps = build_plan(AVANTE, expand=True)["steps"]
+    by_command = {(s["header"], s["command"]): s for s in steps}
+
+    assert not any("expand" in s for s in legacy)
+    assert {"010C", "0105"} <= {s["command"] for s in legacy}
+    assert [s for s in legacy if s["command"] == "010C"][0]["when"] == {"pid": "0C"}
+    assert by_command[(None, "0120")]["when"] == {"pid": "20"}
+    assert by_command[(None, "0100")]["timeout"] == 30000
+    assert by_command[(None, "0141")]["when"] == {"pid": "41"}
+    assert by_command[(None, "0908")]["when"] == {"info09": "08"}
+    assert by_command[(None, "020C00")]["when"] == {"dtc": True, "pid02": "0C"}
+    assert by_command[(None, "0620")]["when"] == {"mid": "20"} and by_command[(None, "0620")]["bus"] == "can"
+
+    pids = by_command[(None, "01")]
+    assert pids["expand"] == "pids" and "0C" in pids["pids"] and "41" not in pids["pids"]
+    assert not any(s["command"] == "010C" for s in steps)
+    assert by_command[(None, "06")]["expand"] == "mids"
+    snapshot = by_command[("7E0", "1904")]
+    assert snapshot["expand"] == "dtcs" and snapshot["limit"] == 3 and snapshot["header29"] == "18DA10F1"
+    assert by_command[("7E1", "1902FF")]["header29"] == "18DA18F1"
+    assert "header29" not in by_command[("7E2", "1902FF")]
+
+
 def test_freeze_frame_cvn_permanent_dtc_and_ecu_ident(app, admin):
     part = "62F187" + "91000-AB12".encode().hex()
     steps = [
@@ -178,6 +207,71 @@ def test_freeze_frame_cvn_permanent_dtc_and_ecu_ident(app, admin):
     assert [e for e in data["ecus"] if e["address"] == "7E8"][0]["part_no"] == "91000-AB12"
     statuses = {s["command"]: s["status"] for s in data["steps"]}
     assert statuses["0205"] == "skipped" and statuses["010D"] == "unsupported"
+
+
+def test_merged_dtcs_per_ecu_values_and_extended_reads(app, admin):
+    snapshot = bytes.fromhex("5904" "013300" "09" "01" "01" "DD01" "0012")
+    kwp = b"\x61\x01" + bms_0101(soc=55.0)[3:]
+    steps = [
+        _step("0100", "7E8 06 41 00 98 3B 80 13\r7E9 06 41 00 80 00 00 01\r\r>"),
+        _step("ATDPN", "A6\r\r>", group="device"),
+        _step("0101", "7E8 06 41 01 81 07 65 21\r\r>"),
+        _step("010C0D05", "7E8 08 41 0C 1A F8 0D 32 05 7B\r7E9 03 41 05 50\r\r>", optional=True),
+        _step("03", "7E8 04 43 01 01 33\r\r>", group="dtc"),
+        _step("0A", "7E8 04 4A 01 01 33\r\r>", group="dtc", optional=True),
+        _step("0621", _can_reply("7E8", bytes.fromhex("4621800B019000640" "3E8")), group="monitor", optional=True,
+              bus="can"),
+        _step("0908", _can_reply("7E8", bytes.fromhex("490814" "0010" "0020" "0005" "000A" "0000" "0000")),
+              group="vehicle", optional=True),
+        _step("1902FF", _can_reply("7E8", bytes.fromhex("5902FF" "013300" "09")), header="7E0", optional=True,
+              bus="can", group="uds"),
+        _step("1904013300FF", _can_reply("7E8", snapshot), header="7E0", optional=True, bus="can", group="uds"),
+        _step("22F195", "7E8 03 7F 22 78\r7E8 03 7F 22 78\r\r>", header="7E0", optional=True, bus="can",
+              group="uds"),
+        _step("2101", _can_reply("7EC", kwp), header="7E4", optional=True, bus="can", group="maker"),
+    ]
+    data = service.run_scan(admin, car_no="34나5678", car=KONA_EV, steps=steps, transport="ble").bms_data
+
+    assert len(data["dtcs"]) == 1
+    dtc = data["dtcs"][0]
+    assert dtc["ecu"] == "7E8" and dtc["code"] == "P013300" and dtc["kind"] == "현재"
+    assert dtc["kinds"] == ["현재", "확정", "영구"] and len(dtc["sources"]) == 3
+
+    assert data["primary_ecu"] == "7E8"
+    assert [v["key"] for v in data["values"]] == ["rpm", "speed", "coolant_temp"]
+    assert data["ecu_values"][0]["ecu"] == "7E9" and data["ecu_values"][0]["values"][0]["value"] == 40
+    assert data["monitor"]["mil"] and {"name": "촉매", "complete": False} in data["monitor"]["tests"]
+    assert data["monitor_tests"][0]["passed"] and data["monitor_tests"][0]["ecu"] == "7E8"
+    assert data["iumpr"]["monitors"][0]["ratio"] == 0.5
+    assert data["snapshots"][0]["code"] == "P013300" and data["snapshots"][0]["did"] == "DD01"
+    assert [e["request"] for e in data["ecus"] if e["address"] == "7E8"] == ["7E0"]
+    assert data["battery"]["soc"]["value"] == 55.0 and data["battery"]["soc"]["source"] == "7E4 21 01"
+
+    statuses = {s["command"]: s["status"] for s in data["steps"]}
+    assert statuses["22F195"] == "pending" and not any(e["command"] == "22F195" for e in data["errors"])
+
+
+def test_obdb_model_match_plan_and_cells(app, admin):
+    assert obdb.match(KONA_EV)["repo"] == "Hyundai-Kona-Electric"
+    assert obdb.match({"diag_model": "니로 EV"})["repo"] == "Kia-Niro-EV"
+    assert obdb.match({"diag_model": "더 뉴 니로"})["repo"] == "Kia-Niro"
+    assert obdb.match({"diag_model": "아이오닉 5"})["repo"] == "Hyundai-IONIQ-5"
+    assert obdb.match(AVANTE) is None
+    assert obdb.plan_dids(AVANTE) == ["0101", "0105"]
+    with app.app_context():
+        commands = [s["command"] for s in build_plan(KONA_EV)["steps"] if s["header"] == "7E4"]
+    assert {"220101", "220105", "220102", "22010C"} <= set(commands)
+
+    cells = bytes.fromhex("620102" + "FFFFFFFF") + bytes([200] * 30 + [199, 130, 0])
+    steps = [
+        _step("ATDPN", "A6\r\r>", group="device"),
+        _step("220102", _can_reply("7EC", cells), header="7E4", optional=True, bus="can", group="maker"),
+    ]
+    data = service.run_scan(admin, car_no="34나5678", car=KONA_EV, steps=steps, transport="ble").bms_data
+    assert data["cells"]["count"] == 31 and data["cells"]["min"] == 3.98 and data["cells"]["max"] == 4.0
+    assert data["cells"]["spread_mv"] == 20 and data["cells"]["origin"] == "OBDb Hyundai-Kona-Electric"
+    assert data["cells"]["range"] == [2.8, 4.2] and data["cells"]["outliers"] == [{"no": 32, "voltage": 2.6}]
+    assert any("OBDb" in note and "CC BY-SA 4.0" in note for note in data["notes"])
 
 
 def test_scan_saves_result_pdf(app, admin):

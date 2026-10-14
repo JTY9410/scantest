@@ -1,0 +1,21 @@
+이 폴더의 차종별 JSON은 OBDb(https://github.com/OBDb) 신호 정의에서 만든 2차 저작물이며
+원본과 같은 Creative Commons Attribution-ShareAlike 4.0(CC BY-SA 4.0, LICENSE)을 따릅니다.
+
+변경 내용: BMS(7E4) 22 DID 신호 중 바이트 단위 신호만 골라 위스캔 신호 키·바이트 배치(start·width·scale)·정상 범위(min·max)로
+바꾸고, 차량정보 모델명 매칭 키워드를 더했습니다. 원본 저장소와 커밋은 각 파일의 repo·commit에 있습니다.
+
+- Hyundai-Kona-Electric @ e74490f9497c: 신호 26개, 셀 192개
+- Hyundai-IONIQ-Electric @ 3bb8e96497a5: 신호 24개, 셀 192개
+- Hyundai-IONIQ-5 @ df7e84ab79f3: 신호 20개, 셀 192개
+- Hyundai-IONIQ-6 @ f5beb44d7510: 신호 20개, 셀 192개
+- Hyundai-IONIQ-9 @ d591e1281948: 신호 21개, 셀 184개
+- Hyundai-Santa-Fe-Hybrid @ 6825fb895530: 신호 3개, 셀 168개
+- Hyundai-Tucson-Hybrid @ 42fa809c3388: 신호 3개, 셀 168개
+- Kia-Niro-EV @ c7822cfe5c19: 신호 26개, 셀 192개
+- Kia-Niro @ bcdd89f55c1b: 신호 23개, 셀 128개
+- Kia-Soul-EV @ 1699c3095ac9: 신호 26개, 셀 98개
+- Kia-Sportage-HEV @ 29ad52d8e810: 신호 2개, 셀 0개
+- Kia-EV3 @ 5acf2f3fb0fd: 신호 25개, 셀 192개
+- Kia-EV6 @ 0d5f14b4988a: 신호 20개, 셀 192개
+- Kia-EV9 @ 8bb70bb5de83: 신호 21개, 셀 152개
+- Genesis-GV60 @ 486f735e1876: 신호 20개, 셀 192개

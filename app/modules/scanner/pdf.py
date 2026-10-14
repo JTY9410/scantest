@@ -13,6 +13,7 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from app.core.time import local_display
+from app.modules.scanner import analysis
 from app.modules.scanner.obd import SYSTEMS
 from app.modules.scans.models import Scan
 
@@ -38,7 +39,9 @@ _DANGER = ParagraphStyle("danger", parent=_BODY, textColor=DANGER)
 
 
 def _p(value, style=_BODY) -> Paragraph:
-    return Paragraph(escape("-" if value in (None, "") else str(value)).replace("\n", "<br/>"), style)
+    # 나눔고딕에는 그리스 문자 Ω(U+03A9)가 없고 옴 기호(U+2126)만 있다.
+    text = escape("-" if value in (None, "") else str(value)).replace("\n", "<br/>").replace("Ω", "\u2126")
+    return Paragraph(text, style)
 
 
 def _num(value) -> str:
@@ -69,6 +72,36 @@ def _pairs(items: list[tuple[str, object]]) -> Table:
 def _values(values: list[dict]) -> Table:
     return _table([["항목", "값"]] + [[v["label"], f"{_num(v['value'])} {v.get('unit') or ''}".strip()]
                                      for v in values], [110, 60])
+
+
+def _analysis(result: dict) -> list:
+    summary = analysis.summarize(result)
+    readiness = summary["readiness"]
+    rows = [
+        ("배출 점검(레디니스)", f"{readiness['ignition']} · 완료 {readiness['complete']}/{readiness['total']}"
+         + (f" · 미완료: {', '.join(readiness['incomplete'])}" if readiness["incomplete"] else " · 모두 완료")
+         if readiness else None),
+        ("고장코드", f"{summary['dtc_total']}건 · " + ", ".join(f"{k} {n}" for k, n in summary["dtc_kinds"].items())
+         if summary["dtc_total"] else "없음"),
+        ("배출 부품 점검(모드 06)", f"{summary['monitor_total']}항목 · "
+         + (f"불합격 {len(summary['monitor_failures'])}" if summary["monitor_failures"] else "모두 합격")
+         if summary["monitor_total"] else None),
+        ("주행 중 진단 실행 비율", ("기준(0.336) 미달: " + ", ".join(m["name"] for m in summary["iumpr_low"])
+                             if summary["iumpr_low"] else "기준 이상") if result.get("iumpr") else None),
+        *[(item["label"], item["value"] + (f"\nOBDb 정상 범위 {item['range']}" if item["range"] else ""))
+          for item in summary["ev"]],
+        ("이상값(요약 계산에서 뺌)", "\n".join(summary["outliers"])),
+    ]
+    story = [_p("분석 요약", _H2), _table([[k, v] for k, v in rows if v], [45, 125], header=False)]
+    failures = [[f"{t['name']} ({t['ecu']} MID {t['mid']})", f"{_num(t['value'])} {t['unit']}".strip(),
+                 f"{_num(t['min'])} ~ {_num(t['max'])}"] for t in summary["monitor_failures"]]
+    if failures:
+        story += [Spacer(1, 4), _table([["불합격 점검 항목", "값", "기준"]] + failures, [90, 40, 40])]
+    story += [_p(f"· {w}", _DANGER) for w in summary["warnings"]]
+    if summary["ev"]:
+        story.append(_p("전기차 배터리 값은 판정 기준 없이 값과 OBDb 정상 범위만 보여 줍니다. 제조사 판정을 대신하지 않습니다.",
+                        _SMALL))
+    return story
 
 
 def render(scan: Scan, result: dict) -> bytes:
@@ -107,6 +140,7 @@ def render(scan: Scan, result: dict) -> bytes:
                 [f"고장 {n}건" if (n := (result.get("systems") or {}).get(k, 0)) else "정상" for k in SYSTEMS]],
                [170 / len(SYSTEMS)] * len(SYSTEMS)),
     ]
+    story += _analysis(result)
 
     dtcs = result.get("dtcs") or []
     story.append(_p(f"고장코드 상세 {len(dtcs)}건", _H2))
@@ -116,8 +150,8 @@ def render(scan: Scan, result: dict) -> bytes:
             note = d.get("desc") or "고장코드 마스터에 설명이 없습니다."
             if d.get("root_cause"):
                 note += f"\n원인: {d['root_cause']}"
-            rows.append([d["code"], SYSTEMS.get(d.get("system"), d.get("system")), d.get("kind"),
-                         f"{d.get('ecu') or ''} {d.get('source') or ''}".strip(), note])
+            rows.append([d["code"], SYSTEMS.get(d.get("system"), d.get("system")), ", ".join(d.get("kinds") or [d.get("kind")]),
+                         f"{d.get('ecu') or ''} {', '.join(d.get('sources') or [d.get('source') or ''])}".strip(), note])
         story.append(_table(rows, [20, 22, 14, 34, 80]))
     else:
         story.append(_p("읽은 고장코드가 없습니다." if counts.get("ok") else "고장코드를 읽지 못했습니다. 오류 기록을 확인하세요."))
@@ -126,15 +160,30 @@ def render(scan: Scan, result: dict) -> bytes:
         story.append(_p(f"고장 당시 값(프리즈 프레임) {freeze.get('dtc') or ''}".strip(), _H2))
         story.append(_values(freeze.get("values") or []) if freeze.get("values") else _p("당시 값은 읽지 못했습니다."))
 
+    if snapshots := result.get("snapshots"):
+        story.append(_p("제어기 고장 당시 데이터(UDS 19 04, 원값)", _H2))
+        story.append(_table([["고장코드", "제어기", "기록·DID", "원값"]] + [
+            [s["code"], s.get("ecu"), f"{s.get('record') if s.get('record') is not None else '-'} · {s.get('did') or '-'}",
+             s.get("raw") or "-"] for s in snapshots], [24, 22, 24, 100]))
+
     if battery := result.get("battery"):
         story.append(_p("고전압 배터리", _H2))
         story.append(_table([["항목", "값", "근거"]] + [
-            [v["label"], f"{_num(v['value'])} {v.get('unit') or ''}".strip(),
-             "참고 해석(미검증)" if v.get("reference") else "적용 규칙"] for v in battery.values()], [80, 50, 40]))
+            [v["label"], f"{_num(v['value'])} {v.get('unit') or ''}".strip() + (" (이상값)" if v.get("outlier") else ""),
+             ("참고 해석(미검증)" if v.get("reference") else "적용 규칙")
+             + (f"\n{v['origin']}" if v.get("origin") else "")] for v in battery.values()], [80, 40, 50]))
+        if cells := result.get("cells"):
+            story.append(_p(f"셀 {cells['count']}개 · 최저 {cells['min']} V · 최고 {cells['max']} V · 편차 "
+                            f"{cells['spread_mv']} mV · 합 {cells['sum']} V"
+                            + (f" · 이상값 {len(cells['outliers'])}개 제외" if cells.get("outliers") else "")
+                            + f" ({cells['origin']}, CC BY-SA 4.0)", _SMALL))
 
     if result.get("values"):
         story.append(_p("실시간 데이터", _H2))
         story.append(_values(result["values"]))
+    for group in result.get("ecu_values") or []:
+        story.append(_p(f"실시간 데이터 · 다른 제어기 {group['ecu']}", _H2))
+        story.append(_values(group["values"]))
 
     if ecus := result.get("ecus"):
         story.append(_p("응답한 제어기", _H2))

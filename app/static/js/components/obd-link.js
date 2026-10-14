@@ -18,8 +18,10 @@
   const SPP_UUID = "00001101-0000-1000-8000-00805f9b34fb";
   const SERIAL_BAUDS = [38400, 9600, 115200, 500000];
   const TRANSPORT_KEY = "wecar.obd.transport";
-  const DEFAULT_INIT = ["ATZ", "ATE0", "ATL0", "ATSP0"];
-  const FORMAT_COMMANDS = ["ATH1", "ATS1", "ATCAF1"];
+  const PROTOCOL_KEY = "wecar.obd.protocols";
+  const DEFAULT_INIT = ["ATZ", "ATE0", "ATL0"];
+  // ATAT1: ECU 응답 속도에 맞춰 기다리는 시간을 자동 조절. ATH1·ATS1: 주소와 공백을 붙여 받는다.
+  const FORMAT_COMMANDS = ["ATH1", "ATS1", "ATCAF1", "ATAT1"];
   const PROBE_MS = 3000;
   const RECONNECT_MS = 5000;
   const CONNECT_TRIES = 3;
@@ -44,6 +46,33 @@
 
   function clean(reply) {
     return reply.replace(/SEARCHING\.\.\./g, "").replace(/>/g, "").trim();
+  }
+
+  // 진단기마다 마지막으로 찾은 통신 방식. 'ATSPA6'은 6번을 먼저 시도하고 안 되면 자동으로 찾는다.
+  function protocolCommand(key) {
+    try {
+      const code = JSON.parse(localStorage.getItem(PROTOCOL_KEY) || "{}")[key];
+      return /^[1-9A-C]$/.test(code || "") ? `ATSPA${code}` : "ATSP0";
+    } catch {
+      return "ATSP0";
+    }
+  }
+
+  function saveProtocol(key, reply) {
+    const token = (reply || "").toUpperCase().split(/[\s>]+/).reverse().find((t) => /^A?[1-9A-C]$/.test(t));
+    if (!key || !token) return;
+    try {
+      const saved = JSON.parse(localStorage.getItem(PROTOCOL_KEY) || "{}");
+      localStorage.setItem(PROTOCOL_KEY, JSON.stringify({ ...saved, [key]: token.slice(-1) }));
+    } catch {
+      // 저장하지 못해도 다음 연결에서 자동으로 찾는다
+    }
+  }
+
+  // STN 칩(OBDLink·vLinker 일부)이면 이름을 돌려준다. ELM327은 '?'로 답한다.
+  function chipName(reply) {
+    const text = clean(reply || "");
+    return text && text !== "?" ? text : "";
   }
 
   class Link extends EventTarget {
@@ -157,13 +186,14 @@
     async _connectAndInit() {
       const server = await this.device.gatt.connect();
       this._channel = await this._detect(server);
-      const init = this.profile?.init?.length ? this.profile.init : DEFAULT_INIT;
+      const init = this.profile?.init?.length ? this.profile.init : [...DEFAULT_INIT, protocolCommand(this.device.id)];
       for (const command of [...init, ...FORMAT_COMMANDS]) {
         await this.send(command, command === "ATZ" ? 4000 : this._timeout());
       }
       this.info = {
         name: this.device.name || "",
         version: clean(await this.send("ATI")),
+        chip: chipName(await this.send("STDI")),
         voltage: clean(await this.send("ATRV")),
       };
       localStorage.setItem(STORAGE_KEY, JSON.stringify({ id: this.device.id, name: this.device.name || "" }));
@@ -239,7 +269,9 @@
       return null;
     }
 
+    // 앞 명령의 늦은 응답이 버퍼에 남아 있으면 이번 응답으로 잘못 읽힌다. 보내기 전에 비운다.
     _write(channel, command, timeoutMs) {
+      channel.buffer = "";
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           channel.waiting = null;
@@ -285,6 +317,10 @@
         await sleep(300);
       }
       return true;
+    }
+
+    rememberProtocol(reply) {
+      saveProtocol(this.device?.id, reply);
     }
 
     disconnect() {
@@ -377,7 +413,7 @@
     }
 
     async _init() {
-      for (const command of [...DEFAULT_INIT, ...FORMAT_COMMANDS]) {
+      for (const command of [...DEFAULT_INIT, protocolCommand("serial"), ...FORMAT_COMMANDS]) {
         await this.send(command, command === "ATZ" ? 4000 : 2000);
       }
       const info = this.port.getInfo ? this.port.getInfo() : {};
@@ -385,6 +421,7 @@
         ...this.info,
         name: info.bluetoothServiceClassId ? "블루투스 SPP 진단기" : "USB 진단기",
         version: clean(await this.send("ATI")),
+        chip: chipName(await this.send("STDI")),
         voltage: clean(await this.send("ATRV")),
       };
       localStorage.setItem(TRANSPORT_KEY, "serial");
@@ -472,6 +509,10 @@
       return true;
     }
 
+    rememberProtocol(reply) {
+      saveProtocol("serial", reply);
+    }
+
     disconnect() {
       this._manual = true;
       this._close();
@@ -550,6 +591,10 @@
       return this.active.waitReady(stop);
     }
 
+    rememberProtocol(reply) {
+      this.active.rememberProtocol(reply);
+    }
+
     disconnect() {
       this.active.disconnect();
     }
@@ -573,7 +618,12 @@
             header = null;
           }
           if (req.header !== header) {
-            await link.send(`ATSH${req.header}`);
+            if (req.header.length === 8) {
+              await link.send(`ATCP${req.header.slice(0, 2)}`);
+              await link.send(`ATSH${req.header.slice(2)}`);
+            } else {
+              await link.send(`ATSH${req.header}`);
+            }
             header = req.header;
           }
           reply = await link.send(req.command);
@@ -590,7 +640,13 @@
         lines.push(`${stamp()} TX ${req.header} ${[payload.length.toString(16).padStart(2, "0").toUpperCase(), ...payload].join(" ")}`);
         let frames = 0;
         reply.split(/[\r\n]+/).forEach((raw) => {
-          const match = FRAME.exec(raw.trim().toUpperCase());
+          const line = raw.trim().toUpperCase();
+          let match = FRAME.exec(line);
+          // 29비트 CAN은 ATS1에서 주소도 '18 DA F1 10'처럼 띄어 온다.
+          const tokens = line.split(/\s+/);
+          if (!match && req.header.length === 8 && tokens.length > 4 && tokens.every((t) => /^[0-9A-F]{2}$/.test(t))) {
+            match = [line, tokens.slice(0, 4).join(""), ` ${tokens.slice(4).join(" ")}`];
+          }
           if (!match) return;
           lines.push(`${stamp()} RX ${match[1]} ${match[2].trim()}`);
           frames += 1;

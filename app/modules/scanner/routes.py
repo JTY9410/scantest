@@ -8,7 +8,7 @@ from app.core.errors import ServiceError
 from app.extensions import db
 from app.modules.auth.access import admin_required
 from app.modules.canlab.service import obd_config
-from app.modules.scanner import service
+from app.modules.scanner import analysis, service
 from app.modules.scanner.obd import SYSTEMS
 from app.modules.scanner.plan import build_plan
 from app.modules.scans import car_info
@@ -58,7 +58,7 @@ def lookup():
 @admin_required
 def plan():
     car = _body().get("car")
-    return build_plan(car if isinstance(car, dict) else None)
+    return build_plan(car if isinstance(car, dict) else None, expand=True)
 
 
 @bp.post("/run")
@@ -83,8 +83,9 @@ def run():
 @admin_required
 def result(scan_id: int):
     scan = get_visible_scan(current_user, scan_id)
-    return render_template("scanner/result.html", scan=scan, result=service.scan_result(scan), systems=SYSTEMS,
-                           transports=service.TRANSPORTS)
+    result = service.scan_result(scan)
+    return render_template("scanner/result.html", scan=scan, result=result, summary=analysis.summarize(result),
+                           systems=SYSTEMS, transports=service.TRANSPORTS)
 
 
 @bp.get("/<int:scan_id>/pdf")

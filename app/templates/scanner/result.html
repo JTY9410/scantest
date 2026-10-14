@@ -10,7 +10,7 @@
 {%- endmacro %}
 
 {% macro status_badge(status, label) -%}
-{{ badge(label, {"ok": "success", "unsupported": "", "skipped": ""}.get(status, "danger")) }}
+{{ badge(label, {"ok": "success", "unsupported": "", "skipped": "", "pending": "warning"}.get(status, "danger")) }}
 {%- endmacro %}
 
 {% block content %}
@@ -82,6 +82,66 @@
   </div>
 </section>
 
+<section class="card card-body mt-6" aria-labelledby="analysis-title">
+  <h2 id="analysis-title" class="text-lg font-bold">분석 요약</h2>
+  <dl class="dl mt-4">
+    <dt>배출 점검(레디니스)</dt>
+    <dd>{% if summary.readiness %}{{ summary.readiness.ignition }} · 완료 {{ summary.readiness.complete }}/{{ summary.readiness.total }}
+      {% if summary.readiness.incomplete %}{{ badge("미완료 " ~ summary.readiness.incomplete|join(", "), "warning") }}{% else %}{{ badge("모두 완료", "success") }}{% endif %}
+      {% else %}-{% endif %}</dd>
+    <dt>고장코드</dt>
+    <dd>{% if summary.dtc_total %}{{ summary.dtc_total }}건 ·
+      {% for kind, n in summary.dtc_kinds.items() %}{{ badge(kind ~ " " ~ n, "danger" if kind in ("현재", "확정") else "warning") }} {% endfor %}
+      {% else %}{{ badge("없음", "success") }}{% endif %}</dd>
+    <dt>배출 부품 점검(모드 06)</dt>
+    <dd>{% if summary.monitor_total %}{{ summary.monitor_total }}항목 ·
+      {{ badge("불합격 " ~ summary.monitor_failures|length, "danger") if summary.monitor_failures else badge("모두 합격", "success") }}
+      {% else %}-{% endif %}</dd>
+    <dt>주행 중 진단 실행 비율</dt>
+    <dd>{% if result.iumpr %}시동 {{ result.iumpr.ignitions }}회 ·
+      {{ badge("기준 미달 " ~ summary.iumpr_low|map(attribute="name")|join(", "), "warning") if summary.iumpr_low else badge("기준 이상", "success") }}
+      {% else %}-{% endif %}</dd>
+    {% for item in summary.ev %}
+    <dt>{{ item.label }}</dt>
+    <dd class="tabular-nums">{{ item.value }}{% if item.range %} <span class="text-sm text-muted">OBDb 정상 범위 {{ item.range }}</span>{% endif %}</dd>
+    {% endfor %}
+    {% if summary.outliers %}
+    <dt>이상값</dt>
+    <dd>{{ badge(summary.outliers|length ~ "개 · 요약 계산에서 뺌", "warning") }}
+      <ul class="mt-1 grid list-disc gap-1 pl-5 text-sm">{% for o in summary.outliers %}<li>{{ o }}</li>{% endfor %}</ul></dd>
+    {% endif %}
+  </dl>
+  {% if summary.warnings %}
+  <ul class="mt-3 grid list-disc gap-1 pl-5 text-sm text-danger">
+    {% for w in summary.warnings %}<li>{{ w }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  {% if summary.ev %}<p class="mt-3 text-sm text-muted">전기차 배터리 값은 판정 기준 없이 값과 OBDb 정상 범위만 보여 줍니다. 제조사 판정을 대신하지 않습니다.</p>{% endif %}
+</section>
+
+{% if summary.monitor_failures or summary.iumpr_low %}
+<section class="card mt-6 overflow-hidden" aria-labelledby="monitor-title">
+  <h2 id="monitor-title" class="card-body pb-0 text-lg font-bold">배출 부품 점검 결과</h2>
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">항목</th><th scope="col" class="num">값</th><th scope="col" class="num">기준</th><th scope="col">판정</th></tr></thead>
+    <tbody>
+      {% for t in summary.monitor_failures %}
+      <tr><td data-primary class="font-semibold">{{ t.name }} <span class="mono text-sm text-muted">{{ t.ecu }} MID {{ t.mid }}·TID {{ t.tid }}</span></td>
+        <td data-label="값" class="num">{{ num(t.value) }} {{ t.unit }}</td>
+        <td data-label="기준" class="num">{{ num(t.min) }} ~ {{ num(t.max) }}</td>
+        <td data-label="판정">{{ badge("불합격", "danger") }}</td></tr>
+      {% endfor %}
+      {% for m in summary.iumpr_low %}
+      <tr><td data-primary class="font-semibold">{{ m.name }} <span class="text-sm text-muted">진단 실행 비율</span></td>
+        <td data-label="값" class="num">{{ m.completed }}/{{ m.conditions }} = {{ m.ratio }}</td>
+        <td data-label="기준" class="num">0.336 이상</td>
+        <td data-label="판정">{{ badge("기준 미달", "warning") }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 <section class="card mt-6 overflow-hidden" aria-labelledby="dtc-title">
   <h2 id="dtc-title" class="card-body pb-0 text-lg font-bold">고장코드 상세 <span class="text-muted">{{ result.dtcs|length }}</span></h2>
   {% if result.dtcs %}
@@ -92,8 +152,8 @@
       <tr>
         <td data-primary class="mono font-semibold">{{ d.code }}</td>
         <td data-label="시스템">{{ systems.get(d.system, d.system) }}</td>
-        <td data-label="상태">{{ badge(d.kind, "danger" if d.kind in ("현재", "확정") else "warning") }}</td>
-        <td data-label="제어기" class="mono">{{ d.ecu }} <span class="text-sm text-muted">{{ d.source }}</span></td>
+        <td data-label="상태">{% for kind in d.kinds or [d.kind] %}{{ badge(kind, "danger" if kind in ("현재", "확정") else "warning") }} {% endfor %}</td>
+        <td data-label="제어기" class="mono">{{ d.ecu }} <span class="text-sm text-muted">{{ (d.sources or [d.source])|join(", ") }}</span></td>
         <td data-label="설명" class="text-sm">
           <p class="font-semibold">{{ d.desc or "고장코드 마스터에 설명이 없습니다." }}</p>
           {% if d.root_cause %}<p class="mt-1">원인: {{ d.root_cause }}</p>{% endif %}
@@ -127,6 +187,23 @@
 </section>
 {% endif %}
 
+{% if result.snapshots %}
+<section class="card mt-6 overflow-hidden" aria-labelledby="snapshot-title">
+  <h2 id="snapshot-title" class="card-body pb-0 text-lg font-bold">제어기 고장 당시 데이터(UDS 19 04)</h2>
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">고장코드</th><th scope="col">제어기</th><th scope="col">기록·DID</th><th scope="col">원값</th></tr></thead>
+    <tbody>
+      {% for s in result.snapshots %}
+      <tr><td data-primary class="mono font-semibold">{{ s.code }}</td><td data-label="제어기" class="mono">{{ s.ecu }}</td>
+        <td data-label="기록" class="mono">{{ s.record if s.record is not none else "-" }} · {{ s.did or "-" }}</td>
+        <td data-label="원값" class="mono text-sm">{{ s.raw or "-" }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="card-body text-sm text-muted">DID별 길이·공식은 제조사 정의라 원값으로 보여 줍니다.</p>
+</section>
+{% endif %}
+
 {% if result.battery %}
 <section class="card mt-6 overflow-hidden" aria-labelledby="battery-title">
   <h2 id="battery-title" class="card-body pb-0 text-lg font-bold">고전압 배터리</h2>
@@ -136,12 +213,18 @@
       {% for key, v in result.battery.items() %}
       <tr>
         <td data-primary class="font-semibold">{{ v.label }}</td>
-        <td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}</td>
-        <td data-label="근거">{{ badge("참고 해석(미검증)", "warning") if v.reference else badge("적용 규칙", "success") }}</td>
+        <td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}{% if v.outlier %} {{ badge("이상값", "warning") }}{% endif %}</td>
+        <td data-label="근거">{{ badge("참고 해석(미검증)", "warning") if v.reference else badge("적용 규칙", "success") }}
+          {% if v.origin or v.source %}<span class="text-sm text-muted">{{ v.origin or "" }} {{ v.source or "" }}</span>{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
+  {% if result.cells %}
+  <p class="card-body text-sm">셀 {{ result.cells.count }}개 · 최저 {{ result.cells.min }} V · 최고 {{ result.cells.max }} V ·
+    편차 {{ result.cells.spread_mv }} mV · 합 {{ result.cells.sum }} V{% if result.cells.outliers %} · 이상값 {{ result.cells.outliers|length }}개 제외{% endif %}
+    <span class="text-muted">({{ result.cells.origin }}, CC BY-SA 4.0)</span></p>
+  {% endif %}
 </section>
 {% endif %}
 
@@ -160,6 +243,16 @@
     {% else %}
     {{ empty("읽은 실시간 데이터가 없습니다.") }}
     {% endif %}
+    {% for group in result.ecu_values or [] %}
+    <h3 class="card-body pb-0 font-bold">다른 제어기 {{ group.ecu }}{% if group.label %} · {{ group.label }}{% endif %}</h3>
+    <table class="rtable mt-3">
+      <tbody>
+        {% for v in group["values"] %}
+        <tr><td data-primary class="font-semibold">{{ v.label }}</td><td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endfor %}
   </section>
 
   <section class="card overflow-hidden" aria-labelledby="ecus-title">

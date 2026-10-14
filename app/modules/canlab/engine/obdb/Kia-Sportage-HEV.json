@@ -1,0 +1,44 @@
+{
+ "repo": "Kia-Sportage-HEV",
+ "url": "https://github.com/OBDb/Kia-Sportage-HEV",
+ "commit": "29ad52d8e810c098d92ca11f3a4d468c5d6927c4",
+ "license": "CC-BY-SA-4.0",
+ "fetched": "2026-10-14",
+ "match": [
+  "스포티지하이브리드",
+  "스포티지HEV",
+  "SPORTAGEHYBRID"
+ ],
+ "request_id": "7E4",
+ "dids": [
+  "0101",
+  "0105"
+ ],
+ "signals": [
+  {
+   "key": "soc",
+   "id": "SPORTAGE_HVBAT_SOC",
+   "did": "0101",
+   "start": 4,
+   "width": 1,
+   "signed": false,
+   "scale": 0.5,
+   "offset": 0,
+   "min": 0,
+   "max": 100
+  },
+  {
+   "key": "soc_display",
+   "id": "SPORTAGE_HVBAT_SOC_DISP",
+   "did": "0105",
+   "start": 31,
+   "width": 1,
+   "signed": false,
+   "scale": 0.5,
+   "offset": 0,
+   "min": 0,
+   "max": 100
+  }
+ ],
+ "cells": []
+}
