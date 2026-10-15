@@ -1,10 +1,10 @@
 {% extends "layouts/admin.html" %}
 {% from "components/ui.html" import page_header, badge, empty, field %}
+{% from "canlab/_truths.html" import truth_table %}
 {% block title %}{{ dataset.filename }}{% endblock %}
 
 {% block content %}
-{% set back = {"wecan_trc": (url_for('canlab.wescan'), "위스캔값 입력"), "gscan_trc": (url_for('canlab.reverse'), "리버스데이터 입력")}.get(dataset.kind, (url_for('canlab.datasets'), "데이터 목록")) %}
-{% call page_header("#" ~ dataset.id ~ " " ~ dataset.filename, dataset.kind_label ~ " · " ~ dataset.vehicle, back=back) %}
+{% call page_header("#" ~ dataset.id ~ " " ~ dataset.filename, dataset.kind_label ~ " · " ~ dataset.vehicle, back=(url_for('canlab.datasets'), "데이터 목록")) %}
   {% if dataset.is_trace %}
   <a class="btn btn-primary" href="{{ url_for('canlab.reports', dataset_id=dataset.id) }}">운영 결과지 만들기</a>
   {% endif %}
@@ -102,30 +102,7 @@
   {% if dataset.truths %}
   <form method="post" action="{{ url_for('canlab.update_truths', dataset_id=dataset.id) }}">
     {{ action.csrf_token }}
-    <table class="rtable mt-3">
-      <thead><tr><th scope="col">항목(결과지)</th><th scope="col">신호</th><th scope="col">값</th><th scope="col">출처</th><th scope="col">확인</th><th scope="col">삭제</th></tr></thead>
-      <tbody>
-        {% for t in dataset.truths %}
-        <tr>
-          <td data-primary>{{ t.label }}{% if t.page %} <span class="text-sm text-muted">({{ t.page }}쪽)</span>{% endif %}</td>
-          <td data-label="신호">
-            <label class="sr-only" for="key-{{ t.id }}">{{ t.label }} 신호</label>
-            <select class="input" id="key-{{ t.id }}" name="key-{{ t.id }}">
-              <option value="">(분석 안 함)</option>
-              {% for s in signals %}<option value="{{ s.key }}" {% if s.key == t.signal_key %}selected{% endif %}>{{ s.label }}</option>{% endfor %}
-            </select>
-          </td>
-          <td data-label="값">
-            <label class="sr-only" for="value-{{ t.id }}">{{ t.label }} 값</label>
-            <span class="flex items-center gap-2"><input class="input max-w-36 tabular-nums" id="value-{{ t.id }}" name="value-{{ t.id }}" value="{{ t.value_text }}" inputmode="decimal"> <span class="text-sm">{{ t.unit or "" }}</span></span>
-          </td>
-          <td data-label="출처">{{ badge(t.source_label, "" if t.source == "manual" else "info") }}</td>
-          <td data-label="확인"><input type="checkbox" class="size-5 accent-ink" name="confirmed-{{ t.id }}" aria-label="{{ t.label }} 확인" {% if t.confirmed %}checked{% endif %}></td>
-          <td data-label="삭제"><input type="checkbox" class="size-5" name="delete-{{ t.id }}" aria-label="{{ t.label }} 삭제"></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+    {{ truth_table(dataset, signals) }}
     <div class="card-body"><button class="btn btn-primary" type="submit">정답값 저장</button></div>
   </form>
   {% else %}

@@ -1,9 +1,11 @@
 {% set tabs = [
   ("canlab.index", "개요", ("canlab.index",)),
-  ("canlab.wescan", "위스캔값 입력", ("canlab.wescan",)),
-  ("canlab.reverse", "리버스데이터 입력", ("canlab.reverse",)),
-  ("canlab.analysis", "역산 분석", ("canlab.analysis", "canlab.run", "canlab.logic", "canlab.confirm_logic")),
-  ("canlab.rules", "디코딩 규칙", ("canlab.rules", "canlab.activate_rule", "canlab.retire_rule", "canlab.restore_logic")),
+  ("canlab.analysis", "데이터입력분석", ("canlab.analysis", "canlab.pending", "canlab.run", "canlab.apply_run")),
+  ("canlab.rules", "디코딩 규칙", ("canlab.rules", "canlab.logic", "canlab.confirm_logic", "canlab.advise_logic",
+                                 "canlab.expand_logic", "canlab.activate_rule", "canlab.retire_rule",
+                                 "canlab.rollback_change", "canlab.reference_list", "canlab.reference_sync",
+                                 "canlab.reference_register", "canlab.reference_approve", "canlab.reference_reject",
+                                 "canlab.reference_retry")),
 ] %}
 <nav class="mb-6 flex flex-wrap gap-2 print:hidden" aria-label="CAN 역분석 메뉴">
   {% for endpoint_name, label, actives in tabs %}

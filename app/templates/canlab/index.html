@@ -3,7 +3,7 @@
 {% block title %}CAN 역분석{% endblock %}
 
 {% block content %}
-{{ page_header("CAN 역분석", "위스캔 스캔 데이터와 리버스 데이터를 비교해 위스캔 결과를 내는 명령·수식을 찾고, 확인한 로직을 스캔하기에 적용합니다.") }}
+{{ page_header("CAN 역분석", "차종별로 리버스데이터와 위스캔 데이터를 비교해 위스캔 결과를 내는 명령·수식을 찾고, 관리자가 확인한 디코딩 규칙을 그 차종(필요하면 같은 제조사)의 스캔에 적용합니다.") }}
 {% include "canlab/_tabs.html" %}
 
 <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="현황">
@@ -23,11 +23,11 @@
 <section class="card card-body mt-6" aria-labelledby="flow-title">
   <h2 id="flow-title" class="text-lg font-bold">작업 순서</h2>
   <ol class="mt-3 grid gap-3 text-[0.9375rem]">
-    <li><strong>1. 위스캔값 입력</strong> — 위스캔으로 스캔할 때의 통신 기록과 위스캔 최종값을 함께 올립니다. 명령과 산출 결과를 바로 추출합니다.</li>
-    <li><strong>2. 리버스데이터 입력</strong> — 리버스한 TRC를 올립니다. 명령(요청)과 응답을 바로 추출합니다.</li>
-    <li><strong>3. 역산 분석</strong> — 두 데이터를 비교해 위스캔 결과를 내는 명령, 수식(바이트 위치·크기·부호·배율), 분석 코드를 찾습니다. 규칙은 바뀌지 않습니다.</li>
-    <li><strong>4. 적용</strong> — 결과 화면의 '적용'에서 변경 전후 로직을 비교하고 AI 최적안을 받아 고른 항목만 확정합니다. 다음 스캔부터 반영되고, 문제가 생기면 스캔 결과 화면에 팝업으로 기록됩니다.
-      {% if not stats.ai_ready %}<span class="block text-sm text-muted">AI 최적안을 쓰려면 설정 &gt; AI 연결에서 'CAN 분석' 용도를 켜세요. 없으면 규칙 기반 기본안을 보여 줍니다.</span>{% endif %}</li>
+    <li><strong>1. 데이터입력분석</strong> — 차량번호로 차종(제조사·모델·세부모델·등급·연식·최초등록일)을 확인하고 위스캔 통신기록, 위스캔 최종값, 리버스데이터를 올린 뒤 '올리고 추출하기'를 누릅니다.</li>
+    <li><strong>2. 분석</strong> — 리버스 명령·결과를 참고자료로 해석하고, 위스캔 통신기록과 대조한 뒤, 위스캔 최종값과 일치하는 명령·수식(바이트 위치·크기·부호·배율)을 찾습니다. 규칙은 바뀌지 않습니다.</li>
+    <li><strong>3. 디코딩 규칙</strong> — '디코딩 규칙 후보 만들기'로 변경 전후와 과거 데이터 비교를 보고, 관리자가 고른 항목만 그 차종에 적용합니다. 차종 규칙은 같은 제조사로 확대할 수 있습니다.</li>
+    <li><strong>4. 기록과 되돌리기</strong> — 모든 적용은 변경 이력에, 스캔 중 로직 문제는 문제 로그에 남습니다. 문제가 생기면 그 범위만 이전 기록으로 되돌립니다.
+      {% if not stats.ai_ready %}<span class="block text-sm text-muted">AI 최적안·참고자료 정리를 쓰려면 설정 &gt; AI 연결에서 'CAN 분석' 용도를 켜세요. 없으면 규칙 기반 기본안을 보여 줍니다.</span>{% endif %}</li>
   </ol>
 </section>
 
@@ -35,12 +35,13 @@
 <section class="card mt-6 overflow-hidden" aria-labelledby="recent-title">
   <h2 id="recent-title" class="card-body pb-0 text-lg font-bold">최근 역산</h2>
   <table class="rtable mt-3">
-    <thead><tr><th scope="col">번호</th><th scope="col">실행</th><th scope="col" class="num">신호</th><th scope="col" class="num">적용</th></tr></thead>
+    <thead><tr><th scope="col">번호</th><th scope="col">실행</th><th scope="col">차종</th><th scope="col" class="num">신호</th><th scope="col" class="num">적용</th></tr></thead>
     <tbody>
       {% for run in runs %}
       <tr>
         <td data-primary><a class="font-semibold underline" href="{{ url_for('canlab.run', run_id=run.id) }}">#{{ run.id }}</a></td>
         <td data-label="실행">{{ run.created_at|kst }}</td>
+        <td data-label="차종">{{ run.scope_label }}</td>
         <td data-label="신호" class="num">{{ run.result|length }}</td>
         <td data-label="적용" class="num">{{ run.activated_count }}</td>
       </tr>

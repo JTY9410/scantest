@@ -28,6 +28,7 @@ from app.modules.reports import service as reports
 from app.modules.reports.models import CarMismatchReport
 from app.modules.scanner import service as scanner
 from app.modules.scans import service as scans
+from app.modules.scans import car_info
 from app.modules.scans.car_info import fetch_car_info
 from app.modules.scans.models import Code, Scan, ScanCode
 
@@ -319,7 +320,14 @@ def obd_devices_destroy(device_id: int):
 @bp.get("/canCaptureRequests")
 @require_api_auth
 def can_capture_requests():
-    return respond({"data": canlab.capture_requests()})
+    # carNo를 주면 그 차종·제조사에 적용한 규칙을 쓴다. 조회에 실패하면 차량 구분 없이 고른다.
+    car = None
+    if car_no := request.args.get("carNo"):
+        try:
+            car, _ = car_info.lookup(current_user(), car_no)
+        except car_info.CarInfoError:
+            car = None
+    return respond({"data": canlab.capture_requests(car)})
 
 
 @bp.post("/canCaptures")

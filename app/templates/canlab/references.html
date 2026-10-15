@@ -1,0 +1,101 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge, empty, field %}
+{% block title %}참고자료 DB{% endblock %}
+
+{% block content %}
+{{ page_header("참고자료 DB", "인터넷의 공개 CAN 통신 자료를 모아 역산 분석의 해석과 후보 점수에 씁니다. 승인한 자료만 분석에 쓰고, 차종·제조사가 맞는 자료만 그 차량 분석에 씁니다.",
+               back=(url_for('canlab.rules'), "디코딩 규칙")) }}
+{% include "canlab/_tabs.html" %}
+
+<div class="grid gap-6 xl:grid-cols-2">
+  <section class="card card-body" aria-labelledby="sync-title">
+    <h2 id="sync-title" class="text-lg font-bold">OBDb 동기화</h2>
+    <p class="mt-1 text-sm text-muted">OBDb(github.com/OBDb, CC BY-SA 4.0)의 현대·기아·제네시스 전동화 차종 BMS 신호 정의를 받아 승인 상태로 저장합니다. 다른 차종 저장소를 함께 받으려면 저장소 이름과 차량정보 모델명 키워드를 넣으세요.</p>
+    <form method="post" action="{{ url_for('canlab.reference_sync') }}" class="mt-4 grid gap-3 md:grid-cols-2" novalidate>
+      {{ sync_form.csrf_token }}
+      {{ field(sync_form.repo, placeholder="예: Kia-EV6") }}
+      {{ field(sync_form.keywords, placeholder="예: EV6, 이브이식스") }}
+      <div class="md:col-span-2"><button class="btn btn-primary" type="submit">OBDb에서 받기</button></div>
+    </form>
+  </section>
+
+  <section class="card card-body" aria-labelledby="url-title">
+    <h2 id="url-title" class="text-lg font-bold">자료 주소 등록</h2>
+    <p class="mt-1 text-sm text-muted">https 공개 주소만 받습니다(1MB, 10초 이내 글자 자료). {{ "AI가 본문에서 해석 항목 초안을 만들고, 관리자가 확인해 승인합니다." if ai_ready else "지금은 사용할 AI 연결이 없어 본문만 저장합니다(설정 > AI 연결 'CAN 분석')." }}</p>
+    <form method="post" action="{{ url_for('canlab.reference_register') }}" class="mt-4 grid gap-3 md:grid-cols-2" novalidate>
+      {{ url_form.csrf_token }}
+      {{ field(url_form.url, placeholder="https://", class_="md:col-span-2") }}
+      {{ field(url_form.title) }}
+      {{ field(url_form.maker, placeholder="비우면 모든 제조사") }}
+      {{ field(url_form.model, placeholder="비우면 제조사 전체") }}
+      <div class="md:col-span-2"><button class="btn btn-primary" type="submit">받아서 정리하기</button></div>
+    </form>
+  </section>
+</div>
+
+<h2 class="mb-2 mt-6 text-lg font-bold">자료 <span class="text-muted">{{ items|length }}</span></h2>
+{% if items %}
+<div class="grid gap-4">
+  {% for ref in items %}
+  <section id="ref-{{ ref.id }}" class="card overflow-hidden" aria-labelledby="ref-title-{{ ref.id }}">
+    <div class="card-body flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <h3 id="ref-title-{{ ref.id }}" class="font-bold">#{{ ref.id }} {{ ref.title }}</h3>
+        <p class="mt-1 text-sm text-muted">
+          {{ "OBDb" if ref.source_type == "obdb" else "URL" }} ·
+          {{ ref.scope_label }}{% if ref.keywords %} (키워드 {{ ref.keywords[:4]|join(", ") }}{% if ref.keywords|length > 4 %}…{% endif %}){% endif %}
+          {% if ref.license %} · {{ ref.license }}{% endif %}
+          {% if ref.ai_provider %} · AI {{ ref.ai_provider }}{% endif %}
+          · <a class="underline break-all" href="{{ ref.url }}" target="_blank" rel="noopener noreferrer">{{ ref.url }}</a>
+        </p>
+        {% if ref.problem %}<p class="mt-2 text-sm">{{ badge("문제", "warning") }} {{ ref.problem }}</p>{% endif %}
+      </div>
+      <div class="flex flex-wrap items-center gap-2">
+        {{ badge(ref.status_label, {"approved": "success", "pending": "warning"}.get(ref.status, "")) }}
+        {% if ref.status == ReferenceStatus.PENDING %}
+        {% if ref.source_type == "url" %}
+        <form method="post" action="{{ url_for('canlab.reference_retry', ref_id=ref.id) }}">
+          {{ action.csrf_token }}<input type="hidden" name="version" value="{{ ref.version }}">
+          <button class="btn btn-secondary" type="submit" {% if not ai_ready %}disabled{% endif %}>AI로 다시 정리</button>
+        </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('canlab.reference_approve', ref_id=ref.id) }}" data-confirm="이 자료의 해석 항목 {{ ref.items|length }}개를 분석에 쓸까요?">
+          {{ action.csrf_token }}<input type="hidden" name="version" value="{{ ref.version }}">
+          <button class="btn btn-primary" type="submit" {% if not ref.items %}disabled{% endif %}>승인</button>
+        </form>
+        {% endif %}
+        {% if ref.status != ReferenceStatus.REJECTED %}
+        <form method="post" action="{{ url_for('canlab.reference_reject', ref_id=ref.id) }}" data-confirm="이 자료를 반려할까요? 분석에 쓰지 않습니다.">
+          {{ action.csrf_token }}<input type="hidden" name="version" value="{{ ref.version }}">
+          <button class="btn btn-secondary" type="submit">반려</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+    {% if ref.items %}
+    <details class="border-t border-line">
+      <summary class="card-body cursor-pointer py-3 text-sm font-semibold">해석 항목 {{ ref.items|length }}개</summary>
+      <table class="rtable">
+        <thead><tr><th scope="col">신호</th><th scope="col">명령</th><th scope="col">바이트·수식</th><th scope="col">근거</th></tr></thead>
+        <tbody>
+          {% for item in ref.items[:60] %}
+          {% set signal = signals.get(item.signal_key) %}
+          <tr>
+            <td data-primary>{{ signal.label if signal else item.signal_key }}</td>
+            <td data-label="명령" class="mono text-sm">{{ item.request_id }} 22 {{ item.did }}</td>
+            <td data-label="바이트·수식" class="mono text-sm">B{{ item.start }}{% if item.width > 1 %}-B{{ item.start + item.width - 1 }}{% endif %} {{ item.endian }}{{ " signed" if item.signed }} × {{ item.scale }}{% if item.offset %} + {{ item.offset }}{% endif %}</td>
+            <td data-label="근거" class="text-sm">{{ item.note or "-" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if ref.items|length > 60 %}<p class="card-body text-sm text-muted">외 {{ ref.items|length - 60 }}개</p>{% endif %}
+    </details>
+    {% endif %}
+  </section>
+  {% endfor %}
+</div>
+{% else %}
+<section class="card">{{ empty("참고자료가 없습니다.", "OBDb에서 받거나 공개 자료 주소를 등록하세요.") }}</section>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,31 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, empty %}
+{% from "canlab/_truths.html" import truth_table %}
+{% block title %}최종값 확인{% endblock %}
+
+{% block content %}
+{% set car = dataset.summary.car or {} %}
+{{ page_header("최종값 확인", (car.car_no ~ " · " if car.car_no else "") ~ dataset.scope_label ~ " · 위스캔 #" ~ dataset.id ~ " " ~ dataset.filename,
+               back=(url_for('canlab.analysis'), "데이터입력분석")) }}
+{% include "canlab/_tabs.html" %}
+
+<section class="card overflow-hidden" aria-labelledby="truths-title">
+  <div class="card-body pb-0">
+    <h2 id="truths-title" class="text-lg font-bold">위스캔 최종값</h2>
+    <p class="mt-1 text-sm text-muted">결과지 PDF에서 읽은 값은 틀릴 수 있습니다. 값과 신호를 확인하고 '확인'에 체크한 값만 분석에 씁니다.
+      비교할 리버스데이터: {% for d in reverse %}#{{ d.id }} {{ d.filename }}{% if not loop.last %}, {% endif %}{% else %}없음{% endfor %}</p>
+  </div>
+  {% if dataset.truths %}
+  <form method="post" action="{{ url_for('canlab.pending', dataset_id=dataset.id, reverse=reverse|map(attribute='id')|list) }}">
+    {{ action.csrf_token }}
+    {{ truth_table(dataset, signals) }}
+    <div class="card-body flex flex-wrap gap-2">
+      <button class="btn btn-primary" type="submit">확정하고 분석</button>
+      <a class="btn btn-secondary" href="{{ url_for('canlab.dataset', dataset_id=dataset.id, _anchor='truths') }}">데이터 화면에서 값 추가</a>
+    </div>
+  </form>
+  {% else %}
+  {{ empty("최종값이 없습니다.", "데이터 화면에서 최종값을 붙여 넣은 뒤 다시 분석하세요.") }}
+  {% endif %}
+</section>
+{% endblock %}

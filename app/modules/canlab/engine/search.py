@@ -160,11 +160,13 @@ def _score(candidate: Candidate, drifting: bool, tolerance: float) -> float:
 
 
 def find_candidates(samples: Samples, truth: GroundTruth,
-                    vectors: list[tuple[Layout, list[int]]] | None = None) -> list[Candidate]:
+                    vectors: list[tuple[Layout, list[int]]] | None = None,
+                    references: dict[tuple[str, Layout], list[str]] | None = None) -> list[Candidate]:
+    """references: (신호, 배치) → 출처. 없으면 기본 참고 해석(references.json)."""
     signal = signals.BY_KEY[truth.signal_key]
     tol = truth.tolerance
     offsets = TEMPERATURE_OFFSETS if signal.unit == "°C" else (0,)
-    references = reference_index()
+    references = reference_index() if references is None else references
     found: dict[tuple, Candidate] = {}
     for base, raws in vectors if vectors is not None else _raw_vectors(samples):
         distinct = sorted(set(raws))
@@ -211,10 +213,11 @@ def _prefer(new: Candidate, old: Candidate) -> bool:
     return new.layout.width < old.layout.width
 
 
-def search(samples: Samples, truths: list[GroundTruth]) -> dict[str, list[Candidate]]:
+def search(samples: Samples, truths: list[GroundTruth],
+           references: dict[tuple[str, Layout], list[str]] | None = None) -> dict[str, list[Candidate]]:
     """신호마다 후보를 찾고, 점수가 높은 신호부터 바이트를 차지하게 해 겹치는 해석을 걸러 낸다."""
     vectors = list(_raw_vectors(samples))
-    per_signal = {truth.signal_key: find_candidates(samples, truth, vectors) for truth in truths}
+    per_signal = {truth.signal_key: find_candidates(samples, truth, vectors, references) for truth in truths}
     order = sorted(per_signal, key=lambda key: -(per_signal[key][0].score if per_signal[key] else 0))
     claimed: list[tuple[int, int, int, int]] = []
     result: dict[str, list[Candidate]] = {}

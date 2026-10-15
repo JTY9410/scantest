@@ -19,7 +19,13 @@ from app.modules.accounts.models import User
 from app.modules.canlab.engine import signals
 from app.modules.canlab.engine.decode import diagnose
 from app.modules.canlab.models import CanDataset, DatasetKind, DatasetSource, DiagnosticReport, ScanLogic
-from app.modules.canlab.service import _describe_dtcs, _trace_summary, active_logic, active_rule_refs
+from app.modules.canlab.service import (
+    _describe_dtcs,
+    _trace_summary,
+    active_logic,
+    active_rule_refs,
+    record_incidents,
+)
 from app.modules.obd.models import ObdDialect
 from app.modules.scanner import pdf
 from app.modules.scanner.interpret import detect_protocol, interpret, record_text
@@ -117,7 +123,7 @@ def _add_error(result: dict, group: str, label: str, status: str, message: str, 
         result["status"] = "partial"
 
 
-def _check_logic(result: dict, logic: ScanLogic | None) -> None:
+def _check_logic(result: dict, logic: ScanLogic | None, car: dict | None = None) -> None:
     """적용 중 스캔 로직이 위스캔과 같은 결과를 내는지 점검해 문제를 '로직 문제'로 남긴다.
     로직 명령이 성공하지 않았거나, 로직 수식으로 값을 읽지 못했으면 문제다.
     로직 명령은 11비트 CAN 주소만 담으므로 11비트 CAN 차량에서만 점검한다."""
@@ -139,7 +145,7 @@ def _check_logic(result: dict, logic: ScanLogic | None) -> None:
             continue
         _add_logic_error(result, command.get("label") or f"{command['header']} {command['command']}",
                          command["header"], command["command"], message, step)
-    active = {r.rule_id for r in active_rule_refs()}
+    active = {r.rule_id for r in active_rule_refs(car)}
     for rule in logic.rules:
         value = result["battery"].get(rule["signal_key"])
         if rule["rule_id"] not in active or (value and value.get("rule_id") == rule["rule_id"]):
@@ -182,7 +188,7 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
                                                   "dialect": dialect, "started": started.isoformat()})
     trace = None
     try:
-        result, trace = interpret(steps, active_rule_refs(), record, car)
+        result, trace = interpret(steps, active_rule_refs(car or None), record, car)
     except Exception as exc:  # 해석 오류도 스캔 기록으로 남긴다
         current_app.logger.exception("스캔 결과 해석 실패")
         result = _failed_result(steps, f"결과를 해석하지 못했습니다({type(exc).__name__}). 통신 기록은 저장했습니다.")
@@ -190,7 +196,8 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
         _add_error(result, "lookup", "차량정보 조회", "lookup_error", str(lookup_error), first=True)
     if client_error:
         _add_error(result, "client", "스캔 진행", "client_error", str(client_error))
-    _check_logic(result, active_logic())
+    logic = active_logic(car or None)
+    _check_logic(result, logic, car or None)
     matched = _describe(result["dtcs"])
     if result["vin"] and car.get("diag_car_id"):
         result["vin_match"] = result["vin"] == str(car["diag_car_id"]).upper()
@@ -241,6 +248,7 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     )
     db.session.add(scan)
     db.session.flush()
+    record_incidents(scan.id, logic, result["errors"])
     for code in {c.id: c for c in matched.values()}.values():
         db.session.add(ScanCode(type=scan.type, scan_id=scan.id, code_id=code.id))
     document = _save_document(scan)

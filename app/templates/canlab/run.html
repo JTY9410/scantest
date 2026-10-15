@@ -6,18 +6,64 @@
 {{ badge(status, {"확정": "success", "가설": "warning", "UNKNOWN": "danger"}.get(status, "")) }}
 {%- endmacro %}
 
+{% macro structure_text(s) -%}
+{% if s %}{{ s.length }}바이트 · 표본 {{ s.samples }}{% if s.varying %} · 변하는 바이트 {{ s.varying[:8]|join(",") }}{% if s.varying|length > 8 %}…{% endif %}{% endif %}{% else %}-{% endif %}
+{%- endmacro %}
+
 {% block content %}
+{% set vehicle = run.vehicle or {} %}
 {{ page_header("역산 결과 #" ~ run.id,
-               run.created_at|kst ~ " · " ~ run.duration_ms ~ "ms · 위스캔 #" ~ (run.truth_dataset_id or "-") ~ " · 적용한 규칙 " ~ run.activated_count ~ "개",
-               back=(url_for('canlab.analysis'), "역산 분석")) }}
+               (vehicle.car_no ~ " · " if vehicle.car_no else "") ~ run.scope_label ~ " · " ~ (run.created_at|kst) ~ " · " ~ run.duration_ms ~ "ms",
+               back=(url_for('canlab.analysis'), "데이터입력분석")) }}
 {% include "canlab/_tabs.html" %}
+
+{% if vehicle %}
+<section class="card card-body mb-6" aria-labelledby="vehicle-title">
+  <h2 id="vehicle-title" class="text-lg font-bold">차량</h2>
+  <dl class="dl mt-3">
+    {% for key, label in [("car_no", "차량번호"), ("maker", "제조사"), ("model", "모델"), ("submodel", "세부모델"), ("grade", "등급"), ("year", "세부등급(연식)"), ("registered", "최초등록일")] %}
+    <dt>{{ label }}</dt><dd>{{ vehicle[key] or "-" }}</dd>
+    {% endfor %}
+  </dl>
+</section>
+{% endif %}
+
+<section class="card mb-6 overflow-hidden" aria-labelledby="interpret-title">
+  <div class="card-body pb-0">
+    <h2 id="interpret-title" class="text-lg font-bold">1. 리버스 명령·결과 해석</h2>
+    <p class="mt-1 text-sm text-muted">리버스데이터에서 추출한 데이터 조회 명령과 응답을 참고자료(승인한 자료, OBDb, 기본 참고 해석)로 해석했습니다. 물리 범위 밖의 값은 뺐습니다.
+      <a class="underline" href="{{ url_for('canlab.reference_list') }}">참고자료 관리</a></p>
+  </div>
+  {% if run.interpretation %}
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">명령</th><th scope="col">응답(결과)</th><th scope="col" class="num">표본</th><th scope="col">해석</th></tr></thead>
+    <tbody>
+      {% for row in run.interpretation %}
+      <tr>
+        <td data-primary class="mono font-semibold">{{ row.header }} {{ row.command }}</td>
+        <td data-label="응답" class="mono text-sm break-all">{{ row.example }}</td>
+        <td data-label="표본" class="num">{{ row.samples }}</td>
+        <td data-label="해석" class="text-sm">
+          {% for v in row["values"][:6] %}
+          <div>{{ v.label }} <strong class="tabular-nums">{{ v.value }} {{ v.unit }}</strong> <span class="mono text-muted">{{ v.formula }}</span> <span class="text-muted">({{ v.sources|join(", ") }})</span></div>
+          {% else %}<span class="text-muted">참고자료에 해석이 없습니다.</span>{% endfor %}
+          {% if row["values"]|length > 6 %}<div class="text-muted">외 {{ row["values"]|length - 6 }}개</div>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("해석할 리버스 응답이 없습니다.") }}
+  {% endif %}
+</section>
 
 {% set commands = run.commands or {} %}
 <section class="card mb-6 overflow-hidden" aria-labelledby="commands-title">
   <div class="card-body pb-0">
-    <h2 id="commands-title" class="text-lg font-bold">1. 명령 비교</h2>
+    <h2 id="commands-title" class="text-lg font-bold">2. 위스캔 통신기록 대조</h2>
     <p class="mt-1 text-sm text-muted">공통 {{ (commands.common or [])|length }} · 위스캔에만 {{ (commands.wescan_only or [])|length }} · 리버스에만 {{ (commands.reverse_only or [])|length }}.
-      위스캔 결과를 내려면 '공통'과 '위스캔에만' 명령을 보내야 합니다.</p>
+      위스캔 결과를 내려면 '공통'과 '위스캔에만' 명령을 보내야 합니다. 공통 명령은 위스캔·리버스 응답의 길이와 값이 바뀌는 바이트를 나란히 보여 줍니다.</p>
   </div>
   {% set rows = [] %}
   {% for group, label in [("common", "공통"), ("wescan_only", "위스캔에만"), ("reverse_only", "리버스에만")] %}
@@ -25,13 +71,20 @@
   {% endfor %}
   {% if rows %}
   <table class="rtable mt-3">
-    <thead><tr><th scope="col">명령</th><th scope="col">구분</th><th scope="col" class="num">위스캔·리버스 횟수</th><th scope="col">응답 예시</th><th scope="col">스캔 로직</th></tr></thead>
+    <thead><tr><th scope="col">명령</th><th scope="col">구분</th><th scope="col" class="num">위스캔·리버스 횟수</th><th scope="col">응답 구조(위스캔 / 리버스)</th><th scope="col">응답 예시</th><th scope="col">스캔 로직</th></tr></thead>
     <tbody>
       {% for label, c in rows %}
       <tr>
         <td data-primary class="mono font-semibold">{{ c.header }} {{ c.command }}</td>
         <td data-label="구분">{{ badge(label, {"공통": "success", "위스캔에만": "warning"}.get(label, "")) }}</td>
         <td data-label="횟수" class="num">{{ c.wescan_count }} · {{ c.reverse_count }}</td>
+        <td data-label="응답 구조" class="text-sm">
+          {% if c.structure %}
+          <div>{{ structure_text(c.structure.wescan) }}</div>
+          <div>{{ structure_text(c.structure.reverse) }}</div>
+          {{ badge("길이 같음", "success") if c.structure.same_length else badge("길이 다름", "warning") }}
+          {% else %}-{% endif %}
+        </td>
         <td data-label="응답 예시" class="mono text-sm break-all">{{ c.wescan_example or c.reverse_example or "-" }}</td>
         <td data-label="스캔 로직">{{ badge("가능", "success") if c.sendable else badge("보내지 않음", "") }}</td>
       </tr>
@@ -43,7 +96,7 @@
   {% endif %}
 </section>
 
-<h2 class="mb-2 text-lg font-bold">2. 신호별 수식과 분석 코드</h2>
+<h2 class="mb-2 text-lg font-bold">3. 위스캔 최종값 일치(적용 로직과 명령)</h2>
 <p class="mb-4 text-sm text-muted">
   <strong class="text-fg">확정</strong>: 위스캔 최종값과 일치하고 모든 검증을 통과 ·
   <strong class="text-fg">가설</strong>: 맞는 해석은 있으나 검증 미통과 ·
@@ -58,8 +111,7 @@
         <h3 id="sig-{{ key }}" class="font-bold">{{ item.label }}</h3>
         <p class="mt-1 text-sm text-muted">위스캔 <strong class="tabular-nums text-fg">{{ item.truth }} {{ item.unit }}</strong>
           {% if item.decoded is defined %} · 해석 <strong class="tabular-nums text-fg">{{ item.decoded }} {{ item.unit }}</strong>{% endif %}
-          {% if item.formula %} · <span class="mono">{{ item.formula }}</span>{% endif %}
-          {% if item.outcome %} · {{ item.outcome }}{% endif %}</p>
+          {% if item.formula %} · <span class="mono">{{ item.formula }}</span>{% endif %}</p>
         <ul class="mt-2 grid gap-1 text-sm">
           {% for reason in item.reasons %}<li>· {{ reason }}</li>{% endfor %}
         </ul>
@@ -77,18 +129,18 @@
     {% endif %}
     {% if item.candidates %}
     <table class="rtable">
-      <thead><tr><th scope="col">후보 수식</th><th scope="col">출처</th><th scope="col" class="num">해석값</th><th scope="col" class="num">오차</th><th scope="col" class="num">일치율</th><th scope="col" class="num">점수</th><th scope="col">참고</th></tr></thead>
+      <thead><tr><th scope="col">후보 수식</th><th scope="col">명령</th><th scope="col" class="num">해석값</th><th scope="col" class="num">오차</th><th scope="col" class="num">일치율</th><th scope="col" class="num">점수</th><th scope="col">참고</th></tr></thead>
       <tbody>
         {% for c in item.candidates %}
         <tr>
           <td data-primary class="mono text-sm">{{ c.formula }}</td>
-          <td data-label="출처" class="mono text-sm">{{ c.source }}</td>
+          <td data-label="명령" class="mono text-sm">{{ c.source }}</td>
           <td data-label="해석값" class="num">{{ c.decoded }}</td>
           <td data-label="오차" class="num">{{ c.error }}</td>
           <td data-label="일치율" class="num">{{ (c.support * 100)|round|int }}%</td>
           <td data-label="점수" class="num">{{ c.score }}</td>
           <td data-label="참고" class="text-sm">
-            {% if c.references %}{{ badge("참고자료 일치", "info") }}{% endif %}
+            {% for source in (c.references or [])[:2] %}{{ badge(source, "info") }} {% endfor %}
             {% if c.rivals %}{{ badge("경합 " ~ c.rivals, "warning") }}{% endif %}
             {% if c.conflict %}{{ badge("바이트 겹침", "danger") }}{% endif %}
           </td>
@@ -102,11 +154,11 @@
 </div>
 
 <section class="card card-body mt-6" aria-labelledby="apply-title">
-  <h2 id="apply-title" class="text-lg font-bold">3. 스캔하기에 적용</h2>
-  <p class="mt-1 text-sm text-muted">적용을 누르면 현재 스캔 로직(변경 전)과 이 분석 결과(변경 후)를 항목별로 비교하는 화면으로 갑니다. AI 최적안을 받아 보고, 고른 항목만 확정하면 다음 스캔부터 반영됩니다.</p>
+  <h2 id="apply-title" class="text-lg font-bold">디코딩 규칙 정하기</h2>
+  <p class="mt-1 text-sm text-muted">{{ run.scope_label }}에 지금 쓰는 디코딩 규칙(변경 전)과 이 분석 결과(변경 후)를 항목별로 비교하고, 같은 차종의 과거 데이터로 다시 읽어 본 결과를 함께 보여 줍니다. 적용 여부는 '디코딩 규칙'에서 관리자가 정합니다.</p>
   <form method="post" action="{{ url_for('canlab.apply_run', run_id=run.id) }}" class="mt-4">
     {{ action.csrf_token }}
-    <button class="btn btn-primary" type="submit">적용</button>
+    <button class="btn btn-primary" type="submit">디코딩 규칙 후보 만들기</button>
   </form>
 </section>
 {% endblock %}

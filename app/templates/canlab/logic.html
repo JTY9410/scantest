@@ -1,6 +1,6 @@
 {% extends "layouts/admin.html" %}
 {% from "components/ui.html" import page_header, badge, empty %}
-{% block title %}스캔 로직 v{{ logic.revision }}{% endblock %}
+{% block title %}디코딩 규칙 후보 v{{ logic.revision }}{% endblock %}
 
 {% macro side(item, which) -%}
 {% set s = item[which] %}
@@ -13,9 +13,11 @@
 
 {% block content %}
 {% set draft = logic.status == "draft" %}
-{{ page_header("스캔 로직 v" ~ logic.revision ~ " · " ~ logic.status_label,
-               "변경 전(현재 적용 중" ~ (" v" ~ logic.diff.base_revision if logic.diff.base_revision else ", 스캔 로직 없음") ~ ")과 변경 후(역산 #" ~ logic.diff.run_id ~ ")를 비교합니다.",
-               back=(url_for('canlab.run', run_id=logic.diff.run_id), "역산 결과 #" ~ logic.diff.run_id)) }}
+{% set base = (logic.diff.base_scope ~ " 로직 v" ~ logic.diff.base_revision) if logic.diff.base_revision else "적용 중 로직 없음" %}
+{% set source = ("차종 로직 확대(" ~ logic.diff.from_scope ~ ")") if logic.diff.from_logic else ("역산 #" ~ logic.diff.run_id) %}
+{{ page_header("디코딩 규칙 후보 v" ~ logic.revision ~ " · " ~ logic.status_label,
+               logic.scope_label ~ "에 적용합니다. 변경 전(" ~ base ~ ")과 변경 후(" ~ source ~ ")를 비교합니다.",
+               back=(url_for('canlab.run', run_id=logic.diff.run_id), "역산 결과 #" ~ logic.diff.run_id) if logic.diff.run_id else (url_for('canlab.rules'), "디코딩 규칙")) }}
 {% include "canlab/_tabs.html" %}
 
 {% set items = logic.diff["items"] %}
@@ -26,6 +28,37 @@
   <div class="card card-body"><p class="text-sm text-muted">{{ label }}</p><p class="mt-1 text-2xl font-bold tabular-nums">{{ counts[key] }}</p></div>
   {% endfor %}
 </section>
+
+{% set bt = logic.diff.backtest %}
+{% if bt %}
+<section class="card mt-6 overflow-hidden" aria-labelledby="backtest-title">
+  <div class="card-body pb-0">
+    <h2 id="backtest-title" class="text-lg font-bold">과거 데이터 비교</h2>
+    <p class="mt-1 text-sm text-muted">{{ bt.scope }}의 과거 통신기록 {{ bt.datasets|length }}개를 변경 전·후 수식으로 다시 읽었습니다.
+      최종값이 있는 기록은 일치 건수, 없는 기록은 물리 범위 안에서 읽힌 건수를 셉니다. 후보가 더 나쁘면 기본안을 '변경 전 유지'로 바꿉니다.</p>
+  </div>
+  {% if bt.signals %}
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">신호</th><th scope="col" class="num">기록·최종값</th><th scope="col" class="num">변경 전</th><th scope="col" class="num">변경 후</th><th scope="col">판정</th></tr></thead>
+    <tbody>
+      {% for item in items if item.kind == "signal" and bt.signals.get(item.signal_key) %}
+      {% set row = bt.signals[item.signal_key] %}
+      {% set metric = "match" if row.with_truth else "read" %}
+      <tr>
+        <td data-primary class="font-semibold">{{ item.label }}</td>
+        <td data-label="기록·최종값" class="num">{{ row.datasets }} · {{ row.with_truth }}</td>
+        <td data-label="변경 전" class="num">{{ row["before_" ~ metric] }} {{ "일치" if metric == "match" else "읽힘" }}</td>
+        <td data-label="변경 후" class="num">{{ row["after_" ~ metric] }} {{ "일치" if metric == "match" else "읽힘" }}</td>
+        <td data-label="판정">{{ badge(row.verdict, {"개선": "success", "악화": "danger"}.get(row.verdict, "")) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("비교할 수식이 없습니다.") }}
+  {% endif %}
+</section>
+{% endif %}
 
 {% if logic.ai_advice %}
 <section class="card card-body mt-6" aria-labelledby="ai-title">
@@ -43,7 +76,7 @@
 {% endif %}
 
 <form method="post" action="{{ url_for('canlab.confirm_logic', logic_id=logic.id) }}" class="mt-6"
-      data-confirm="고른 항목으로 스캔 로직을 적용할까요? 다음 스캔부터 바로 반영됩니다.">
+      data-confirm="고른 항목으로 {{ logic.scope_label }}에 적용할까요? 다음 스캔부터 바로 반영되며, 변경 이력에서 되돌릴 수 있습니다.">
   {{ action.csrf_token }}<input type="hidden" name="version" value="{{ logic.version }}">
   <section class="card overflow-hidden" aria-labelledby="diff-title">
     <h2 id="diff-title" class="card-body pb-0 text-lg font-bold">변경 전 · 변경 후 비교</h2>
@@ -60,7 +93,7 @@
           <td data-label="변경 후">{{ side(item, "after") }}</td>
           <td data-label="변화">{{ badge({"added": "추가", "changed": "변경", "removed": "분석에 없음", "same": "같음"}[item.change],
                                          {"added": "success", "changed": "warning"}.get(item.change, "")) }}</td>
-          <td data-label="추천" class="text-sm">{{ choices[rec.choice] }}{% if rec.reason %}<span class="block text-muted">{{ rec.reason }}</span>{% endif %}</td>
+          <td data-label="추천" class="text-sm">{{ choices[rec.choice] }}{% if rec.reason %}<span class="block text-muted">{{ rec.reason }}</span>{% endif %}{% if item.note %}<span class="block text-muted">{{ item.note }}</span>{% endif %}</td>
           <td data-label="선택">
             {% if draft %}
             <label class="sr-only" for="choice-{{ loop.index }}">{{ item.label }} 선택</label>
@@ -84,12 +117,20 @@
 
 {% if not draft %}
 <section class="card card-body mt-6" aria-labelledby="applied-title">
-  <h2 id="applied-title" class="text-lg font-bold">이 버전의 스캔 로직</h2>
+  <h2 id="applied-title" class="text-lg font-bold">이 버전의 디코딩 규칙</h2>
   <dl class="dl mt-3">
+    <dt>적용 범위</dt><dd>{{ logic.scope_label }}</dd>
     <dt>추가 명령</dt><dd class="mono text-sm">{% for c in logic.commands %}{{ c.header }} {{ c.command }}{{ ", " if not loop.last }}{% else %}-{% endfor %}</dd>
     <dt>수식</dt><dd class="text-sm">{% for r in logic.rules %}{{ r.signal_key }} v{{ r.revision }}({{ r.formula }}){{ ", " if not loop.last }}{% else %}-{% endfor %}</dd>
     <dt>적용</dt><dd>{{ logic.activated_at|kst if logic.activated_at else "-" }}</dd>
   </dl>
+  {% if logic.status == LogicStatus.ACTIVE and logic.maker and logic.model %}
+  <form method="post" action="{{ url_for('canlab.expand_logic', logic_id=logic.id) }}" class="mt-4">
+    {{ action.csrf_token }}
+    <button class="btn btn-secondary" type="submit">같은 제조사({{ logic.maker }})로 확대</button>
+    <span class="ml-2 text-sm text-muted">{{ logic.maker }}의 다른 차종 과거 데이터로 비교한 확대 후보를 만듭니다. 차종 규칙이 있는 차종은 차종 규칙을 먼저 씁니다.</span>
+  </form>
+  {% endif %}
 </section>
 {% endif %}
 {% endblock %}

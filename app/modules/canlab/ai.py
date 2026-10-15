@@ -1,4 +1,4 @@
-"""CAN 분석에서 쓰는 외부 AI 호출(결과지 판독, 보고서 요약, 스캔 로직 최적안).
+"""CAN 분석에서 쓰는 외부 AI 호출(결과지 판독, 보고서 요약, 스캔 로직 최적안, 참고자료 정리).
 
 관리자 'AI 연결'에서 'CAN 분석' 용도를 켠 연결만 쓴다. 키는 호출 순간에만 복호화한다.
 """
@@ -148,6 +148,34 @@ def advise_logic(items: list[dict]) -> tuple[dict[str, dict], str, str]:
     advice = {str(r.get("key")): {"choice": str(r.get("choice", "")), "reason": str(r.get("reason", ""))[:300]}
               for r in rows if isinstance(r, dict) and r.get("key")}
     return advice, str(data.get("summary", ""))[:1000], provider
+
+
+REFERENCE_SYSTEM = (
+    "너는 자동차 CAN·UDS 진단 자료에서 응답 바이트 해석 규칙을 옮겨 적는 엔지니어다. 자료에 적힌 것만 옮기고 "
+    "추측하거나 계산해서 만들지 않는다. 차대번호·차량번호 같은 개인정보는 넣지 않는다."
+)
+
+
+def extract_references(text: str, maker: str | None, model: str | None) -> tuple[list, str]:
+    """공개 자료 본문에서 (신호, 요청 ID, DID, 바이트 배치, 배율) 후보를 JSON으로 받는다. 검사는 호출한 쪽에서 한다."""
+    from app.modules.canlab.engine import signals
+
+    keys = "\n".join(f"{s.key}: {s.label} ({s.unit})" for s in signals.SIGNALS)
+    prompt = (
+        "다음 자료에서 진단 요청(UDS 22 DID 등)의 응답 바이트를 물리값으로 바꾸는 규칙을 찾아 JSON 배열로만 답하라. "
+        '각 원소: {"signal_key": 아래 신호 키 중 하나, "request_id": 요청 CAN ID 16진수(예: 7E4), '
+        '"did": DID 16진수 4자리(예: 0101), "start": 응답의 DID 뒤 데이터에서 시작 바이트(0부터), '
+        '"width": 바이트 수 1·2·4, "endian": "big" 또는 "little", "signed": true 또는 false, '
+        '"scale": 배율, "offset": 더하는 값, "note": 자료의 근거 한 줄}. 자료에 없는 신호는 넣지 않는다.\n\n'
+        f"차량: {maker or '-'} {model or '-'}\n신호 키:\n{keys}\n\n자료:\n{text[:30000]}"
+    )
+    answer, provider = ask(REFERENCE_SYSTEM, prompt)
+    match = re.search(r"\[.*\]", answer, re.DOTALL)
+    try:
+        rows = json.loads(match.group(0)) if match else []
+    except json.JSONDecodeError:
+        rows = []
+    return (rows if isinstance(rows, list) else []), provider
 
 
 def summarize_report(facts: dict) -> tuple[str, str]:

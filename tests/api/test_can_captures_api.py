@@ -3,6 +3,7 @@ from sqlalchemy import select
 from app.extensions import db
 from app.modules.canlab.engine.search import Layout
 from app.modules.canlab.models import CanDataset, DecodeRule, DiagnosticReport, RuleStatus
+from app.modules.scans import car_info
 from tests.canlab.synthetic import bms_0101, isotp_frames
 from tests.conftest import api_login
 
@@ -46,6 +47,35 @@ def test_capture_requests_follow_active_rules(app, client, make_user):
         {"header": "7E4", "command": "1902FF"},
         {"header": "7E4", "command": "22F190"},
     ]
+
+
+def test_capture_requests_with_car_no_use_that_cars_rules(app, client, make_user, monkeypatch):
+    cars = {"12가3456": {"diag_company": "기아", "diag_model": "EV6"},
+            "34나5678": {"diag_company": "현대", "diag_model": "아이오닉5"}}
+
+    def lookup(user, car_no, refresh=False):
+        if car_no not in cars:
+            raise car_info.CarInfoError("조회 결과 없음", 404, "not_found")
+        return cars[car_no], True
+
+    monkeypatch.setattr(car_info, "lookup", lookup)
+    make_user("tester1")
+    headers = api_login(client, "tester1")
+    with app.app_context():
+        layout = Layout(0x7E4, 0x0101, 4, 1, scale=0.5)
+        db.session.add(DecodeRule(signal_key="soc", revision=1, status=RuleStatus.ACTIVE, confidence=0.9,
+                                  evidence={}, formula=layout.formula(), maker="기아", model="EV6",
+                                  **layout.to_dict()))
+        db.session.commit()
+
+    def requests(car_no=None):
+        query = {"carNo": car_no} if car_no else {}
+        return client.get("/api/canCaptureRequests", headers=headers, query_string=query).get_json()["data"]
+
+    assert {"header": "7E4", "command": "220101"} in requests("12가3456")
+    assert requests("34나5678") == []
+    fallback = requests()
+    assert {"header": "7E4", "command": "220101"} in fallback and requests("99하9999") == fallback
 
 
 def test_capture_upload_returns_result_sheet_from_active_rules(app, client, make_user):

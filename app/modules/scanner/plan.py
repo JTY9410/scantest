@@ -136,8 +136,8 @@ def build_plan(car: dict | None = None, *, expand: bool = False) -> dict:
                 timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
 
     planned = {(s["header"], s["command"]) for s in steps}
-    logic = {(c["header"], c["command"]): c for c in logic_commands()}
-    for request in capture_requests():
+    logic = {(c["header"], c["command"]): c for c in logic_commands(car or None)}
+    for request in capture_requests(car or None):
         # 기능 주소(7DF) 요청은 계획의 기본 주소(header 없음)와 같다.
         header = None if request["header"] == "7DF" else request["header"]
         if (header, request["command"]) in planned:
