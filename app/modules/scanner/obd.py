@@ -55,6 +55,7 @@ STATUS_LABELS = {
     "timeout": "시간 초과", "device_error": "단말기 오류", "parse_error": "해석 오류",
     "server_error": "서버 오류", "skipped": "건너뜀", "disconnected": "연결 끊김",
     "lookup_error": "조회 실패", "client_error": "화면 오류", "pdf_error": "PDF 오류", "pending": "응답 지연",
+    "logic_error": "로직 문제",
 }
 # 이 ECU가 그 요청을 지원하지 않는다는 뜻의 NRC(지원 안 함 서비스·하위기능·DID, 기본 세션에서 지원 안 함)
 UNSUPPORTED_NRC = {0x11, 0x12, 0x31, 0x7E, 0x7F}

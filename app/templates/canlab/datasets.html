@@ -1,9 +1,9 @@
 {% extends "layouts/admin.html" %}
-{% from "components/ui.html" import page_header, badge, empty, field %}
-{% block title %}데이터·정답값{% endblock %}
+{% from "components/ui.html" import page_header, field %}
+{% block title %}전체 데이터{% endblock %}
 
 {% block content %}
-{{ page_header("데이터·정답값", "기초데이터(TRC), 결과지 PDF, 위스캔 기록을 올립니다. 파일은 4MB 이하, 같은 파일은 한 번만 등록됩니다.") }}
+{{ page_header("전체 데이터", "등록된 모든 통신 기록·결과지입니다. 파일은 4MB 이하, 같은 파일은 한 번만 등록됩니다.") }}
 {% include "canlab/_tabs.html" %}
 
 <section class="card card-body mb-6" aria-labelledby="upload-title">
@@ -18,27 +18,6 @@
   </form>
 </section>
 
-<section class="card overflow-hidden" aria-label="등록 데이터 목록">
-  {% if datasets %}
-  <table class="rtable">
-    <thead><tr><th scope="col">파일</th><th scope="col">종류</th><th scope="col">차량</th><th scope="col">요약</th><th scope="col">등록</th></tr></thead>
-    <tbody>
-      {% for d in datasets %}
-      <tr>
-        <td data-primary><a class="font-semibold underline" href="{{ url_for('canlab.dataset', dataset_id=d.id) }}">#{{ d.id }} {{ d.filename }}</a></td>
-        <td data-label="종류">{{ badge(d.kind_label, "info" if d.kind == "gscan_pdf" else ("ink" if d.kind == "gscan_trc" else "")) }}</td>
-        <td data-label="차량">{{ d.vehicle }}</td>
-        <td data-label="요약" class="tabular-nums text-sm">
-          {% if d.is_trace %}요청·응답 {{ d.summary.transactions }}건 · DID {{ d.summary.dids|length }}개{% else %}{{ d.summary.pages }}쪽{% endif %}
-          {% if d.truths %} · 정답값 {{ d.truths|selectattr("confirmed")|list|length }}/{{ d.truths|length }}{% endif %}
-        </td>
-        <td data-label="등록" class="text-sm">{{ d.created_at|kst }} · {{ d.source_label }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  {{ empty("등록된 데이터가 없습니다.", "G스캔 통신 TRC와 같은 순간의 결과지 PDF를 함께 올리면 수식을 찾을 수 있습니다.") }}
-  {% endif %}
-</section>
+{% set empty_title, empty_body = "등록된 데이터가 없습니다.", "위스캔값 입력과 리버스데이터 입력에서 올린 데이터, 블루투스 수집 기록이 모두 여기에 보입니다." %}
+{% include "canlab/_dataset_table.html" %}
 {% endblock %}

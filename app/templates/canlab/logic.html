@@ -1,0 +1,95 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge, empty %}
+{% block title %}스캔 로직 v{{ logic.revision }}{% endblock %}
+
+{% macro side(item, which) -%}
+{% set s = item[which] %}
+{% if not s %}<span class="text-muted">없음</span>
+{% elif item.kind == "command" %}<span class="mono">{{ s.header }} {{ s.command }}</span>
+{% else %}<span class="mono text-sm">{{ s.formula }}</span>
+  <span class="block text-sm text-muted">{% if which == "before" %}v{{ s.revision }} · {{ s.source }}{% else %}{{ s.status }} · 해석 {{ s.decoded }} / 위스캔 {{ s.truth }}{% endif %}</span>
+{% endif %}
+{%- endmacro %}
+
+{% block content %}
+{% set draft = logic.status == "draft" %}
+{{ page_header("스캔 로직 v" ~ logic.revision ~ " · " ~ logic.status_label,
+               "변경 전(현재 적용 중" ~ (" v" ~ logic.diff.base_revision if logic.diff.base_revision else ", 스캔 로직 없음") ~ ")과 변경 후(역산 #" ~ logic.diff.run_id ~ ")를 비교합니다.",
+               back=(url_for('canlab.run', run_id=logic.diff.run_id), "역산 결과 #" ~ logic.diff.run_id)) }}
+{% include "canlab/_tabs.html" %}
+
+{% set items = logic.diff["items"] %}
+{% set counts = {"added": 0, "changed": 0, "removed": 0, "same": 0} %}
+{% for i in items %}{% do counts.update({i.change: counts[i.change] + 1}) %}{% endfor %}
+<section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="변경 요약">
+  {% for key, label in [("added", "추가"), ("changed", "변경"), ("removed", "분석에 없음"), ("same", "같음")] %}
+  <div class="card card-body"><p class="text-sm text-muted">{{ label }}</p><p class="mt-1 text-2xl font-bold tabular-nums">{{ counts[key] }}</p></div>
+  {% endfor %}
+</section>
+
+{% if logic.ai_advice %}
+<section class="card card-body mt-6" aria-labelledby="ai-title">
+  <h2 id="ai-title" class="text-lg font-bold">{{ "AI 최적안 · " ~ logic.ai_advice.provider if logic.ai_advice.provider else "규칙 기반 기본안" }}</h2>
+  <p class="mt-2 whitespace-pre-line">{{ logic.ai_advice.summary }}</p>
+</section>
+{% endif %}
+
+{% if draft %}
+<form method="post" action="{{ url_for('canlab.advise_logic', logic_id=logic.id) }}" class="mt-6">
+  {{ action.csrf_token }}
+  <button class="btn btn-secondary" type="submit">AI 최적안 받기</button>
+  <span class="ml-2 text-sm text-muted">{{ "변경 전후 항목을 AI에 보내 항목별 추천과 이유를 받습니다." if ai_ready else "사용할 AI 연결이 없으면 규칙 기반 기본안을 보여 줍니다(설정 > AI 연결 'CAN 분석')." }}</span>
+</form>
+{% endif %}
+
+<form method="post" action="{{ url_for('canlab.confirm_logic', logic_id=logic.id) }}" class="mt-6"
+      data-confirm="고른 항목으로 스캔 로직을 적용할까요? 다음 스캔부터 바로 반영됩니다.">
+  {{ action.csrf_token }}<input type="hidden" name="version" value="{{ logic.version }}">
+  <section class="card overflow-hidden" aria-labelledby="diff-title">
+    <h2 id="diff-title" class="card-body pb-0 text-lg font-bold">변경 전 · 변경 후 비교</h2>
+    {% if items %}
+    <table class="rtable mt-3">
+      <thead><tr><th scope="col">항목</th><th scope="col">변경 전</th><th scope="col">변경 후</th><th scope="col">변화</th><th scope="col">추천</th><th scope="col">{{ "선택" if draft else "적용한 선택" }}</th></tr></thead>
+      <tbody>
+        {% for item in items %}
+        {% set rec = recommended[item.key] %}
+        {% set chosen = (logic.diff.chosen or {}).get(item.key) %}
+        <tr>
+          <td data-primary><span class="block text-sm text-muted">{{ "명령" if item.kind == "command" else "수식" }}</span><span class="font-semibold">{{ item.label }}</span></td>
+          <td data-label="변경 전">{{ side(item, "before") }}</td>
+          <td data-label="변경 후">{{ side(item, "after") }}</td>
+          <td data-label="변화">{{ badge({"added": "추가", "changed": "변경", "removed": "분석에 없음", "same": "같음"}[item.change],
+                                         {"added": "success", "changed": "warning"}.get(item.change, "")) }}</td>
+          <td data-label="추천" class="text-sm">{{ choices[rec.choice] }}{% if rec.reason %}<span class="block text-muted">{{ rec.reason }}</span>{% endif %}</td>
+          <td data-label="선택">
+            {% if draft %}
+            <label class="sr-only" for="choice-{{ loop.index }}">{{ item.label }} 선택</label>
+            <select class="input" id="choice-{{ loop.index }}" name="choice-{{ item.key }}">
+              {% for option in options(item) %}<option value="{{ option }}" {% if option == rec.choice %}selected{% endif %}>{{ "유지" if item.change == "same" and option == "before" else choices[option] }}</option>{% endfor %}
+            </select>
+            {% else %}{{ choices.get(chosen, "-") }}{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    {{ empty("비교할 항목이 없습니다.", "분석에서 찾은 명령·수식과 현재 적용 중인 로직이 모두 비어 있습니다.") }}
+    {% endif %}
+  </section>
+  {% if draft %}
+  <div class="mt-4"><button class="btn btn-primary" type="submit">고른 항목으로 적용 확정</button></div>
+  {% endif %}
+</form>
+
+{% if not draft %}
+<section class="card card-body mt-6" aria-labelledby="applied-title">
+  <h2 id="applied-title" class="text-lg font-bold">이 버전의 스캔 로직</h2>
+  <dl class="dl mt-3">
+    <dt>추가 명령</dt><dd class="mono text-sm">{% for c in logic.commands %}{{ c.header }} {{ c.command }}{{ ", " if not loop.last }}{% else %}-{% endfor %}</dd>
+    <dt>수식</dt><dd class="text-sm">{% for r in logic.rules %}{{ r.signal_key }} v{{ r.revision }}({{ r.formula }}){{ ", " if not loop.last }}{% else %}-{% endfor %}</dd>
+    <dt>적용</dt><dd>{{ logic.activated_at|kst if logic.activated_at else "-" }}</dd>
+  </dl>
+</section>
+{% endif %}
+{% endblock %}

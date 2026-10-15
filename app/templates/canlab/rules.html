@@ -3,8 +3,43 @@
 {% block title %}디코딩 규칙{% endblock %}
 
 {% block content %}
-{{ page_header("디코딩 규칙", "신호마다 적용 중인 수식은 하나입니다. 이전 버전을 다시 적용하면 되돌리기가 됩니다. 운영 결과지에는 즉시 반영됩니다.") }}
+{{ page_header("디코딩 규칙", "신호마다 적용 중인 수식은 하나입니다. 이전 버전을 다시 적용하면 되돌리기가 됩니다. 운영 결과지와 스캔하기에 즉시 반영됩니다.") }}
 {% include "canlab/_tabs.html" %}
+
+<section class="card mb-6 overflow-hidden" aria-labelledby="logic-title">
+  <div class="card-body pb-0">
+    <h2 id="logic-title" class="text-lg font-bold">스캔 로직 버전</h2>
+    <p class="mt-1 text-sm text-muted">스캔하기가 추가로 보내는 명령과 쓰는 수식 묶음입니다. 이전 버전을 되돌리면 그 버전의 수식도 함께 되돌립니다.</p>
+  </div>
+  {% if logics %}
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">버전</th><th scope="col">상태</th><th scope="col" class="num">명령·수식</th><th scope="col">근거</th><th scope="col">만든 때</th><th scope="col"><span class="sr-only">관리</span></th></tr></thead>
+    <tbody>
+      {% for logic in logics %}
+      <tr>
+        <td data-primary><a class="font-semibold underline" href="{{ url_for('canlab.logic', logic_id=logic.id) }}">v{{ logic.revision }}</a></td>
+        <td data-label="상태">{{ badge(logic.status_label, {"active": "success", "draft": "warning"}.get(logic.status, "")) }}</td>
+        <td data-label="명령·수식" class="num">{{ logic.commands|length }} · {{ logic.rules|length }}</td>
+        <td data-label="근거">{% if logic.analysis_run_id %}<a class="text-sm underline" href="{{ url_for('canlab.run', run_id=logic.analysis_run_id) }}">역산 #{{ logic.analysis_run_id }}</a>{% else %}-{% endif %}</td>
+        <td data-label="만든 때" class="text-sm">{{ logic.created_at|kst }}{% if logic.creator %} · {{ logic.creator.name }}{% endif %}</td>
+        <td data-label="관리">
+          {% if logic.status == LogicStatus.RETIRED %}
+          <form method="post" action="{{ url_for('canlab.restore_logic', logic_id=logic.id) }}" data-confirm="스캔 로직 v{{ logic.revision }}으로 되돌릴까요? 그 버전의 수식도 함께 되돌립니다.">
+            {{ action.csrf_token }}<input type="hidden" name="version" value="{{ logic.version }}">
+            <button class="btn btn-secondary" type="submit">되돌리기<span class="sr-only"> (v{{ logic.revision }})</span></button>
+          </form>
+          {% elif logic.status == LogicStatus.DRAFT %}
+          <a class="btn btn-secondary" href="{{ url_for('canlab.logic', logic_id=logic.id) }}">검토<span class="sr-only"> (v{{ logic.revision }})</span></a>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("스캔 로직이 없습니다.", "역산 결과에서 '적용'을 누르면 변경 전후를 비교한 뒤 스캔 로직을 만듭니다.") }}
+  {% endif %}
+</section>
 
 {% if groups %}
 <div class="grid gap-4">
@@ -47,6 +82,6 @@
   {% endfor %}
 </div>
 {% else %}
-<section class="card">{{ empty("규칙이 없습니다.", "역산 분석을 실행하면 검증을 통과한 수식이 여기에 생깁니다.") }}</section>
+<section class="card">{{ empty("규칙이 없습니다.", "역산 결과에서 '적용'으로 고른 수식이 여기에 생깁니다.") }}</section>
 {% endif %}
 {% endblock %}

@@ -3,7 +3,7 @@
 {% block title %}CAN 역분석{% endblock %}
 
 {% block content %}
-{{ page_header("CAN 역분석", "G스캔 기록과 결과지로 수식을 찾아 검증하고, 통과한 수식을 위스캔 결과지에 바로 적용합니다.") }}
+{{ page_header("CAN 역분석", "위스캔 스캔 데이터와 리버스 데이터를 비교해 위스캔 결과를 내는 명령·수식을 찾고, 확인한 로직을 스캔하기에 적용합니다.") }}
 {% include "canlab/_tabs.html" %}
 
 <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="현황">
@@ -23,11 +23,11 @@
 <section class="card card-body mt-6" aria-labelledby="flow-title">
   <h2 id="flow-title" class="text-lg font-bold">작업 순서</h2>
   <ol class="mt-3 grid gap-3 text-[0.9375rem]">
-    <li><strong>1. 기초데이터 올리기</strong> — G스캔 통신 TRC(같은 순간의 결과지 PDF와 짝)를 올립니다.</li>
-    <li><strong>2. 정답값 만들기</strong> — 결과지 PDF를 올리고 쪽마다 AI 판독을 누르거나 값을 직접 붙여 넣은 뒤, 맞는 값만 체크합니다.
-      {% if not stats.ai_ready %}<span class="block text-sm text-muted">AI 판독을 쓰려면 설정 &gt; AI 연결에서 'CAN 분석' 용도를 켜세요. 없어도 직접 입력으로 진행할 수 있습니다.</span>{% endif %}</li>
-    <li><strong>3. 역산 실행</strong> — 통신 기록과 정답값을 고르면 바이트 위치·크기·부호·배율을 모두 시험해 정답과 맞는 수식을 찾습니다. 검증을 통과한 수식은 새 버전으로 자동 적용되고, 이전 버전은 보관됩니다.</li>
-    <li><strong>4. 운영 결과지</strong> — 위스캔 TRC나 블루투스로 직접 수집한 기록에 적용 중인 수식을 써서 결과지와 그래프 보고서를 만듭니다.</li>
+    <li><strong>1. 위스캔값 입력</strong> — 위스캔으로 스캔할 때의 통신 기록과 위스캔 최종값을 함께 올립니다. 명령과 산출 결과를 바로 추출합니다.</li>
+    <li><strong>2. 리버스데이터 입력</strong> — 리버스한 TRC를 올립니다. 명령(요청)과 응답을 바로 추출합니다.</li>
+    <li><strong>3. 역산 분석</strong> — 두 데이터를 비교해 위스캔 결과를 내는 명령, 수식(바이트 위치·크기·부호·배율), 분석 코드를 찾습니다. 규칙은 바뀌지 않습니다.</li>
+    <li><strong>4. 적용</strong> — 결과 화면의 '적용'에서 변경 전후 로직을 비교하고 AI 최적안을 받아 고른 항목만 확정합니다. 다음 스캔부터 반영되고, 문제가 생기면 스캔 결과 화면에 팝업으로 기록됩니다.
+      {% if not stats.ai_ready %}<span class="block text-sm text-muted">AI 최적안을 쓰려면 설정 &gt; AI 연결에서 'CAN 분석' 용도를 켜세요. 없으면 규칙 기반 기본안을 보여 줍니다.</span>{% endif %}</li>
   </ol>
 </section>
 
@@ -35,14 +35,14 @@
 <section class="card mt-6 overflow-hidden" aria-labelledby="recent-title">
   <h2 id="recent-title" class="card-body pb-0 text-lg font-bold">최근 역산</h2>
   <table class="rtable mt-3">
-    <thead><tr><th scope="col">번호</th><th scope="col">실행</th><th scope="col" class="num">신호</th><th scope="col" class="num">새로 적용</th></tr></thead>
+    <thead><tr><th scope="col">번호</th><th scope="col">실행</th><th scope="col" class="num">신호</th><th scope="col" class="num">적용</th></tr></thead>
     <tbody>
       {% for run in runs %}
       <tr>
         <td data-primary><a class="font-semibold underline" href="{{ url_for('canlab.run', run_id=run.id) }}">#{{ run.id }}</a></td>
         <td data-label="실행">{{ run.created_at|kst }}</td>
         <td data-label="신호" class="num">{{ run.result|length }}</td>
-        <td data-label="새로 적용" class="num">{{ run.activated_count }}</td>
+        <td data-label="적용" class="num">{{ run.activated_count }}</td>
       </tr>
       {% endfor %}
     </tbody>

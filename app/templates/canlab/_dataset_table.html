@@ -1,0 +1,25 @@
+{# 등록 데이터 목록. datasets와 빈 목록 안내(empty_title, empty_body)를 받는다. #}
+{% from "components/ui.html" import badge, empty %}
+<section class="card overflow-hidden" aria-label="등록 데이터 목록">
+  {% if datasets %}
+  <table class="rtable">
+    <thead><tr><th scope="col">파일</th><th scope="col">종류</th><th scope="col">차량</th><th scope="col">요약</th><th scope="col">등록</th></tr></thead>
+    <tbody>
+      {% for d in datasets %}
+      <tr>
+        <td data-primary><a class="font-semibold underline" href="{{ url_for('canlab.dataset', dataset_id=d.id) }}">#{{ d.id }} {{ d.filename }}</a></td>
+        <td data-label="종류">{{ badge(d.kind_label, "info" if d.kind == "gscan_pdf" else ("ink" if d.kind == "gscan_trc" else "")) }}</td>
+        <td data-label="차량">{{ d.vehicle }}</td>
+        <td data-label="요약" class="tabular-nums text-sm">
+          {% if d.is_trace %}요청·응답 {{ d.summary.transactions }}건 · 명령 {{ (d.summary.commands or [])|length }}개 · DID {{ d.summary.dids|length }}개{% else %}{{ d.summary.pages }}쪽{% endif %}
+          {% if d.truths %} · 최종값(정답) {{ d.truths|selectattr("confirmed")|list|length }}/{{ d.truths|length }}{% endif %}
+        </td>
+        <td data-label="등록" class="text-sm">{{ d.created_at|kst }} · {{ d.source_label }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty(empty_title, empty_body) }}
+  {% endif %}
+</section>

@@ -2,6 +2,7 @@ import os
 
 import click
 from flask import Flask
+from flask.cli import AppGroup
 from sqlalchemy import select
 
 from app.core import audit
@@ -29,3 +30,21 @@ def register_cli(app: Flask) -> None:
         audit.record("관리자 등록", "User", user.id, changes={"tid": tid}, message="create-admin")
         db.session.commit()
         click.echo(f"관리자 {tid} 계정을 만들었습니다. 첫 로그인 후 비밀번호를 바꾸세요.")
+
+    canlab = AppGroup("canlab", help="CAN 분석 데이터 관리")
+
+    @canlab.command("reset")
+    @click.option("--yes", is_flag=True, help="건수 확인 후 실제로 삭제한다")
+    def canlab_reset(yes: bool) -> None:
+        """CAN 분석 데이터를 모두 지운다. --yes 없이 실행하면 건수만 보여 준다."""
+        from app.modules.canlab import service
+
+        for table, count in service.reset_counts().items():
+            click.echo(f"{table}: {count}")
+        if not yes:
+            click.echo("삭제하려면 --yes를 붙여 다시 실행하세요.")
+            return
+        service.reset_all()
+        click.echo("CAN 분석 데이터를 모두 삭제했습니다.")
+
+    app.cli.add_command(canlab)

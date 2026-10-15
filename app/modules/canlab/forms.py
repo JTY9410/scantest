@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileRequired
-from wtforms import BooleanField, HiddenField, SelectField, SelectMultipleField, StringField, TextAreaField
+from wtforms import HiddenField, SelectField, SelectMultipleField, StringField, TextAreaField
 from wtforms.validators import DataRequired, Length, Optional
 from wtforms.widgets import CheckboxInput, ListWidget
 
@@ -23,12 +23,25 @@ class MultiCheckboxField(SelectMultipleField):
     option_widget = CheckboxInput()
 
 
+class WescanForm(FlaskForm):
+    file = FileField("위스캔 통신 기록", validators=[FileRequired("위스캔 통신 기록 파일을 고르세요.")])
+    values_file = FileField("위스캔 최종값 파일")
+    values_text = TextAreaField("위스캔 최종값 붙여넣기", validators=[Optional()])
+    vehicle = StringField("차량", validators=[DataRequired("차량 이름을 입력하세요."), Length(max=100)])
+    note = StringField("메모", validators=[Optional(), Length(max=500)])
+
+
+class ReverseForm(FlaskForm):
+    file = FileField("리버스 데이터(TRC)", validators=[FileRequired("리버스 데이터 파일을 고르세요.")])
+    vehicle = StringField("차량", validators=[DataRequired("차량 이름을 입력하세요."), Length(max=100)])
+    note = StringField("메모", validators=[Optional(), Length(max=500)])
+
+
 class AnalysisForm(FlaskForm):
-    trace_ids = MultiCheckboxField("기초데이터(통신 기록)", coerce=int,
-                                   validators=[DataRequired("통신 기록을 하나 이상 고르세요.")])
-    truth_dataset_id = SelectField("정답값 출처", coerce=int,
-                                   validators=[DataRequired("정답값이 있는 데이터를 고르세요.")])
-    apply = BooleanField("검증을 통과한 수식을 바로 적용", default=True)
+    wescan_id = SelectField("위스캔 데이터(최종값)", coerce=int,
+                            validators=[DataRequired("최종값이 있는 위스캔 데이터를 고르세요.")])
+    reverse_ids = MultiCheckboxField("리버스 데이터", coerce=int,
+                                     validators=[DataRequired("리버스 데이터를 하나 이상 고르세요.")])
 
 
 class ReportForm(FlaskForm):

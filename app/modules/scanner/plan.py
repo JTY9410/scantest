@@ -6,7 +6,7 @@
   진단 세션 변경(10)·보안 접근(27)·쓰기(2E)·루틴(31)은 보내지 않는다(기본 세션에서 읽기만).
 - 제조사별: 현대·기아·제네시스 전기·하이브리드 BMS(7E4) 22 0101/0105와 구형 KWP 21 01/05,
   OBDb 정의가 있는 차종은 셀 전압 DID도 읽는다.
-- CAN 분석에서 적용한 규칙의 요청도 함께 보낸다.
+- CAN 분석에서 적용한 스캔 로직의 명령과 규칙의 요청도 함께 보낸다.
 
 단계 조건(when)은 클라이언트(웹·앱·LTE)가 같은 규칙으로 평가한다.
 - pid / pid02 / info09 / mid: 모드 01·02·09·06 지원 비트맵에 그 번호가 있을 때만(비트맵을 못 읽었으면 보냄)
@@ -19,7 +19,7 @@ dtcs는 같은 ECU의 19 02 응답 중 확정 고장코드마다 19 04 <DTC> FF(
 """
 
 from app.modules.canlab.engine import obdb
-from app.modules.canlab.service import capture_requests
+from app.modules.canlab.service import capture_requests, logic_commands
 from app.modules.scanner.obd import ECU_IDENT_DIDS, FREEZE_PIDS, MODE06_RANGES, PIDS, SUPPORT_PIDS
 
 HKMC = ("현대", "기아", "제네시스", "HYUNDAI", "KIA", "GENESIS")
@@ -136,9 +136,17 @@ def build_plan(car: dict | None = None, *, expand: bool = False) -> dict:
                 timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
 
     planned = {(s["header"], s["command"]) for s in steps}
+    logic = {(c["header"], c["command"]): c for c in logic_commands()}
     for request in capture_requests():
-        if (request["header"], request["command"]) not in planned:
-            add("rule", f"적용 규칙 요청 {request['header']} {request['command']}", request["command"],
-                header=request["header"], timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
+        # 기능 주소(7DF) 요청은 계획의 기본 주소(header 없음)와 같다.
+        header = None if request["header"] == "7DF" else request["header"]
+        if (header, request["command"]) in planned:
+            continue
+        planned.add((header, request["command"]))
+        command = logic.get((request["header"], request["command"]))
+        label = (f"스캔 로직: {command['label']}" if command
+                 else f"적용 규칙 요청 {request['header']} {request['command']}")
+        add("rule", label, request["command"], header=header, timeout=UDS_TIMEOUT_MS, optional=True,
+            bus="can" if header else None)
 
     return {"steps": steps, "notes": [DOIP_NOTE]}

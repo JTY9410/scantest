@@ -32,6 +32,7 @@
   --wc-color-warning-bg: #fff3df;
   --wc-color-info: #1d4ed8;
   --wc-color-info-bg: #e9f0ff;
+  --wc-color-backdrop: rgb(16 18 24 / 0.45);
 
   --wc-font-sans: "Pretendard", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic",
     system-ui, -apple-system, "Segoe UI", sans-serif;

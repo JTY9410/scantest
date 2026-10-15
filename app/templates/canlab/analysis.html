@@ -3,46 +3,45 @@
 {% block title %}역산 분석{% endblock %}
 
 {% block content %}
-{{ page_header("역산 분석", "고른 통신 기록의 모든 바이트 해석을 정답값과 비교합니다. 검증을 통과한 수식은 바로 운영에 적용됩니다.") }}
+{{ page_header("역산 분석", "리버스 데이터에서 추출한 명령·응답을 위스캔 데이터와 비교해, 위스캔 결과를 내는 명령과 수식, 디코더 코드를 찾습니다. 규칙은 결과 화면의 '적용'에서만 바뀝니다.") }}
 {% include "canlab/_tabs.html" %}
 
 <section class="card card-body mb-6" aria-labelledby="run-title">
   <h2 id="run-title" class="text-lg font-bold">분석 실행</h2>
-  {% if form.trace_ids.choices and form.truth_dataset_id.choices %}
+  {% if form.wescan_id.choices and form.reverse_ids.choices %}
   <form method="post" class="mt-4 grid gap-4" novalidate>
     {{ form.csrf_token }}
+    {{ field(form.wescan_id, help="신호가 지정된 최종값이 있는 위스캔 데이터만 보입니다. 이 최종값이 정답이 됩니다.") }}
     <fieldset class="field">
-      <legend class="field-label">{{ form.trace_ids.label.text }}<span class="field-req" aria-hidden="true">*</span></legend>
-      <p class="field-help">결과지와 같은 순간에 기록한 G스캔 TRC를 고르세요. 여러 개를 고르면 표본을 합칩니다.</p>
+      <legend class="field-label">{{ form.reverse_ids.label.text }}<span class="field-req" aria-hidden="true">*</span></legend>
+      <p class="field-help">위스캔과 같은 차량의 리버스 TRC를 고르세요. 여러 개를 고르면 표본을 합칩니다.</p>
       <ul class="check-list">
-        {% for option in form.trace_ids %}<li><label>{{ option() }} {{ option.label.text }}</label></li>{% endfor %}
+        {% for option in form.reverse_ids %}<li><label>{{ option() }} {{ option.label.text }}</label></li>{% endfor %}
       </ul>
-      {% if form.trace_ids.errors %}<p class="field-error">{{ form.trace_ids.errors|join(" ") }}</p>{% endif %}
+      {% if form.reverse_ids.errors %}<p class="field-error">{{ form.reverse_ids.errors|join(" ") }}</p>{% endif %}
     </fieldset>
-    {{ field(form.truth_dataset_id, help="확인된 정답값이 있는 데이터만 보입니다.") }}
-    <ul class="check-list">
-      <li><label>{{ form.apply() }} {{ form.apply.label.text }}</label></li>
-    </ul>
-    <p class="field-help -mt-2">결과지와 통신 기록의 측정 시각이 다르면 끄고 '검증만' 하세요. 다른 순간의 값으로는 잘못된 수식이 맞아 보일 수 있습니다.</p>
-    <div><button class="btn btn-primary" type="submit">역산 실행</button></div>
+    <div><button class="btn btn-primary" type="submit">역산 분석 실행</button></div>
   </form>
   {% else %}
-  {{ empty("분석할 준비가 덜 되었습니다.", "통신 기록(TRC)과 확인된 정답값이 각각 하나 이상 있어야 합니다.") }}
-  <p class="text-center"><a class="btn btn-secondary" href="{{ url_for('canlab.datasets') }}">데이터·정답값으로 가기</a></p>
+  {{ empty("분석할 준비가 덜 되었습니다.", "최종값이 있는 위스캔 데이터와 리버스 데이터가 각각 하나 이상 있어야 합니다.") }}
+  <p class="flex flex-wrap justify-center gap-2">
+    <a class="btn btn-secondary" href="{{ url_for('canlab.wescan') }}">위스캔값 입력</a>
+    <a class="btn btn-secondary" href="{{ url_for('canlab.reverse') }}">리버스데이터 입력</a>
+  </p>
   {% endif %}
 </section>
 
 <section class="card overflow-hidden" aria-label="분석 기록">
   {% if runs %}
   <table class="rtable">
-    <thead><tr><th scope="col">번호</th><th scope="col">실행</th><th scope="col">기록·정답</th><th scope="col" class="num">확정</th><th scope="col" class="num">가설</th><th scope="col" class="num">UNKNOWN</th><th scope="col" class="num">새로 적용</th></tr></thead>
+    <thead><tr><th scope="col">번호</th><th scope="col">실행</th><th scope="col">위스캔·리버스</th><th scope="col" class="num">확정</th><th scope="col" class="num">가설</th><th scope="col" class="num">UNKNOWN</th><th scope="col" class="num">새로 적용</th></tr></thead>
     <tbody>
       {% for run in runs %}
       {% set statuses = run.result.values()|map(attribute="status")|list %}
       <tr>
         <td data-primary><a class="font-semibold underline" href="{{ url_for('canlab.run', run_id=run.id) }}">#{{ run.id }}</a></td>
         <td data-label="실행">{{ run.created_at|kst }}{% if run.creator %} · {{ run.creator.name }}{% endif %}</td>
-        <td data-label="기록·정답" class="text-sm">TRC #{{ run.trace_dataset_ids|join(", #") }} · 정답 #{{ run.truth_dataset_id or "-" }}</td>
+        <td data-label="위스캔·리버스" class="text-sm">위스캔 #{{ run.truth_dataset_id or "-" }} · 리버스 #{{ (run.reverse_dataset_ids or run.trace_dataset_ids)|join(", #") }}</td>
         <td data-label="확정" class="num">{{ statuses.count("확정") }}</td>
         <td data-label="가설" class="num">{{ statuses.count("가설") }}</td>
         <td data-label="UNKNOWN" class="num">{{ statuses.count("UNKNOWN") }}</td>

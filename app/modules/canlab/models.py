@@ -20,8 +20,8 @@ class DatasetKind(enum.StrEnum):
     @property
     def label(self) -> str:
         return {
-            "gscan_trc": "G스캔 통신 TRC(기초데이터)",
-            "wecan_trc": "위스캔 통신 TRC",
+            "gscan_trc": "리버스 데이터 TRC",
+            "wecan_trc": "위스캔 스캔 데이터",
             "live_capture": "블루투스 실시간 수집",
             "gscan_pdf": "G스캔 결과지 PDF(정답값)",
         }[self.value]
@@ -142,8 +142,12 @@ class AnalysisRun(db.Model):
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     trace_dataset_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
+    # 위스캔 데이터(truth_dataset_id)와 비교한 리버스 데이터
+    reverse_dataset_ids: Mapped[list[int]] = mapped_column(JSON, default=list, server_default="[]")
     truth_dataset_id: Mapped[int | None] = mapped_column(ForeignKey("can_datasets.id", ondelete="SET NULL"))
     result: Mapped[dict] = mapped_column(JSON, default=dict)
+    # 명령 비교: {"common": [...], "wescan_only": [...], "reverse_only": [...]}
+    commands: Mapped[dict] = mapped_column(JSON, default=dict, server_default="{}")
     activated_count: Mapped[int] = mapped_column(Integer, default=0)
     duration_ms: Mapped[int] = mapped_column(Integer, default=0)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
@@ -191,6 +195,52 @@ class DecodeRule(TimestampMixin, db.Model):
     @property
     def status_label(self) -> str:
         return RuleStatus(self.status).label
+
+
+class LogicStatus(enum.StrEnum):
+    DRAFT = "draft"
+    ACTIVE = "active"
+    RETIRED = "retired"
+
+    @property
+    def label(self) -> str:
+        return {"draft": "적용 전(검토 중)", "active": "적용 중", "retired": "이전 버전"}[self.value]
+
+
+class ScanLogic(TimestampMixin, db.Model):
+    """스캔하기가 보내는 추가 명령과 쓰는 수식 묶음. 적용 중(active) 버전은 하나뿐이다.
+
+    commands: [{header, command, label}], rules: [{signal_key, rule_id, revision, formula}]
+    diff: 적용 화면의 항목별 변경 전·후, ai_advice: {provider, summary, items: {key: {choice, reason}}}
+    """
+
+    __tablename__ = "scan_logics"
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'active', 'retired')", name="status_valid"),
+        Index("uq_scan_logics_active", "status", unique=True, postgresql_where=text("status = 'active'")),
+        Index("ix_scan_logics_revision", "revision"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    revision: Mapped[int] = mapped_column(Integer)
+    status: Mapped[str] = mapped_column(String(10), default=LogicStatus.DRAFT)
+    commands: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    rules: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    diff: Mapped[dict] = mapped_column(JSON, default=dict)
+    ai_advice: Mapped[dict | None] = mapped_column(JSON)
+    analysis_run_id: Mapped[int | None] = mapped_column(ForeignKey("analysis_runs.id", ondelete="SET NULL"))
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
+
+    creator: Mapped[User | None] = relationship(lazy="joined")
+
+    __mapper_args__ = {"version_id_col": version}
+
+    @property
+    def status_label(self) -> str:
+        return LogicStatus(self.status).label
 
 
 class DiagnosticReport(db.Model):

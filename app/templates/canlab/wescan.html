@@ -1,0 +1,24 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, field %}
+{% block title %}위스캔값 입력{% endblock %}
+
+{% block content %}
+{{ page_header("위스캔값 입력", "위스캔으로 스캔할 때의 통신 기록(명령·응답)과 위스캔이 화면에 보여 준 최종값을 함께 올립니다. 올리면 명령과 산출 결과를 바로 추출합니다.") }}
+{% include "canlab/_tabs.html" %}
+
+<section class="card card-body mb-6" aria-labelledby="upload-title">
+  <h2 id="upload-title" class="text-lg font-bold">위스캔 데이터 올리기</h2>
+  <form method="post" enctype="multipart/form-data" class="mt-4 grid gap-4 md:grid-cols-2" novalidate>
+    {{ form.csrf_token }}
+    {{ field(form.file, help="위스캔 사용 중 기록한 PCAN TRC(.trc) 또는 위카 ELM 기록(.txt/.log). 4MB 이하", accept=".trc,.txt,.log") }}
+    {{ field(form.values_file, help="위스캔 최종값 파일(.txt/.tsv: '항목 | 값 | 단위' 줄, .csv: 항목,값,단위 열). 아래에 붙여 넣어도 됩니다.", accept=".txt,.csv,.tsv") }}
+    {{ field(form.values_text, help="한 줄에 하나씩 '항목명 | 값 | 단위'. 예: 배터리 팩 전압 | 263.2 | V. 항목명이 신호 목록과 같으면 신호가 자동으로 정해집니다.", rows=6, class_="md:col-span-2") }}
+    {{ field(form.vehicle, placeholder="예: 그랜저 HEV 2024") }}
+    {{ field(form.note) }}
+    <div class="md:col-span-2"><button class="btn btn-primary" type="submit">올리고 추출하기</button></div>
+  </form>
+</section>
+
+{% set empty_title, empty_body = "등록된 위스캔 데이터가 없습니다.", "위스캔 통신 기록과 최종값을 함께 올리면 역산 분석의 기준(정답)이 됩니다." %}
+{% include "canlab/_dataset_table.html" %}
+{% endblock %}

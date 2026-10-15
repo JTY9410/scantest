@@ -4,8 +4,10 @@ from sqlalchemy import select
 from app.core.errors import ServiceError
 from app.extensions import db
 from app.modules.accounts.models import User
+from app.modules.canlab import service as canlab_service
 from app.modules.canlab.engine import obdb
-from app.modules.canlab.models import CanDataset, DiagnosticReport
+from app.modules.canlab.engine.search import Layout
+from app.modules.canlab.models import CanDataset, DecodeRule, DiagnosticReport, LogicStatus, RuleStatus, ScanLogic
 from app.modules.scanner import service
 from app.modules.scanner.plan import build_plan
 from app.modules.scans.models import Code, Scan, ScanCode, ScanDocument
@@ -300,6 +302,70 @@ def test_pdf_failure_still_saves_scan_and_retries_later(app, admin, monkeypatch)
 
     monkeypatch.undo()
     assert service.scan_document(scan).content.startswith(b"%PDF")
+
+
+def _activate_logic() -> ScanLogic:
+    """스캔 로직 v1: 명령 220101·220105, 수식 SOC(0101 b4)·최대 온도(0105 b3)."""
+    rules = []
+    for key, layout in (("soc", Layout(0x7E4, 0x0101, 4, 1, scale=0.5)), ("max_temp", Layout(0x7E4, 0x0105, 3, 1))):
+        rule = DecodeRule(signal_key=key, revision=1, status=RuleStatus.ACTIVE, confidence=0.9, evidence={},
+                          formula=layout.formula(), **layout.to_dict())
+        db.session.add(rule)
+        db.session.flush()
+        rules.append({"signal_key": key, "rule_id": rule.id, "revision": 1, "formula": rule.formula})
+    logic = ScanLogic(revision=1, status=LogicStatus.ACTIVE, rules=rules, diff={}, commands=[
+        {"header": "7E4", "command": "220101", "label": "BMS 0101"},
+        {"header": "7E4", "command": "220105", "label": "BMS 0105"}])
+    db.session.add(logic)
+    db.session.commit()
+    return logic
+
+
+LOGIC_STEPS = [
+    _step("ATDPN", "A6\r\r>", group="device"),
+    _step("220101", _can_reply("7EC", bms_0101(soc=37.5)), header="7E4", optional=True, bus="can", group="rule"),
+    _step("220105", "NO DATA\r\r>", header="7E4", optional=True, bus="can", group="rule"),
+]
+
+
+def test_scan_logic_problems_are_recorded(app, admin):
+    logic = _activate_logic()
+    with app.app_context():
+        labels = {s["label"] for s in build_plan(AVANTE)["steps"] if s["group"] == "rule"}
+    assert {"스캔 로직: BMS 0101", "스캔 로직: BMS 0105"} <= labels
+
+    data = service.run_scan(admin, car_no="12가3456", car=AVANTE, steps=LOGIC_STEPS, transport="ble").bms_data
+
+    problems = {e["label"]: e for e in data["errors"] if e["group"] == "logic"}
+    assert set(problems) == {"BMS 0105", "배터리 최대 온도"}
+    assert problems["BMS 0105"]["command"] == "220105" and problems["BMS 0105"]["status_label"] == "로직 문제"
+    assert "v1" in problems["배터리 최대 온도"]["message"]
+    assert data["battery"]["soc"]["value"] == 37.5 and data["status"] == "partial"
+    assert data["scan_logic"] == {"id": logic.id, "revision": 1}
+
+    other = service.run_scan(admin, car_no="12가3456", car=AVANTE, steps=[_step("03", "NO DATA")],
+                             transport="ble").bms_data
+    assert not any(e["group"] == "logic" for e in other["errors"])
+
+
+def test_result_page_pops_up_logic_problems_and_handles_deleted_report(app, admin_client):
+    from tests.conftest import csrf_token
+
+    with app.app_context():
+        _activate_logic()
+    token = csrf_token(admin_client, "/admin/scan/")
+    steps = [{k: v for k, v in s.items() if k != "tMs"} for s in LOGIC_STEPS]
+    saved = admin_client.post("/admin/scan/run", headers={"X-CSRFToken": token}, json={
+        "carNo": "12가3456", "car": AVANTE, "steps": steps, "transport": "ble"}).get_json()
+
+    html = admin_client.get(saved["url"]).get_data(as_text=True)
+    assert "data-auto-open" in html and "스캔 로직 문제 2건" in html and "v1" in html
+    assert "/admin/canlab/reports/" in html
+
+    with app.app_context():
+        canlab_service.reset_all()
+    html = admin_client.get(saved["url"]).get_data(as_text=True)
+    assert "결과지 삭제됨" in html and "/admin/canlab/reports/" not in html
 
 
 @pytest.mark.parametrize("bad", [

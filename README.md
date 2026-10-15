@@ -91,7 +91,7 @@ docker push wecarmobility/wecarscan_dh:latest && docker push wecarmobility/wecar
 
 ## CAN/UDS/BMS 역분석 도구
 
-TRC 트레이스와 G-Scan 결과지를 교차 분석하는 역분석·결과지는 관리자 메뉴 "CAN 분석"(`app/modules/canlab/`)에서 합니다(`docs/flows/canlab.md`). 요구사항은 `CAN_UDS_BMS_Reverse_Engineering_Cursor_통합_개별요구사항 (1).md`입니다.
+위스캔 스캔 데이터와 리버스 데이터(TRC)를 비교하는 역분석, 스캔 로직 적용, 운영 결과지는 관리자 메뉴 "CAN 분석"(`app/modules/canlab/`)에서 합니다(`docs/flows/canlab.md`). 쌓인 CAN 분석 데이터는 `flask canlab reset`(건수 확인) → `flask canlab reset --yes`로 지웁니다. 요구사항은 `CAN_UDS_BMS_Reverse_Engineering_Cursor_통합_개별요구사항 (1).md`입니다.
 
 실제 차량 데이터(TRC·PDF)는 VIN 같은 차량 정보가 들어 있어 로컬 `data/can/`에만 두고 git·Docker·Vercel에서 제외합니다. 화면에서 올리면 DB에 저장됩니다.
 

@@ -11,8 +11,18 @@ from app.extensions import db
 from app.modules.canlab import ai, service
 from app.modules.canlab.engine.frames import elm_from_exchanges
 from app.modules.canlab.engine.search import Layout
-from app.modules.canlab.models import AnalysisRun, CanDataset, DecodeRule, GroundTruthValue, RuleStatus
+from app.modules.canlab.models import (
+    AnalysisRun,
+    CanDataset,
+    DecodeRule,
+    DiagnosticReport,
+    GroundTruthValue,
+    LogicStatus,
+    RuleStatus,
+    ScanLogic,
+)
 from app.modules.obd.models import ObdProfile
+from app.modules.scanner.plan import build_plan
 from tests.canlab.synthetic import bms_0101, bms_session, exchange, isotp_frames, trc
 from tests.conftest import csrf_token
 
@@ -51,22 +61,69 @@ def _post(client, url: str, page: str, **data):
     return client.post(url, data={"csrf_token": csrf_token(client, page), **data})
 
 
-def _analyse(client, trace_id: int, truth_id: int, apply: bool = True):
-    extra = {"apply": "y"} if apply else {}
+def _reverse_trace() -> str:
+    """리버스 기록: 같은 BMS 응답(온도만 다름)과 위스캔에 없는 22 0105 요청."""
+    return trc(exchange(0x7E4, b"\x22\x01\x01", bms_0101(max_temp=30))
+               + exchange(0x7E4, b"\x22\x01\x05", b"\x62\x01\x05" + bytes(20)))
+
+
+def _upload_wescan(client, content: bytes = None, values: str = TRUTHS, filename: str = "wescan.trc", **extra):
+    token = csrf_token(client, "/admin/canlab/wescan")
+    content = bms_session(count=1).encode() if content is None else content
+    return client.post("/admin/canlab/wescan", content_type="multipart/form-data", data={
+        "csrf_token": token, "file": (io.BytesIO(content), filename), "vehicle": "EV6 시험차",
+        "values_text": values, **extra,
+    })
+
+
+def _upload_reverse(client, content: bytes = None, filename: str = "reverse.trc"):
+    token = csrf_token(client, "/admin/canlab/reverse")
+    content = _reverse_trace().encode() if content is None else content
+    return client.post("/admin/canlab/reverse", content_type="multipart/form-data", data={
+        "csrf_token": token, "file": (io.BytesIO(content), filename), "vehicle": "EV6 시험차",
+    })
+
+
+def _analyse(client, wescan_id: int, reverse_id: int):
     return _post(client, "/admin/canlab/analysis", "/admin/canlab/analysis",
-                 trace_ids=str(trace_id), truth_dataset_id=str(truth_id), **extra)
+                 wescan_id=str(wescan_id), reverse_ids=str(reverse_id))
+
+
+def _run_id(response) -> int:
+    return int(response.headers["Location"].rsplit("/", 1)[1])
+
+
+def _draft(client, run_id: int) -> int:
+    page = f"/admin/canlab/analysis/{run_id}"
+    response = _post(client, f"{page}/apply", page)
+    assert response.status_code == 302
+    return int(re.search(r"/logics/(\d+)", response.headers["Location"]).group(1))
+
+
+def _confirm(app, client, logic_id: int, **choices):
+    with app.app_context():
+        version = db.session.get(ScanLogic, logic_id).version
+    page = f"/admin/canlab/logics/{logic_id}"
+    return _post(client, f"{page}/confirm", page, version=str(version),
+                 **{f"choice-{k}": v for k, v in choices.items()})
 
 
 @pytest.fixture
-def trained(app, admin_client):
-    """G스캔 기록 + 정답값 PDF를 올리고 역산까지 마친 상태."""
-    trace_id = _dataset_id(_upload(admin_client, bms_session(count=1).encode(), "gscan.trc", "gscan_trc"))
-    pdf_id = _dataset_id(_upload(admin_client, _pdf(), "result.pdf", "gscan_pdf"))
-    page = f"/admin/canlab/datasets/{pdf_id}"
-    _post(admin_client, f"{page}/truths/add", page, text=TRUTHS)
-    response = _analyse(admin_client, trace_id, pdf_id)
+def analysed(app, admin_client):
+    """위스캔 데이터(최종값 포함)와 리버스 데이터를 올리고 역산 분석까지 마친 상태(적용 전)."""
+    wescan_id = _dataset_id(_upload_wescan(admin_client))
+    reverse_id = _dataset_id(_upload_reverse(admin_client))
+    response = _analyse(admin_client, wescan_id, reverse_id)
     assert response.status_code == 302
-    return {"trace": trace_id, "pdf": pdf_id, "run": int(response.headers["Location"].rsplit("/", 1)[1])}
+    return {"wescan": wescan_id, "reverse": reverse_id, "run": _run_id(response)}
+
+
+@pytest.fixture
+def trained(app, admin_client, analysed):
+    """역산 결과를 기본안 그대로 스캔 로직으로 적용한 상태."""
+    logic_id = _draft(admin_client, analysed["run"])
+    assert _confirm(app, admin_client, logic_id).status_code == 302
+    return analysed | {"logic": logic_id}
 
 
 def test_canlab_pages_are_admin_only(client, make_user):
@@ -156,16 +213,180 @@ def test_ocr_without_ai_connection_explains_how_to_enable(admin_client):
     assert "CAN 분석" in html and "용도를 켜세요" in html
 
 
-def test_analysis_activates_validated_rules_and_report_applies_them(app, admin_client, trained):
-    run_html = admin_client.get(f"/admin/canlab/analysis/{trained['run']}").get_data(as_text=True)
-    assert "확정" in run_html and "b12~b13" in run_html
+def test_wescan_upload_extracts_commands_and_final_values(app, admin_client):
+    response = _upload_wescan(admin_client)
 
+    assert response.status_code == 302
+    html = admin_client.get(response.headers["Location"]).get_data(as_text=True)
+    assert "추출한 명령과 산출 결과" in html and "위스캔 최종값(정답값)" in html
+    assert "220101" in html and "31 " in html
     with app.app_context():
+        dataset = db.session.scalar(select(CanDataset))
+        assert dataset.kind == "wecan_trc"
+        commands = {(c["header"], c["command"]): c for c in dataset.summary["commands"]}
+        assert commands[("7E4", "220101")]["positive"] == 1 and commands[("7E4", "220101")]["sendable"] is True
+        assert commands[("7E4", "22010A")]["negative"].startswith("31 ")
+        assert [t.signal_key for t in sorted(dataset.truths, key=lambda t: t.id)][:5] == [
+            "soc", "pack_voltage", "pack_current", "max_cell_v", "min_cell_v"]
+    page = admin_client.get("/admin/canlab/wescan").get_data(as_text=True)
+    assert "wescan.trc" in page and "위스캔값 입력" in page
+
+
+def test_wescan_values_from_csv_file_and_missing_values(app, admin_client):
+    csv = "배터리 충전 상태(BMS),94.5,%\n배터리 팩 전압,785.5,V\n".encode()
+    response = _upload_wescan(admin_client, values="", values_file=(io.BytesIO(csv), "values.csv"))
+    assert response.status_code == 302
+    with app.app_context():
+        assert {t.signal_key for t in db.session.scalars(select(GroundTruthValue))} == {"soc", "pack_voltage"}
+
+    missing = _upload_wescan(admin_client, content=bms_session(count=2).encode(), values="메모만 있음")
+    assert missing.status_code == 400 and "위스캔 최종값을" in missing.get_data(as_text=True)
+
+
+def test_reverse_upload_extracts_commands(app, admin_client):
+    response = _upload_reverse(admin_client)
+
+    assert response.status_code == 302
+    with app.app_context():
+        dataset = db.session.scalar(select(CanDataset))
+        assert dataset.kind == "gscan_trc"
+        assert [c["command"] for c in dataset.summary["commands"]] == ["220101", "220105"]
+    assert "reverse.trc" in admin_client.get("/admin/canlab/reverse").get_data(as_text=True)
+
+
+def test_analysis_compares_commands_and_finds_formulas_without_applying(app, admin_client, analysed):
+    html = admin_client.get(f"/admin/canlab/analysis/{analysed['run']}").get_data(as_text=True)
+
+    assert "명령 비교" in html and "b12~b13" in html and "def decode_soc" in html
+    assert 'action="/admin/canlab/analysis/%d/apply"' % analysed["run"] in html
+    with app.app_context():
+        assert db.session.scalar(select(DecodeRule.id)) is None
+        run = db.session.get(AnalysisRun, analysed["run"])
+        assert run.reverse_dataset_ids == [analysed["reverse"]] and run.truth_dataset_id == analysed["wescan"]
+        assert [c["command"] for c in run.commands["common"]] == ["220101"]
+        assert [c["command"] for c in run.commands["reverse_only"]] == ["220105"]
+        assert "22010A" in [c["command"] for c in run.commands["wescan_only"]]
+        assert run.result["soc"]["status"] == "확정" and run.result["soc"]["formula"] == "b4(무부호 8비트) × 0.5"
+
+
+def test_analysis_requires_wescan_and_reverse(app, admin_client):
+    wescan_id = _dataset_id(_upload_wescan(admin_client))
+    response = _post(admin_client, "/admin/canlab/analysis", "/admin/canlab/analysis", wescan_id=str(wescan_id))
+    assert response.status_code == 400
+    with app.app_context():
+        assert db.session.scalar(select(AnalysisRun.id)) is None
+
+
+def test_apply_shows_before_after_and_confirm_changes_scan_logic(app, admin_client, analysed):
+    logic_id = _draft(admin_client, analysed["run"])
+    html = admin_client.get(f"/admin/canlab/logics/{logic_id}").get_data(as_text=True)
+    assert "변경 전" in html and "변경 후" in html and "AI 최적안 받기" in html
+    assert 'name="choice-sig:soc"' in html and "고른 항목으로 적용 확정" in html
+    with app.app_context():
+        logic = db.session.get(ScanLogic, logic_id)
+        items = {i["key"]: i for i in logic.diff["items"]}
+        assert logic.status == LogicStatus.DRAFT and service.active_logic() is None
+        assert items["sig:soc"]["change"] == "added" and items["sig:soc"]["default"] == "after"
+        assert items["cmd:7E4:220101"]["change"] == "added"
+        assert "cmd:7E4:220105" not in items
+        assert db.session.scalar(select(DecodeRule.id)) is None
+
+    response = _confirm(app, admin_client, logic_id, **{"cmd:7E4:22010A": "exclude"})
+
+    assert response.status_code == 302
+    with app.app_context():
+        logic = db.session.get(ScanLogic, logic_id)
+        assert logic.status == LogicStatus.ACTIVE and service.active_logic().id == logic_id
+        commands = [(c["header"], c["command"]) for c in logic.commands]
+        assert ("7E4", "220101") in commands and ("7E4", "22010A") not in commands
+        assert {r["signal_key"] for r in logic.rules} >= {"soc", "pack_voltage", "pack_current"}
         active = {r.signal_key: r for r in db.session.scalars(
             select(DecodeRule).where(DecodeRule.status == RuleStatus.ACTIVE))}
-        assert {"soc", "pack_voltage", "pack_current", "max_cell_v", "min_cell_v"} <= set(active)
-        assert active["soc"].formula == "b4(무부호 8비트) × 0.5"
-        assert active["pack_current"].signed is True
+        assert active["soc"].formula == "b4(무부호 8비트) × 0.5" and active["pack_current"].signed is True
+        assert db.session.get(AnalysisRun, analysed["run"]).activated_count == len(active)
+        steps = [s for s in build_plan({})["steps"] if s["group"] == "rule"]
+        logic_step = next(s for s in steps if s["command"] == "220101")
+        assert logic_step["header"] == "7E4" and logic_step["label"].startswith("스캔 로직:")
+        assert sum(1 for s in steps if (s["header"], s["command"]) == ("7E4", "220101")) == 1
+        actions = db.session.scalars(select(Activity.relation_type).where(Activity.relation == "ScanLogic")).all()
+        assert actions == ["스캔 로직 초안", "스캔 로직 적용"]
+
+    again = _confirm(app, admin_client, logic_id)
+    assert again.status_code == 409
+
+
+def test_confirm_with_stale_version_is_rejected(app, admin_client, analysed):
+    logic_id = _draft(admin_client, analysed["run"])
+    page = f"/admin/canlab/logics/{logic_id}"
+    response = _post(admin_client, f"{page}/confirm", page, version="99")
+    assert response.status_code == 409 and "다른 관리자가 먼저 바꿨습니다" in response.get_data(as_text=True)
+
+
+def test_advise_without_ai_shows_rule_based_default(app, admin_client, analysed):
+    logic_id = _draft(admin_client, analysed["run"])
+    page = f"/admin/canlab/logics/{logic_id}"
+
+    response = _post(admin_client, f"{page}/advise", page)
+
+    html = admin_client.get(response.headers["Location"]).get_data(as_text=True)
+    assert "AI를 쓸 수 없어 규칙 기반 기본안" in html and "기본안을 표시합니다" in html
+    with app.app_context():
+        assert db.session.get(ScanLogic, logic_id).ai_advice["provider"] is None
+
+
+def test_ai_advice_is_shown_as_recommendation(app, admin_client, analysed, monkeypatch):
+    logic_id = _draft(admin_client, analysed["run"])
+    page = f"/admin/canlab/logics/{logic_id}"
+    sent = []
+
+    def fake_advise(items):
+        sent.extend(items)
+        return ({"sig:soc": {"choice": "exclude", "reason": "근거 부족"},
+                 "sig:pack_voltage": {"choice": "nonsense", "reason": "x"}}, "SOC는 빼는 것이 좋습니다.", "openai")
+
+    monkeypatch.setattr(ai, "advise_logic", fake_advise)
+    _post(admin_client, f"{page}/advise", page)
+
+    html = admin_client.get(page).get_data(as_text=True)
+    assert "SOC는 빼는 것이 좋습니다." in html and "근거 부족" in html
+    assert all("layout" not in (i["after"] or {}) and "evidence" not in (i["after"] or {}) for i in sent)
+    with app.app_context():
+        logic = db.session.get(ScanLogic, logic_id)
+        recommended = service.recommended(logic)
+        assert recommended["sig:soc"]["choice"] == "exclude"
+        assert recommended["sig:pack_voltage"] == {"choice": "after", "reason": "기본안"}
+
+
+def test_new_logic_replaces_old_and_restore_brings_back_rules(app, admin_client, trained):
+    run_id = _run_id(_analyse(admin_client, trained["wescan"], trained["reverse"]))
+    second = _draft(admin_client, run_id)
+    with app.app_context():
+        items = {i["key"]: i for i in db.session.get(ScanLogic, second).diff["items"]}
+        assert items["sig:soc"]["change"] == "same" and items["cmd:7E4:220101"]["change"] == "same"
+
+    _confirm(app, admin_client, second, **{"sig:soc": "exclude"})
+    with app.app_context():
+        assert service.active_rule("soc") is None
+        assert db.session.get(ScanLogic, trained["logic"]).status == LogicStatus.RETIRED
+        assert db.session.scalar(select(func.max(DecodeRule.revision)).where(DecodeRule.signal_key == "soc")) == 1
+        version = db.session.get(ScanLogic, trained["logic"]).version
+    assert "스캔 로직 버전" in admin_client.get("/admin/canlab/rules").get_data(as_text=True)
+
+    page = f"/admin/canlab/logics/{trained['logic']}"
+    stale = _post(admin_client, f"{page}/restore", "/admin/canlab/rules", version=str(version + 3))
+    assert stale.status_code == 409
+    assert _post(admin_client, f"{page}/restore", "/admin/canlab/rules", version=str(version)).status_code == 302
+    with app.app_context():
+        assert service.active_logic().id == trained["logic"]
+        assert service.active_rule("soc") is not None
+        assert db.session.get(ScanLogic, second).status == LogicStatus.RETIRED
+
+
+def test_report_from_wescan_trace_uses_applied_rules(app, admin_client, trained):
+    with app.app_context():
+        active = {r.signal_key for r in db.session.scalars(
+            select(DecodeRule).where(DecodeRule.status == RuleStatus.ACTIVE))}
+        assert {"soc", "pack_voltage", "pack_current", "max_cell_v", "min_cell_v"} <= active
 
     wecan_id = _dataset_id(_upload(admin_client, _wecan_trace().encode(), "wecan.trc", "wecan_trc", "그랜저 HEV"))
     response = _post(admin_client, "/admin/canlab/reports", "/admin/canlab/reports", dataset_id=str(wecan_id))
@@ -176,50 +397,47 @@ def test_analysis_activates_validated_rules_and_report_applies_them(app, admin_c
     assert "1. 종합: 충전 상태(SOC) 37.5%" in html
 
 
-def test_second_analysis_keeps_same_rules_without_new_versions(app, admin_client, trained):
-    _analyse(admin_client, trained["trace"], trained["pdf"])
-
-    with app.app_context():
-        assert db.session.scalar(select(DecodeRule.revision).where(DecodeRule.signal_key == "soc")
-                                 .order_by(DecodeRule.revision.desc())) == 1
-
-
-def test_validate_only_run_leaves_rules_untouched(app, admin_client):
-    trace_id = _dataset_id(_upload(admin_client, bms_session(count=1).encode(), "gscan.trc", "gscan_trc"))
-    pdf_id = _dataset_id(_upload(admin_client, _pdf(), "result.pdf", "gscan_pdf"))
-    page = f"/admin/canlab/datasets/{pdf_id}"
-    _post(admin_client, f"{page}/truths/add", page, text=TRUTHS)
-
-    response = _analyse(admin_client, trace_id, pdf_id, apply=False)
-
-    assert response.status_code == 302
-    with app.app_context():
-        assert db.session.scalar(select(DecodeRule.id)) is None
-    html = admin_client.get(response.headers["Location"]).get_data(as_text=True)
-    assert "검증만(적용 안 함)" in html and "확정" in html
-
-
-def test_analysis_never_replaces_or_overlaps_active_rules_automatically(app, admin_client):
+def test_analysis_never_replaces_active_rules_and_flags_overlap(app, admin_client):
     with app.app_context():
         for key, start in (("soc", 5), ("max_temp", 12)):
             layout = Layout(0x7E4, 0x0101, start, 1)
             db.session.add(DecodeRule(signal_key=key, revision=1, status=RuleStatus.ACTIVE, confidence=0.9,
                                       evidence={}, formula=layout.formula(), **layout.to_dict()))
         db.session.commit()
-    trace_id = _dataset_id(_upload(admin_client, bms_session(count=1).encode(), "gscan.trc", "gscan_trc"))
-    pdf_id = _dataset_id(_upload(admin_client, _pdf(), "result.pdf", "gscan_pdf"))
-    page = f"/admin/canlab/datasets/{pdf_id}"
-    _post(admin_client, f"{page}/truths/add", page, text=TRUTHS)
+    wescan_id = _dataset_id(_upload_wescan(admin_client))
+    reverse_id = _dataset_id(_upload_reverse(admin_client))
 
-    _analyse(admin_client, trace_id, pdf_id)
+    run_id = _run_id(_analyse(admin_client, wescan_id, reverse_id))
 
     with app.app_context():
         assert service.active_rule("soc").start == 5
         assert service.active_rule("pack_voltage") is None
-        result = db.session.scalar(select(AnalysisRun.result))
-        assert result["soc"]["status"] == "가설" and "자동으로 바꾸지 않았습니다" in result["soc"]["reasons"][0]
+        result = db.session.get(AnalysisRun, run_id).result
+        assert result["soc"]["matches_active"] is False and "적용 중 수식" in result["soc"]["reasons"][-1]
+        assert result["pack_voltage"]["status"] == "가설"
         assert "배터리 최대 온도" in result["pack_voltage"]["reasons"][0]
-        assert service.active_rule("max_cell_v") is not None
+    logic_id = _draft(admin_client, run_id)
+    with app.app_context():
+        items = {i["key"]: i for i in db.session.get(ScanLogic, logic_id).diff["items"]}
+        assert items["sig:soc"]["change"] == "changed" and items["sig:soc"]["before"]["formula"] == "b5(무부호 8비트)"
+        assert items["sig:pack_voltage"]["default"] == "exclude"
+        assert items["sig:max_temp"]["change"] == "removed" and items["sig:max_temp"]["default"] == "before"
+
+
+def test_reset_cli_counts_then_deletes_all_canlab_data(app, admin_client, trained):
+    runner = app.test_cli_runner()
+
+    dry = runner.invoke(args=["canlab", "reset"])
+    assert dry.exit_code == 0 and "--yes" in dry.output
+    with app.app_context():
+        assert db.session.scalar(select(func.count(CanDataset.id))) == 2
+
+    done = runner.invoke(args=["canlab", "reset", "--yes"])
+    assert done.exit_code == 0 and "모두 삭제했습니다" in done.output
+    with app.app_context():
+        for model in (CanDataset, GroundTruthValue, AnalysisRun, DecodeRule, ScanLogic, DiagnosticReport):
+            assert db.session.scalar(select(func.count()).select_from(model)) == 0
+        assert db.session.scalar(select(Activity.relation_type).where(Activity.relation_type == "CAN 분석 초기화"))
 
 
 def test_rule_rollback_and_conflict(app, admin_client, trained):

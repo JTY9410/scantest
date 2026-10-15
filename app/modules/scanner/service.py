@@ -16,9 +16,10 @@ from app.core import audit
 from app.core.errors import ServiceError
 from app.extensions import db
 from app.modules.accounts.models import User
+from app.modules.canlab.engine import signals
 from app.modules.canlab.engine.decode import diagnose
-from app.modules.canlab.models import CanDataset, DatasetKind, DatasetSource, DiagnosticReport
-from app.modules.canlab.service import _describe_dtcs, _trace_summary, active_rule_refs
+from app.modules.canlab.models import CanDataset, DatasetKind, DatasetSource, DiagnosticReport, ScanLogic
+from app.modules.canlab.service import _describe_dtcs, _trace_summary, active_logic, active_rule_refs
 from app.modules.obd.models import ObdDialect
 from app.modules.scanner import pdf
 from app.modules.scanner.interpret import detect_protocol, interpret, record_text
@@ -116,6 +117,46 @@ def _add_error(result: dict, group: str, label: str, status: str, message: str, 
         result["status"] = "partial"
 
 
+def _check_logic(result: dict, logic: ScanLogic | None) -> None:
+    """적용 중 스캔 로직이 위스캔과 같은 결과를 내는지 점검해 문제를 '로직 문제'로 남긴다.
+    로직 명령이 성공하지 않았거나, 로직 수식으로 값을 읽지 못했으면 문제다.
+    로직 명령은 11비트 CAN 주소만 담으므로 11비트 CAN 차량에서만 점검한다."""
+    if logic is None or result["status"] == "failed" or (result.get("protocol") or {}).get("bus") != "can11":
+        return
+    steps: dict[tuple[str | None, str], dict] = {}
+    for step in result["steps"]:
+        key = (step.get("header"), step.get("command"))
+        if key not in steps or step.get("status") == "ok":
+            steps[key] = step
+    for command in logic.commands:
+        header = None if command["header"] == "7DF" else command["header"]
+        step = steps.get((header, command["command"]))
+        if step is None:
+            message = "스캔 계획에 이 명령이 없어 보내지 못했습니다."
+        elif step.get("status") != "ok":
+            message = f"{step.get('status_label') or step.get('status')}: {step.get('message') or '응답을 받지 못했습니다.'}"
+        else:
+            continue
+        _add_logic_error(result, command.get("label") or f"{command['header']} {command['command']}",
+                         command["header"], command["command"], message, step)
+    active = {r.rule_id for r in active_rule_refs()}
+    for rule in logic.rules:
+        value = result["battery"].get(rule["signal_key"])
+        if rule["rule_id"] not in active or (value and value.get("rule_id") == rule["rule_id"]):
+            continue
+        signal = signals.BY_KEY.get(rule["signal_key"])
+        _add_logic_error(result, signal.label if signal else rule["signal_key"], None, None,
+                         f"로직 수식(v{rule['revision']}: {rule['formula']})으로 값을 읽지 못했거나 물리 범위를 벗어났습니다.")
+    result["scan_logic"] = {"id": logic.id, "revision": logic.revision}
+
+
+def _add_logic_error(result: dict, label: str, header: str | None, command: str | None, message: str,
+                     step: dict | None = None) -> None:
+    _add_error(result, "logic", label, "logic_error", message)
+    result["errors"][-1].update(id=(step or {}).get("id"), header=header, command=command,
+                                raw=(step or {}).get("raw") or "")
+
+
 def _int(value: Any) -> int | None:
     return value if isinstance(value, int) else None
 
@@ -149,6 +190,7 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
         _add_error(result, "lookup", "차량정보 조회", "lookup_error", str(lookup_error), first=True)
     if client_error:
         _add_error(result, "client", "스캔 진행", "client_error", str(client_error))
+    _check_logic(result, active_logic())
     matched = _describe(result["dtcs"])
     if result["vin"] and car.get("diag_car_id"):
         result["vin_match"] = result["vin"] == str(car["diag_car_id"]).upper()

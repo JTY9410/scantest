@@ -5,10 +5,17 @@ from app.core.errors import ServiceError
 from app.modules.auth.access import admin_required
 from app.modules.canlab import service
 from app.modules.canlab.engine import signals
-from app.modules.canlab.forms import ActionForm, AnalysisForm, ReportForm, TruthTextForm, UploadForm
-from app.modules.canlab.models import DatasetKind, DatasetSource, RuleStatus
+from app.modules.canlab.forms import (
+    ActionForm, AnalysisForm, ReportForm, ReverseForm, TruthTextForm, UploadForm, WescanForm,
+)
+from app.modules.canlab.models import DatasetKind, DatasetSource, LogicStatus, RuleStatus
 
 bp = Blueprint("canlab", __name__, url_prefix="/admin/canlab")
+
+
+@bp.app_template_global("canlab_report_exists")
+def report_exists(report_id) -> bool:
+    return service.report_exists(report_id)
 
 
 def _flash_error(error: ServiceError) -> int:
@@ -115,10 +122,62 @@ def update_truths(dataset_id: int):
 @bp.post("/datasets/<int:dataset_id>/delete")
 @admin_required
 def delete_dataset(dataset_id: int):
+    item = service.get_dataset(dataset_id)
+    back = {DatasetKind.WECAN_TRC: "canlab.wescan", DatasetKind.GSCAN_TRC: "canlab.reverse"}.get(item.kind,
+                                                                                                "canlab.datasets")
     if ActionForm().validate_on_submit():
-        service.delete_dataset(current_user, service.get_dataset(dataset_id))
+        service.delete_dataset(current_user, item)
         flash("데이터를 삭제했습니다.", "success")
-    return redirect(url_for("canlab.datasets"))
+    return redirect(url_for(back))
+
+
+@bp.route("/wescan", methods=["GET", "POST"])
+@admin_required
+def wescan():
+    form = WescanForm()
+    status = 200
+    if form.validate_on_submit():
+        upload = form.file.data
+        try:
+            text = form.values_text.data or ""
+            values = form.values_file.data
+            if values and values.filename:
+                text += "\n" + service.values_file_text(values.filename, values.read())
+            dataset = service.upload_wescan(current_user, filename=upload.filename or "wescan.trc",
+                                            content=upload.read(), vehicle=form.vehicle.data,
+                                            values_text=text, note=form.note.data)
+        except ServiceError as error:
+            status = _flash_error(error)
+        else:
+            flash(f"위스캔 데이터를 등록했습니다. 명령 {len(dataset.summary['commands'])}개, "
+                  f"최종값 {len(dataset.truths)}개를 추출했습니다.", "success")
+            return redirect(url_for("canlab.dataset", dataset_id=dataset.id))
+    elif request.method == "POST":
+        status = 400
+    return render_template("canlab/wescan.html", form=form,
+                           datasets=service.list_datasets(DatasetKind.WECAN_TRC)), status
+
+
+@bp.route("/reverse", methods=["GET", "POST"])
+@admin_required
+def reverse():
+    form = ReverseForm()
+    status = 200
+    if form.validate_on_submit():
+        upload = form.file.data
+        try:
+            dataset = service.upload_dataset(current_user, filename=upload.filename or "reverse.trc",
+                                             content=upload.read(), kind=DatasetKind.GSCAN_TRC,
+                                             vehicle=form.vehicle.data, note=form.note.data)
+        except ServiceError as error:
+            status = _flash_error(error)
+        else:
+            flash(f"리버스 데이터를 등록했습니다. 명령 {len(dataset.summary['commands'])}개를 추출했습니다.", "success")
+            return redirect(url_for("canlab.dataset", dataset_id=dataset.id))
+    elif request.method == "POST":
+        status = 400
+    return render_template("canlab/reverse.html", form=form,
+                           datasets=service.list_datasets(DatasetKind.GSCAN_TRC)), status
 
 
 def _dataset_choice(d) -> tuple[int, str]:
@@ -129,18 +188,16 @@ def _dataset_choice(d) -> tuple[int, str]:
 @admin_required
 def analysis():
     form = AnalysisForm()
-    form.trace_ids.choices = [_dataset_choice(d) for d in service.trace_datasets()]
-    form.truth_dataset_id.choices = [_dataset_choice(d) for d in service.truth_datasets()]
+    form.wescan_id.choices = [_dataset_choice(d) for d in service.wescan_datasets()]
+    form.reverse_ids.choices = [_dataset_choice(d) for d in service.list_datasets(DatasetKind.GSCAN_TRC)]
     status = 200
     if form.validate_on_submit():
         try:
-            run = service.run_analysis(current_user, form.trace_ids.data, form.truth_dataset_id.data,
-                                       apply=form.apply.data)
+            run = service.run_analysis(current_user, form.wescan_id.data, form.reverse_ids.data)
         except ServiceError as error:
             status = _flash_error(error)
         else:
-            flash(f"분석을 마쳤습니다. 새로 적용한 규칙 {run.activated_count}개." if form.apply.data
-                  else "검증만 했습니다. 규칙은 바꾸지 않았습니다.", "success")
+            flash("역산 분석을 마쳤습니다. 결과를 확인하고 아래 '적용'으로 스캔 로직에 반영하세요.", "success")
             return redirect(url_for("canlab.run", run_id=run.id))
     elif request.method == "POST":
         status = 400
@@ -150,14 +207,86 @@ def analysis():
 @bp.get("/analysis/<int:run_id>")
 @admin_required
 def run(run_id: int):
-    return render_template("canlab/run.html", run=service.get_run(run_id))
+    return render_template("canlab/run.html", run=service.get_run(run_id), action=ActionForm())
+
+
+@bp.post("/analysis/<int:run_id>/apply")
+@admin_required
+def apply_run(run_id: int):
+    if not ActionForm().validate_on_submit():
+        flash(CSRF_EXPIRED["message"], "error")
+        return redirect(url_for("canlab.run", run_id=run_id))
+    logic = service.draft_logic(current_user, service.get_run(run_id))
+    return redirect(url_for("canlab.logic", logic_id=logic.id))
+
+
+def _render_logic(logic, status: int = 200):
+    return render_template("canlab/logic.html", logic=logic, recommended=service.recommended(logic),
+                           options=service.item_options, choices=service.CHOICES, action=ActionForm(),
+                           ai_ready=service.ai.available_connection() is not None), status
+
+
+@bp.get("/logics/<int:logic_id>")
+@admin_required
+def logic(logic_id: int):
+    return _render_logic(service.get_logic(logic_id))
+
+
+@bp.post("/logics/<int:logic_id>/advise")
+@admin_required
+def advise_logic(logic_id: int):
+    if ActionForm().validate_on_submit():
+        try:
+            _, problem = service.advise_logic(current_user, service.get_logic(logic_id))
+        except ServiceError as error:
+            _flash_error(error)
+        else:
+            if problem:
+                flash(f"AI 최적안을 받지 못해 기본안을 표시합니다. {problem}", "warning")
+            else:
+                flash("AI 최적안을 받았습니다. 추천을 확인하고 적용하세요.", "success")
+    return redirect(url_for("canlab.logic", logic_id=logic_id))
+
+
+@bp.post("/logics/<int:logic_id>/confirm")
+@admin_required
+def confirm_logic(logic_id: int):
+    form = ActionForm()
+    item = service.get_logic(logic_id)
+    if not form.validate_on_submit():
+        return _render_logic(item, 400)
+    choices = {key[len("choice-"):]: value for key, value in request.form.items() if key.startswith("choice-")}
+    try:
+        service.confirm_logic(current_user, item, int(form.version.data or 0), choices)
+    except ServiceError as error:
+        return _render_logic(item, _flash_error(error))
+    flash(f"스캔 로직 v{item.revision}을 적용했습니다. 다음 스캔부터 이 명령과 수식을 씁니다.", "success")
+    return redirect(url_for("canlab.logic", logic_id=logic_id))
+
+
+@bp.post("/logics/<int:logic_id>/restore")
+@admin_required
+def restore_logic(logic_id: int):
+    form = ActionForm()
+    if form.validate_on_submit():
+        try:
+            item = service.restore_logic(current_user, service.get_logic(logic_id), int(form.version.data or 0))
+        except ServiceError as error:
+            return _render_rules(_flash_error(error))
+        flash(f"스캔 로직 v{item.revision}으로 되돌렸습니다.", "success")
+    return redirect(url_for("canlab.rules"))
 
 
 @bp.get("/rules")
 @admin_required
 def rules():
+    return _render_rules()
+
+
+def _render_rules(status: int = 200):
     return render_template("canlab/rules.html", groups=service.list_rules(), signals=signals.BY_KEY,
-                           action=ActionForm(), RuleStatus=RuleStatus)
+                           action=ActionForm(), RuleStatus=RuleStatus, logics=service.list_logics(),
+                           LogicStatus=LogicStatus), status
 
 
 def _rule_action(rule_id: int, change, done: str):
@@ -171,8 +300,7 @@ def _rule_action(rule_id: int, change, done: str):
         else:
             flash(done, "success")
     if status != 200:
-        return render_template("canlab/rules.html", groups=service.list_rules(), signals=signals.BY_KEY,
-                               action=ActionForm(), RuleStatus=RuleStatus), status
+        return _render_rules(status)
     return redirect(url_for("canlab.rules"))
 
 

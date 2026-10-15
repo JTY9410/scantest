@@ -9,7 +9,7 @@ from typing import Any
 
 from flask import current_app, url_for
 from flask_login import current_user
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import undefer
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -18,22 +18,26 @@ from app.core.errors import ServiceError
 from app.extensions import db
 from app.modules.accounts.models import User
 from app.modules.canlab import ai
-from app.modules.canlab.engine import signals
+from app.modules.canlab.engine import signals, uds
 from app.modules.canlab.engine.decode import RuleRef, Trace, decode_signals, diagnose, load_trace
 from app.modules.canlab.engine.frames import decode_text, elm_from_exchanges
 from app.modules.canlab.engine.search import GroundTruth, Layout, Samples, search
 from app.modules.canlab.engine.validate import judge
 from app.modules.canlab.models import (
     AnalysisRun, CanDataset, DatasetKind, DatasetSource, DecodeRule, DiagnosticReport,
-    GroundTruthValue, RuleStatus, TruthSource,
+    GroundTruthValue, LogicStatus, RuleStatus, ScanLogic, TruthSource,
 )
 from app.modules.obd import devices as obd_devices
 from app.modules.obd.service import list_profiles
 
 CONFLICT = "다른 관리자가 먼저 바꿨습니다. 새로고침한 뒤 다시 시도하세요."
 TRACE_EXTENSIONS = (".trc", ".txt", ".log")
+VALUE_EXTENSIONS = (".txt", ".csv", ".tsv")
 MAX_TRUTH_LINES = 200
 MAX_SERIES_POINTS = 120
+MAX_COMMANDS = 200
+# 스캔 로직에 넣을 수 있는 읽기 서비스. 세션 변경·보안 접근·쓰기·루틴·지우기는 넣지 않는다.
+READ_SERVICES = {0x01, 0x02, 0x03, 0x06, 0x07, 0x09, 0x0A, 0x19, 0x21, 0x22}
 
 
 def _now() -> datetime:
@@ -42,8 +46,11 @@ def _now() -> datetime:
 
 # ── 데이터 ─────────────────────────────────────────────────────────────
 
-def list_datasets() -> list[CanDataset]:
-    return list(db.session.scalars(select(CanDataset).order_by(CanDataset.id.desc())))
+def list_datasets(kind: str | None = None) -> list[CanDataset]:
+    query = select(CanDataset).order_by(CanDataset.id.desc())
+    if kind:
+        query = query.where(CanDataset.kind == kind)
+    return list(db.session.scalars(query))
 
 
 def get_dataset(dataset_id: int, with_content: bool = False) -> CanDataset:
@@ -68,7 +75,48 @@ def _trace_summary(trace: Trace) -> dict:
         "vin": diagnosis["vin"],
         "ecus": diagnosis["ecus"],
         "dtc_count": sum(len(v) for v in diagnosis["dtcs"].values()),
+        "commands": extract_commands(trace),
     }
+
+
+def _can_header(can_id: int | None) -> str | None:
+    if can_id is None:
+        return None
+    return f"{can_id:03X}" if can_id <= 0x7FF else f"{can_id:08X}"
+
+
+def extract_commands(trace: Trace) -> list[dict]:
+    """기록의 요청(명령)과 응답(산출 결과)을 명령별로 모은다.
+    sendable: 스캔 로직에 넣을 수 있는 명령(읽기 서비스, 11비트 주소, 8바이트 이하)."""
+    rows: dict[tuple[str, str], dict] = {}
+    for tx in trace.transactions:
+        header, command = _can_header(tx.request_id), tx.request.hex().upper()
+        row = rows.get((header, command))
+        if row is None:
+            if len(rows) >= MAX_COMMANDS:
+                continue
+            row = rows[(header, command)] = {
+                "header": header, "command": command, "service": f"{tx.service:02X}",
+                "did": f"{tx.did:04X}" if tx.did is not None else None, "response_id": None,
+                "count": 0, "positive": 0, "negative": None, "example": None,
+                "sendable": tx.service in READ_SERVICES and tx.request_id <= 0x7FF and len(tx.request) <= 8,
+            }
+        row["count"] += 1
+        if tx.response is not None and row["response_id"] is None:
+            row["response_id"] = _can_header(tx.response_id)
+        if tx.positive:
+            row["positive"] += 1
+            row["example"] = row["example"] or tx.response[:24].hex(" ").upper()
+        elif tx.negative_code is not None:
+            row["negative"] = f"{tx.negative_code:02X} {uds.NEGATIVE_CODES.get(tx.negative_code, '기타')}"
+    return list(rows.values())
+
+
+def dataset_commands(dataset: CanDataset) -> list[dict]:
+    """등록할 때 뽑아 둔 명령. 이전에 등록한 데이터는 지금 다시 뽑는다."""
+    if "commands" in (dataset.summary or {}):
+        return dataset.summary["commands"]
+    return extract_commands(load_trace(decode_text(get_dataset(dataset.id, with_content=True).content)))
 
 
 def _responded_trace(content: bytes) -> Trace:
@@ -221,6 +269,37 @@ def add_truths(actor: User, dataset: CanDataset, text: str) -> int:
     return len(added)
 
 
+def values_file_text(filename: str, content: bytes) -> str:
+    """최종값 파일(.txt/.tsv는 '항목 | 값 | 단위' 줄, .csv는 항목,값,단위 열)을 입력 줄로 바꾼다."""
+    if not filename.lower().endswith(VALUE_EXTENSIONS):
+        raise ServiceError("최종값 파일은 .txt, .csv, .tsv 파일이어야 합니다.")
+    if len(content) > current_app.config["CANLAB_MAX_UPLOAD_BYTES"]:
+        raise ServiceError("최종값 파일이 너무 큽니다.", 413)
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        text = content.decode("cp949", errors="replace")
+    if filename.lower().endswith(".csv"):
+        import csv
+
+        return "\n".join(" | ".join(cell.strip() for cell in row[:3])
+                         for row in csv.reader(io.StringIO(text)) if row)
+    return text
+
+
+def upload_wescan(actor: User, *, filename: str, content: bytes, vehicle: str, values_text: str,
+                  note: str | None = None) -> CanDataset:
+    """위스캔 스캔 데이터: 통신 기록(명령·응답)과 위스캔이 화면에 보여 준 최종값을 함께 등록한다."""
+    numeric = [row for row in parse_truth_lines(values_text)
+               if re.fullmatch(r"-?\d+(\.\d+)?", row[1].strip().replace(",", ""))]
+    if not numeric:
+        raise ServiceError("위스캔 최종값을 '항목명 | 값 | 단위' 형식으로 올리거나 붙여 넣으세요(숫자 값 1개 이상).")
+    dataset = upload_dataset(actor, filename=filename, content=content, kind=DatasetKind.WECAN_TRC,
+                             vehicle=vehicle, note=note)
+    add_truths(actor, dataset, values_text)
+    return dataset
+
+
 def update_truths(actor: User, dataset: CanDataset, rows: dict[int, dict[str, Any]]) -> None:
     """rows: 정답값 id → {value, signal_key, confirmed, delete}"""
     changes = {}
@@ -247,10 +326,12 @@ def update_truths(actor: User, dataset: CanDataset, rows: dict[int, dict[str, An
         db.session.commit()
 
 
-def truth_datasets() -> list[CanDataset]:
-    """확인된 정답값이 하나 이상 있는 데이터."""
-    ids = select(GroundTruthValue.dataset_id).where(GroundTruthValue.confirmed.is_(True)).distinct()
-    return list(db.session.scalars(select(CanDataset).where(CanDataset.id.in_(ids))
+def wescan_datasets() -> list[CanDataset]:
+    """신호가 지정된 확인 최종값이 하나 이상 있는 위스캔 데이터."""
+    ids = select(GroundTruthValue.dataset_id).where(GroundTruthValue.confirmed.is_(True),
+                                                    GroundTruthValue.signal_key.is_not(None)).distinct()
+    return list(db.session.scalars(select(CanDataset).where(CanDataset.id.in_(ids),
+                                                            CanDataset.kind == DatasetKind.WECAN_TRC)
                                    .order_by(CanDataset.id.desc())))
 
 
@@ -304,36 +385,27 @@ def _next_revision(signal_key: str) -> int:
     return (current or 0) + 1
 
 
-def _apply(signal_key: str, layout: Layout, evidence: dict, confidence: float, run: AnalysisRun,
-           actor: User, activate: bool) -> tuple[DecodeRule, str]:
-    """후보 수식을 규칙으로 남긴다. 적용하면 기존 적용 규칙은 '이전 버전'이 된다."""
+def _activate_layout(signal_key: str, layout: Layout, evidence: dict, confidence: float,
+                     run_id: int | None, actor: User) -> tuple[DecodeRule, bool]:
+    """수식을 적용한다. 같은 수식의 규칙이 있으면 그 버전을, 없으면 새 버전을 쓴다.
+    기존 적용 규칙은 '이전 버전'이 된다. (규칙, 새로 적용했는지)를 돌려준다."""
     rules = db.session.scalars(select(DecodeRule).where(DecodeRule.signal_key == signal_key)).all()
     same = next((r for r in rules if _layout(r) == layout), None)
     current = next((r for r in rules if r.status == RuleStatus.ACTIVE), None)
-
-    if not activate:
-        if same is None:
-            same = DecodeRule(signal_key=signal_key, revision=_next_revision(signal_key),
-                              status=RuleStatus.CANDIDATE, analysis_run_id=run.id, created_by=actor.id,
-                              confidence=confidence, evidence=evidence, **_rule_fields(layout))
-            db.session.add(same)
-            db.session.flush()
-            return same, "가설 저장"
-        if same.status == RuleStatus.CANDIDATE:
-            same.evidence, same.confidence = evidence, confidence
-        return same, "보류"
-
-    if current is not None:
+    if same is not None and same is current:
         current.evidence, current.confidence = evidence, confidence
-        return current, "유지"
+        return current, False
+    if current is not None:
+        current.status, current.retired_at = RuleStatus.RETIRED, _now()
+        db.session.flush()
     if same is None:
-        same = DecodeRule(signal_key=signal_key, revision=_next_revision(signal_key), analysis_run_id=run.id,
+        same = DecodeRule(signal_key=signal_key, revision=_next_revision(signal_key), analysis_run_id=run_id,
                           created_by=actor.id, **_rule_fields(layout))
         db.session.add(same)
     same.status, same.activated_at, same.retired_at = RuleStatus.ACTIVE, _now(), None
     same.evidence, same.confidence = evidence, confidence
     db.session.flush()
-    return same, "새로 적용"
+    return same, True
 
 
 def _overlaps(a: Layout, b: Layout) -> bool:
@@ -341,43 +413,84 @@ def _overlaps(a: Layout, b: Layout) -> bool:
 
 
 def _guard(signal_key: str, layout: Layout, active: dict[str, DecodeRule]) -> list[str]:
-    """자동 적용을 막는 이유. 규칙은 모든 차량에 함께 쓰이므로 이미 적용된 수식은 사람이 바꾼다."""
-    reasons = []
-    current = active.get(signal_key)
-    if current is not None and _layout(current) != layout:
-        reasons.append(f"적용 중 수식(v{current.revision}: {current.formula})과 달라 자동으로 바꾸지 않았습니다. "
-                       "규칙 화면에서 확인 후 적용하세요.")
+    """확정을 막는 이유: 다른 신호에 적용 중인 바이트와 겹치는 수식."""
     for key, rule in active.items():
         if key != signal_key and _overlaps(layout, _layout(rule)):
             label = signals.BY_KEY[key].label if key in signals.BY_KEY else key
-            reasons.append(f"'{label}'에 적용 중인 바이트와 겹칩니다.")
-            break
-    return reasons
+            return [f"'{label}'에 적용 중인 바이트와 겹칩니다."]
+    return []
 
 
-def run_analysis(actor: User, trace_ids: list[int], truth_dataset_id: int, apply: bool = True) -> AnalysisRun:
-    """apply=False면 판정만 기록하고 규칙은 바꾸지 않는다(기록과 정답의 측정 시각이 다를 때)."""
-    if not trace_ids:
-        raise ServiceError("분석할 통신 기록을 하나 이상 고르세요.")
-    truth_dataset = get_dataset(truth_dataset_id)
-    truths = ground_truths(truth_dataset)
+def compare_commands(wescan: CanDataset, reverse: list[CanDataset]) -> dict[str, list[dict]]:
+    """위스캔 기록과 리버스 기록의 명령(요청)을 공통 / 위스캔에만 / 리버스에만으로 나눈다."""
+    ours = {(c["header"], c["command"]): c for c in dataset_commands(wescan)}
+    theirs: dict[tuple[str, str], dict] = {}
+    for dataset in reverse:
+        for c in dataset_commands(dataset):
+            row = theirs.setdefault((c["header"], c["command"]), dict(c, count=0))
+            row["count"] += c["count"]
+            row["example"] = row["example"] or c["example"]
+
+    def merged(key: tuple[str, str]) -> dict:
+        w, r = ours.get(key), theirs.get(key)
+        base = w or r
+        return {"header": base["header"], "command": base["command"], "service": base["service"],
+                "did": base["did"], "sendable": base["sendable"],
+                "wescan_count": w["count"] if w else 0, "reverse_count": r["count"] if r else 0,
+                "wescan_example": w["example"] if w else None, "reverse_example": r["example"] if r else None}
+
+    return {
+        "common": [merged(k) for k in ours if k in theirs],
+        "wescan_only": [merged(k) for k in ours if k not in theirs],
+        "reverse_only": [merged(k) for k in theirs if k not in ours],
+    }
+
+
+def decoder_code(signal_key: str, layout: Layout) -> str:
+    """수식을 그대로 옮긴 Python 디코더. 화면에서 보여 주기만 하고 서버에서 실행하지 않는다."""
+    end = layout.start + layout.width
+    return (
+        f"# 요청: ATSH{layout.request_id:03X} → 22 {layout.did:04X}, 응답 62 {layout.did:04X} 뒤의 데이터(payload)\n"
+        f"def decode_{re.sub(r'[^0-9a-zA-Z_]', '_', signal_key)}(payload: bytes) -> float | None:\n"
+        f'    """{layout.formula()}"""\n'
+        f"    if len(payload) < {end}:\n"
+        f"        return None\n"
+        f"    raw = int.from_bytes(payload[{layout.start}:{end}], \"{layout.endian}\", signed={layout.signed})\n"
+        f"    return round(raw * {layout.scale!r} + {layout.offset!r}, 6)\n"
+    )
+
+
+def run_analysis(actor: User, wescan_id: int, reverse_ids: list[int]) -> AnalysisRun:
+    """위스캔 최종값을 정답으로 삼아 위스캔·리버스 기록의 응답에서 수식을 찾고 명령을 비교한다.
+    규칙은 바꾸지 않는다. 적용은 결과 화면의 '적용'(변경 전후 비교 → 확정)으로 한다."""
+    if not reverse_ids:
+        raise ServiceError("비교할 리버스 데이터를 하나 이상 고르세요.")
+    wescan = get_dataset(wescan_id)
+    if wescan.kind != DatasetKind.WECAN_TRC:
+        raise ServiceError("위스캔 데이터를 고르세요.")
+    reverse = [get_dataset(i) for i in reverse_ids if i != wescan.id]
+    if not reverse:
+        raise ServiceError("비교할 리버스 데이터를 하나 이상 고르세요.")
+    truths = ground_truths(wescan)
     if not truths:
-        raise ServiceError("확인된 숫자 정답값이 없습니다. 정답값을 확인(체크)한 뒤 실행하세요.")
+        raise ServiceError("위스캔 최종값 중 신호가 지정된 확인 값이 없습니다. 데이터 화면에서 신호를 고르세요.")
     started = time.perf_counter()
+    trace_ids = [wescan.id, *[d.id for d in reverse]]
     samples = merged_samples(trace_ids)
     if not samples:
         raise ServiceError("고른 기록에 데이터 조회(0x22) 응답이 없습니다.")
     ranked = search(samples, truths)
     decisions = judge(truths, ranked, samples)
 
-    run = AnalysisRun(trace_dataset_ids=trace_ids, truth_dataset_id=truth_dataset.id, created_by=actor.id,
-                      created_at=_now(), result={})
+    run = AnalysisRun(trace_dataset_ids=trace_ids, reverse_dataset_ids=[d.id for d in reverse],
+                      truth_dataset_id=wescan.id, commands=compare_commands(wescan, reverse),
+                      created_by=actor.id, created_at=_now(), result={})
     db.session.add(run)
     db.session.flush()
 
     active = {r.signal_key: r for r in db.session.scalars(
         select(DecodeRule).where(DecodeRule.status == RuleStatus.ACTIVE))}
-    result, activated = {}, 0
+    result = {}
     for truth in truths:
         decision = decisions[truth.signal_key]
         if decision.activate and (blocked := _guard(truth.signal_key, decision.candidate.layout, active)):
@@ -385,7 +498,7 @@ def run_analysis(actor: User, trace_ids: list[int], truth_dataset_id: int, apply
         signal = signals.BY_KEY[truth.signal_key]
         entry = {
             "label": signal.label, "unit": signal.unit, "truth": truth.value, "activate": decision.activate,
-            "reasons": decision.reasons, "status": "UNKNOWN", "rule_id": None, "outcome": None,
+            "reasons": list(decision.reasons), "status": "UNKNOWN",
             "candidates": [
                 {"formula": c.layout.formula(), "source": f"{c.layout.request_id:03X} 22 {c.layout.did:04X}",
                  "decoded": c.decoded, "error": round(c.error, 6), "score": round(c.score, 3),
@@ -396,25 +509,23 @@ def run_analysis(actor: User, trace_ids: list[int], truth_dataset_id: int, apply
         }
         if decision.candidate is not None:
             best = decision.candidate
-            entry.update(status="확정" if decision.activate else "가설", decoded=best.decoded,
-                         outcome="검증만(적용 안 함)")
             current = active.get(truth.signal_key)
-            entry["matches_active"] = current is not None and _layout(current) == best.layout
-            if apply:
-                evidence = best.evidence(truth) | {"reasons": decision.reasons, "analysis_run_id": run.id}
-                rule, outcome = _apply(truth.signal_key, best.layout, evidence, round(best.score, 3), run, actor,
-                                       decision.activate)
-                entry.update(rule_id=rule.id, outcome=outcome)
-                if decision.activate and outcome != "유지":
-                    activated += 1
+            entry.update(status="확정" if decision.activate else "가설", decoded=best.decoded,
+                         formula=best.layout.formula(), layout=best.layout.to_dict(),
+                         score=round(best.score, 3),
+                         evidence=best.evidence(truth) | {"reasons": decision.reasons, "analysis_run_id": run.id},
+                         code=decoder_code(truth.signal_key, best.layout),
+                         matches_active=current is not None and _layout(current) == best.layout)
+            if current is not None and not entry["matches_active"]:
+                entry["reasons"].append(f"적용 중 수식(v{current.revision}: {current.formula})과 다릅니다. "
+                                        "적용 화면에서 변경 전후를 비교하세요.")
         result[truth.signal_key] = entry
 
     run.result = result
-    run.activated_count = activated
     run.duration_ms = int((time.perf_counter() - started) * 1000)
     audit.record("CAN 역산 실행", "AnalysisRun", run.id, user_id=actor.id,
-                 changes={"traces": trace_ids, "truth_dataset": truth_dataset.id, "signals": len(truths),
-                          "activated": activated, "apply": apply})
+                 changes={"wescan": wescan.id, "reverse": run.reverse_dataset_ids, "signals": len(truths),
+                          "commands": {k: len(v) for k, v in run.commands.items()}})
     db.session.commit()
     return run
 
@@ -489,14 +600,233 @@ def active_rule_refs() -> list[RuleRef]:
     return [RuleRef(r.id, r.revision, r.signal_key, _layout(r), r.confidence) for r in rules]
 
 
+# ── 스캔 로직(스캔하기에 쓰는 명령·수식 묶음) ─────────────────────────────
+
+CHOICES = {"before": "변경 전 유지", "after": "변경 후 적용", "exclude": "빼기"}
+
+
+def active_logic() -> ScanLogic | None:
+    return db.session.scalar(select(ScanLogic).where(ScanLogic.status == LogicStatus.ACTIVE))
+
+
+def list_logics() -> list[ScanLogic]:
+    return list(db.session.scalars(select(ScanLogic).order_by(ScanLogic.revision.desc()).limit(50)))
+
+
+def get_logic(logic_id: int) -> ScanLogic:
+    logic = db.session.get(ScanLogic, logic_id)
+    if logic is None:
+        raise ServiceError("스캔 로직을 찾을 수 없습니다.", 404)
+    return logic
+
+
+def logic_commands() -> list[dict]:
+    logic = active_logic()
+    return list(logic.commands) if logic else []
+
+
+def _rule_side(rule: DecodeRule) -> dict:
+    return {"rule_id": rule.id, "revision": rule.revision, "formula": rule.formula,
+            "source": f"{rule.request_id} 22 {rule.did}", "layout": _layout(rule).to_dict()}
+
+
+def item_options(item: dict) -> list[str]:
+    if item["change"] == "same":
+        return ["before", "exclude"]
+    return [c for c in ("before", "after") if item[c]] + ["exclude"]
+
+
+def draft_logic(actor: User, run: AnalysisRun) -> ScanLogic:
+    """분석 결과로 적용 전(draft) 로직을 만든다. 현재 적용 중인 명령·수식(변경 전)과 분석 결과(변경 후)를
+    항목별로 비교하고 기본안(확정 수식은 변경 후, 가설·UNKNOWN은 변경 전 유지)을 정한다."""
+    before_cmds = {(c["header"], c["command"]): c for c in logic_commands()}
+    after_cmds: dict[tuple[str, str], dict] = {}
+    for c in run.commands.get("common", []) + run.commands.get("wescan_only", []):
+        if c["sendable"]:
+            label = f"위스캔 명령 {c['header']} {c['command']}"
+            after_cmds[(c["header"], c["command"])] = {"header": c["header"], "command": c["command"], "label": label}
+    for key, entry in run.result.items():
+        if entry.get("layout"):
+            header, command = entry["layout"]["request_id"], f"22{entry['layout']['did']}"
+            after_cmds.setdefault((header, command), {"header": header, "command": command,
+                                                      "label": f"{entry['label']} 조회 {header} {command}"})
+
+    items = []
+    for key in list(before_cmds) + [k for k in after_cmds if k not in before_cmds]:
+        before, after = before_cmds.get(key), after_cmds.get(key)
+        change = "same" if before and after else ("added" if after else "removed")
+        items.append({"key": f"cmd:{key[0]}:{key[1]}", "kind": "command", "label": f"{key[0]} {key[1]}",
+                      "before": before, "after": after, "change": change,
+                      "default": "after" if change == "added" else "before"})
+
+    active = {r.signal_key: r for r in db.session.scalars(
+        select(DecodeRule).where(DecodeRule.status == RuleStatus.ACTIVE))}
+    order = [s.key for s in signals.SIGNALS]
+    keys = sorted(set(active) | {k for k, e in run.result.items() if e.get("layout")},
+                  key=lambda k: order.index(k) if k in order else len(order))
+    for key in keys:
+        rule, entry = active.get(key), run.result.get(key) or {}
+        before = _rule_side(rule) if rule else None
+        after = ({"formula": entry["formula"], "layout": entry["layout"], "status": entry["status"],
+                  "decoded": entry["decoded"], "truth": entry["truth"], "score": entry["score"],
+                  "evidence": entry["evidence"]} if entry.get("layout") else None)
+        if before and after and before["layout"] == after["layout"]:
+            change, default = "same", "before"
+        elif after:
+            change = "changed" if before else "added"
+            default = "after" if after["status"] == "확정" else ("before" if before else "exclude")
+        else:
+            change, default = "removed", "before"
+        signal = signals.BY_KEY.get(key)
+        items.append({"key": f"sig:{key}", "kind": "signal", "signal_key": key,
+                      "label": signal.label if signal else key, "unit": signal.unit if signal else "",
+                      "before": before, "after": after, "change": change, "default": default})
+
+    revision = (db.session.scalar(select(func.max(ScanLogic.revision))) or 0) + 1
+    current = active_logic()
+    logic = ScanLogic(revision=revision, status=LogicStatus.DRAFT, commands=[], rules=[], analysis_run_id=run.id,
+                      created_by=actor.id,
+                      diff={"items": items, "run_id": run.id, "base_revision": current.revision if current else None})
+    db.session.add(logic)
+    db.session.flush()
+    audit.record("스캔 로직 초안", "ScanLogic", logic.id, user_id=actor.id,
+                 changes={"revision": revision, "run": run.id, "items": len(items)})
+    db.session.commit()
+    return logic
+
+
+def recommended(logic: ScanLogic) -> dict[str, dict]:
+    """항목별 추천(AI 최적안이 있으면 그것, 없으면 기본안)."""
+    advice = (logic.ai_advice or {}).get("items", {})
+    out = {}
+    for item in logic.diff["items"]:
+        given = advice.get(item["key"]) or {}
+        if given.get("choice") in item_options(item):
+            out[item["key"]] = {"choice": given["choice"], "reason": given.get("reason") or ""}
+        else:
+            out[item["key"]] = {"choice": item["default"], "reason": "기본안"}
+    return out
+
+
+def advise_logic(actor: User, logic: ScanLogic) -> tuple[ScanLogic, str | None]:
+    """AI에게 변경 전후를 보내 항목별 최적안을 받는다. AI를 쓸 수 없으면 기본안을 저장하고 이유를 돌려준다."""
+    if logic.status != LogicStatus.DRAFT:
+        raise ServiceError("적용 전 로직만 최적안을 받을 수 있습니다.", 409)
+    facts = [{"key": i["key"], "kind": i["kind"], "label": i["label"], "change": i["change"],
+              "options": item_options(i), "default": i["default"],
+              "before": {k: v for k, v in (i["before"] or {}).items() if k not in ("layout", "evidence")} or None,
+              "after": {k: v for k, v in (i["after"] or {}).items() if k not in ("layout", "evidence")} or None}
+             for i in logic.diff["items"]]
+    problem = None
+    try:
+        items, summary, provider = ai.advise_logic(facts)
+        valid = {i["key"]: item_options(i) for i in logic.diff["items"]}
+        advice = {"provider": provider, "summary": summary,
+                  "items": {k: v for k, v in items.items() if v.get("choice") in valid.get(k, [])}}
+    except ServiceError as error:
+        problem = error.message
+        advice = {"provider": None, "summary": f"AI를 쓸 수 없어 규칙 기반 기본안을 보여 줍니다. ({error.message})",
+                  "items": {i["key"]: {"choice": i["default"], "reason": "기본안"} for i in logic.diff["items"]}}
+    logic.ai_advice = advice
+    audit.record("스캔 로직 AI 최적안", "ScanLogic", logic.id, user_id=actor.id,
+                 changes={"provider": advice["provider"], "items": len(advice["items"])})
+    db.session.commit()
+    return logic, problem
+
+
+def _switch_active_logic(logic: ScanLogic) -> ScanLogic | None:
+    previous = active_logic()
+    if previous is not None and previous is not logic:
+        previous.status, previous.retired_at = LogicStatus.RETIRED, _now()
+        db.session.flush()
+    logic.status, logic.activated_at, logic.retired_at = LogicStatus.ACTIVE, _now(), None
+    return previous
+
+
+def confirm_logic(actor: User, logic: ScanLogic, version: int, choices: dict[str, str]) -> ScanLogic:
+    """관리자가 고른 항목으로 로직을 적용한다. 고른 수식은 규칙으로 적용하고 이전 로직은 '이전 버전'이 된다."""
+    if logic.version != version:
+        raise ServiceError(CONFLICT, 409)
+    if logic.status != LogicStatus.DRAFT:
+        raise ServiceError("이미 처리한 로직입니다. 디코딩 규칙 화면에서 버전을 확인하세요.", 409)
+    commands, rules, chosen, activated = [], [], {}, 0
+    try:
+        for item in logic.diff["items"]:
+            choice = choices.get(item["key"])
+            if choice not in item_options(item):
+                choice = item["default"]
+            chosen[item["key"]] = choice
+            if item["kind"] == "command":
+                if choice != "exclude":
+                    commands.append(item[choice] or item["before"] or item["after"])
+                continue
+            key, current = item["signal_key"], active_rule(item["signal_key"])
+            if choice == "after":
+                after = item["after"]
+                rule, changed = _activate_layout(key, Layout.from_dict(after["layout"]), after["evidence"],
+                                                 after["score"], logic.analysis_run_id, actor)
+                activated += changed
+            elif choice == "before" and current is not None:
+                rule = current
+            else:
+                rule = None
+                if current is not None:
+                    current.status, current.retired_at = RuleStatus.RETIRED, _now()
+            if rule is not None:
+                rules.append({"signal_key": key, "rule_id": rule.id, "revision": rule.revision,
+                              "formula": rule.formula})
+        previous = _switch_active_logic(logic)
+        logic.commands, logic.rules = commands, rules
+        logic.diff = dict(logic.diff, chosen=chosen)
+        if logic.analysis_run_id and (run := db.session.get(AnalysisRun, logic.analysis_run_id)):
+            run.activated_count = (run.activated_count or 0) + activated
+        audit.record("스캔 로직 적용", "ScanLogic", logic.id, user_id=actor.id,
+                     changes={"revision": logic.revision, "commands": len(commands), "rules": len(rules),
+                              "activated": activated, "replaced": previous.revision if previous else None})
+        db.session.commit()
+    except StaleDataError as exc:
+        db.session.rollback()
+        raise ServiceError(CONFLICT, 409) from exc
+    return logic
+
+
+def restore_logic(actor: User, logic: ScanLogic, version: int) -> ScanLogic:
+    """이전 버전 로직을 다시 적용한다. 그 버전의 수식(규칙 버전)도 함께 되돌린다."""
+    if logic.version != version:
+        raise ServiceError(CONFLICT, 409)
+    if logic.status != LogicStatus.RETIRED:
+        raise ServiceError("이전 버전 로직만 되돌릴 수 있습니다.", 409)
+    try:
+        wanted = {r["signal_key"]: r["rule_id"] for r in logic.rules}
+        for rule in db.session.scalars(select(DecodeRule).where(DecodeRule.status == RuleStatus.ACTIVE)):
+            if wanted.get(rule.signal_key) != rule.id:
+                rule.status, rule.retired_at = RuleStatus.RETIRED, _now()
+        db.session.flush()
+        for rule_id in wanted.values():
+            rule = db.session.get(DecodeRule, rule_id)
+            if rule is not None and rule.status != RuleStatus.ACTIVE:
+                rule.status, rule.activated_at, rule.retired_at = RuleStatus.ACTIVE, _now(), None
+        previous = _switch_active_logic(logic)
+        audit.record("스캔 로직 되돌리기", "ScanLogic", logic.id, user_id=actor.id,
+                     changes={"revision": logic.revision, "replaced": previous.revision if previous else None})
+        db.session.commit()
+    except StaleDataError as exc:
+        db.session.rollback()
+        raise ServiceError(CONFLICT, 409) from exc
+    return logic
+
+
 def capture_requests() -> list[dict]:
-    """실시간 수집에서 보낼 요청. 적용 중 규칙이 쓰는 ECU·DID와 고장코드·VIN 조회."""
+    """실시간 수집·스캔에서 보낼 요청. 적용 중 스캔 로직의 명령, 그다음 적용 규칙이 쓰는 ECU·DID와
+    고장코드·VIN 조회."""
+    requests = [{"header": c["header"], "command": c["command"]} for c in logic_commands()]
     pairs = sorted({(r.layout.request_id, r.layout.did) for r in active_rule_refs()})
-    requests = [{"header": f"{req:03X}", "command": f"22{did:04X}"} for req, did in pairs]
+    rule_requests = [{"header": f"{req:03X}", "command": f"22{did:04X}"} for req, did in pairs]
     for header in sorted({f"{req:03X}" for req, _ in pairs}):
-        requests.append({"header": header, "command": "1902FF"})
-    if requests:
-        requests.append({"header": requests[0]["header"], "command": "22F190"})
+        rule_requests.append({"header": header, "command": "1902FF"})
+    if rule_requests:
+        rule_requests.append({"header": rule_requests[0]["header"], "command": "22F190"})
+    requests += [r for r in rule_requests if r not in requests]
     return requests
 
 
@@ -729,6 +1059,28 @@ def chart_data(report: DiagnosticReport) -> dict:
             "series": {k: {"label": values[k]["label"], "unit": values[k]["unit"], "points": v}
                        for k, v in series.items()},
             "compare": compare}
+
+
+RESET_MODELS = (DiagnosticReport, ScanLogic, DecodeRule, AnalysisRun, GroundTruthValue, CanDataset)
+
+
+def reset_counts() -> dict[str, int]:
+    return {m.__tablename__: db.session.scalar(select(func.count()).select_from(m)) for m in RESET_MODELS}
+
+
+def reset_all() -> dict[str, int]:
+    """CAN 분석 데이터(데이터셋, 정답값, 역산 기록, 규칙, 스캔 로직, 운영 결과지)를 모두 지운다.
+    스캔 기록(scans)은 남고 그 안의 결과지·통신 기록 번호는 '삭제됨'으로 보인다."""
+    counts = reset_counts()
+    for model in RESET_MODELS:
+        db.session.execute(delete(model))
+    audit.record("CAN 분석 초기화", "CanDataset", changes=counts, message="flask canlab reset")
+    db.session.commit()
+    return counts
+
+
+def report_exists(report_id: int | None) -> bool:
+    return bool(report_id) and db.session.get(DiagnosticReport, report_id) is not None
 
 
 def overview() -> dict:

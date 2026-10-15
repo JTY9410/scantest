@@ -1,5 +1,5 @@
 {% extends "layouts/admin.html" %}
-{% from "components/ui.html" import page_header, badge %}
+{% from "components/ui.html" import page_header, badge, empty %}
 {% block title %}역산 #{{ run.id }}{% endblock %}
 
 {% macro status_badge(status) -%}
@@ -8,13 +8,45 @@
 
 {% block content %}
 {{ page_header("역산 결과 #" ~ run.id,
-               run.created_at|kst ~ " · " ~ run.duration_ms ~ "ms · 새로 적용 " ~ run.activated_count ~ "개",
+               run.created_at|kst ~ " · " ~ run.duration_ms ~ "ms · 위스캔 #" ~ (run.truth_dataset_id or "-") ~ " · 적용한 규칙 " ~ run.activated_count ~ "개",
                back=(url_for('canlab.analysis'), "역산 분석")) }}
 {% include "canlab/_tabs.html" %}
 
+{% set commands = run.commands or {} %}
+<section class="card mb-6 overflow-hidden" aria-labelledby="commands-title">
+  <div class="card-body pb-0">
+    <h2 id="commands-title" class="text-lg font-bold">1. 명령 비교</h2>
+    <p class="mt-1 text-sm text-muted">공통 {{ (commands.common or [])|length }} · 위스캔에만 {{ (commands.wescan_only or [])|length }} · 리버스에만 {{ (commands.reverse_only or [])|length }}.
+      위스캔 결과를 내려면 '공통'과 '위스캔에만' 명령을 보내야 합니다.</p>
+  </div>
+  {% set rows = [] %}
+  {% for group, label in [("common", "공통"), ("wescan_only", "위스캔에만"), ("reverse_only", "리버스에만")] %}
+    {% for c in commands.get(group, []) %}{% do rows.append((label, c)) %}{% endfor %}
+  {% endfor %}
+  {% if rows %}
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">명령</th><th scope="col">구분</th><th scope="col" class="num">위스캔·리버스 횟수</th><th scope="col">응답 예시</th><th scope="col">스캔 로직</th></tr></thead>
+    <tbody>
+      {% for label, c in rows %}
+      <tr>
+        <td data-primary class="mono font-semibold">{{ c.header }} {{ c.command }}</td>
+        <td data-label="구분">{{ badge(label, {"공통": "success", "위스캔에만": "warning"}.get(label, "")) }}</td>
+        <td data-label="횟수" class="num">{{ c.wescan_count }} · {{ c.reverse_count }}</td>
+        <td data-label="응답 예시" class="mono text-sm break-all">{{ c.wescan_example or c.reverse_example or "-" }}</td>
+        <td data-label="스캔 로직">{{ badge("가능", "success") if c.sendable else badge("보내지 않음", "") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("비교할 명령이 없습니다.") }}
+  {% endif %}
+</section>
+
+<h2 class="mb-2 text-lg font-bold">2. 신호별 수식과 분석 코드</h2>
 <p class="mb-4 text-sm text-muted">
-  <strong class="text-fg">확정</strong>: 정답과 일치하고 모든 검증을 통과해 운영에 적용됨 ·
-  <strong class="text-fg">가설</strong>: 맞는 해석은 있으나 검증 미통과(규칙 화면에서 수동 적용 가능) ·
+  <strong class="text-fg">확정</strong>: 위스캔 최종값과 일치하고 모든 검증을 통과 ·
+  <strong class="text-fg">가설</strong>: 맞는 해석은 있으나 검증 미통과 ·
   <strong class="text-fg">UNKNOWN</strong>: 맞는 바이트를 찾지 못함
 </p>
 
@@ -23,9 +55,10 @@
   <section class="card overflow-hidden" aria-labelledby="sig-{{ key }}">
     <div class="card-body flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 id="sig-{{ key }}" class="font-bold">{{ item.label }}</h2>
-        <p class="mt-1 text-sm text-muted">정답 <strong class="tabular-nums text-fg">{{ item.truth }} {{ item.unit }}</strong>
+        <h3 id="sig-{{ key }}" class="font-bold">{{ item.label }}</h3>
+        <p class="mt-1 text-sm text-muted">위스캔 <strong class="tabular-nums text-fg">{{ item.truth }} {{ item.unit }}</strong>
           {% if item.decoded is defined %} · 해석 <strong class="tabular-nums text-fg">{{ item.decoded }} {{ item.unit }}</strong>{% endif %}
+          {% if item.formula %} · <span class="mono">{{ item.formula }}</span>{% endif %}
           {% if item.outcome %} · {{ item.outcome }}{% endif %}</p>
         <ul class="mt-2 grid gap-1 text-sm">
           {% for reason in item.reasons %}<li>· {{ reason }}</li>{% endfor %}
@@ -36,6 +69,12 @@
         {% if item.matches_active %}{{ badge("적용 중 수식과 같음", "info") }}{% endif %}
       </div>
     </div>
+    {% if item.code %}
+    <details class="border-t border-line">
+      <summary class="card-body cursor-pointer py-3 text-sm font-semibold">분석 코드(Python)</summary>
+      <pre class="code-block mx-4 mb-4"><code>{{ item.code }}</code></pre>
+    </details>
+    {% endif %}
     {% if item.candidates %}
     <table class="rtable">
       <thead><tr><th scope="col">후보 수식</th><th scope="col">출처</th><th scope="col" class="num">해석값</th><th scope="col" class="num">오차</th><th scope="col" class="num">일치율</th><th scope="col" class="num">점수</th><th scope="col">참고</th></tr></thead>
@@ -61,4 +100,13 @@
   </section>
   {% endfor %}
 </div>
+
+<section class="card card-body mt-6" aria-labelledby="apply-title">
+  <h2 id="apply-title" class="text-lg font-bold">3. 스캔하기에 적용</h2>
+  <p class="mt-1 text-sm text-muted">적용을 누르면 현재 스캔 로직(변경 전)과 이 분석 결과(변경 후)를 항목별로 비교하는 화면으로 갑니다. AI 최적안을 받아 보고, 고른 항목만 확정하면 다음 스캔부터 반영됩니다.</p>
+  <form method="post" action="{{ url_for('canlab.apply_run', run_id=run.id) }}" class="mt-4">
+    {{ action.csrf_token }}
+    <button class="btn btn-primary" type="submit">적용</button>
+  </form>
+</section>
 {% endblock %}

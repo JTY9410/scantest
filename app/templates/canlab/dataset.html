@@ -3,7 +3,8 @@
 {% block title %}{{ dataset.filename }}{% endblock %}
 
 {% block content %}
-{% call page_header("#" ~ dataset.id ~ " " ~ dataset.filename, dataset.kind_label ~ " · " ~ dataset.vehicle, back=(url_for('canlab.datasets'), "데이터 목록")) %}
+{% set back = {"wecan_trc": (url_for('canlab.wescan'), "위스캔값 입력"), "gscan_trc": (url_for('canlab.reverse'), "리버스데이터 입력")}.get(dataset.kind, (url_for('canlab.datasets'), "데이터 목록")) %}
+{% call page_header("#" ~ dataset.id ~ " " ~ dataset.filename, dataset.kind_label ~ " · " ~ dataset.vehicle, back=back) %}
   {% if dataset.is_trace %}
   <a class="btn btn-primary" href="{{ url_for('canlab.reports', dataset_id=dataset.id) }}">운영 결과지 만들기</a>
   {% endif %}
@@ -70,9 +71,32 @@
   {% endif %}
 </div>
 
+{% if dataset.is_trace and dataset.summary.commands %}
+<section class="card mt-6 overflow-hidden" aria-labelledby="commands-title">
+  <div class="card-body pb-0">
+    <h2 id="commands-title" class="text-lg font-bold">추출한 명령과 산출 결과 <span class="text-muted">{{ dataset.summary.commands|length }}</span></h2>
+    <p class="mt-1 text-sm text-muted">기록에 있는 요청(명령)과 그 응답입니다. '스캔 로직 가능'은 읽기 명령이라 스캔하기에 넣을 수 있다는 뜻입니다.</p>
+  </div>
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">명령</th><th scope="col">응답 주소</th><th scope="col" class="num">요청·긍정</th><th scope="col">응답 예시(산출 결과)</th><th scope="col">비고</th></tr></thead>
+    <tbody>
+      {% for c in dataset.summary.commands %}
+      <tr>
+        <td data-primary class="mono font-semibold">{{ c.header }} {{ c.command }}</td>
+        <td data-label="응답 주소" class="mono">{{ c.response_id or "-" }}</td>
+        <td data-label="요청·긍정" class="num">{{ c.count }} · {{ c.positive }}</td>
+        <td data-label="응답 예시" class="mono text-sm break-all">{{ c.example or "-" }}</td>
+        <td data-label="비고">{% if c.negative %}{{ badge("부정 " ~ c.negative, "warning") }} {% endif %}{{ badge("스캔 로직 가능", "success") if c.sendable else badge("보내지 않음", "") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 <section id="truths" class="card mt-6 overflow-hidden" aria-labelledby="truths-title">
   <div class="card-body pb-0">
-    <h2 id="truths-title" class="text-lg font-bold">정답값</h2>
+    <h2 id="truths-title" class="text-lg font-bold">{{ "위스캔 최종값(정답값)" if dataset.kind == "wecan_trc" else "정답값" }}</h2>
     <p class="mt-1 text-sm text-muted">확인(체크)한 숫자 값 중 신호가 지정된 것만 역산에 씁니다. 항목명이 결과지와 같으면 신호가 자동으로 정해집니다.</p>
   </div>
   {% if dataset.truths %}

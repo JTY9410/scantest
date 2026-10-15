@@ -21,7 +21,8 @@
   <a class="btn btn-secondary print:hidden" href="{{ url_for('scanner.pdf', scan_id=scan.id) }}" download
      {% if request.args.get('pdf') %}data-pdf-auto{% endif %}>PDF 내려받기</a>
   <button type="button" class="btn btn-secondary print:hidden" data-print>인쇄</button>
-  {% if result.report_id %}<a class="btn btn-secondary print:hidden" href="{{ url_for('canlab.report', report_id=result.report_id) }}">결과지</a>{% endif %}
+  {% if canlab_report_exists(result.report_id) %}<a class="btn btn-secondary print:hidden" href="{{ url_for('canlab.report', report_id=result.report_id) }}">결과지</a>
+  {% elif result.report_id %}<span class="btn btn-secondary print:hidden" aria-disabled="true">결과지 삭제됨</span>{% endif %}
   <a class="btn btn-secondary print:hidden" href="{{ url_for('monitoring.scan_show', scan_id=scan.id) }}">스캔 기록</a>
   <a class="btn btn-primary print:hidden" href="{{ url_for('scanner.index', car_no=scan.car_no) }}">다시 스캔</a>
 {% endcall %}
@@ -34,6 +35,23 @@
 {% else %}
 <div class="flash flash-error mb-6"><span aria-hidden="true" class="font-bold">!</span>
   <p>스캔에 실패했습니다. <a class="underline" href="#errors-title">오류 기록</a>에서 원인을 확인하세요.</p></div>
+{% endif %}
+
+{% set logic_errors = result.errors|selectattr("group", "equalto", "logic")|list %}
+{% if logic_errors %}
+<dialog class="dialog print:hidden" data-auto-open aria-labelledby="logic-title">
+  <div class="card-body">
+    <h2 id="logic-title" class="text-lg font-bold">스캔 로직 문제 {{ logic_errors|length }}건</h2>
+    <p class="mt-1 text-sm text-muted">적용 중인 스캔 로직{% if result.scan_logic %} v{{ result.scan_logic.revision }}{% endif %}이 위스캔과 같은 결과를 내지 못했습니다. 아래 오류 기록에도 남겼습니다.</p>
+    <ul class="mt-3 grid gap-2 text-sm">
+      {% for e in logic_errors %}
+      <li><strong>{{ e.label }}</strong>{% if e.command %} <span class="mono text-muted">{{ e.header or "" }} {{ e.command }}</span>{% endif %}
+        <p>{{ e.message }}</p></li>
+      {% endfor %}
+    </ul>
+    <form method="dialog" class="mt-4 flex justify-end"><button class="btn btn-primary">확인</button></form>
+  </div>
+</dialog>
 {% endif %}
 
 <div class="grid gap-6 lg:grid-cols-2">

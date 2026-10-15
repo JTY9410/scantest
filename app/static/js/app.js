@@ -1,4 +1,4 @@
-// 관리자 공통 동작: 모바일 메뉴, 툴팁, 제출 중 표시, 확인 대화상자.
+// 관리자 공통 동작: 모바일 메뉴, 툴팁, 제출 중 표시, 확인 대화상자, 문제 알림 팝업.
 (() => {
   "use strict";
 
@@ -87,7 +87,7 @@
     form.addEventListener("submit", (event) => {
       if (event.defaultPrevented) return;
       const button = event.submitter || form.querySelector("[type=submit]");
-      if (!button || form.method.toLowerCase() === "get") return;
+      if (!button || ["get", "dialog"].includes(form.method.toLowerCase())) return;
       if (form.dataset.submitting === "true") {
         event.preventDefault();
         return;
@@ -112,5 +112,10 @@
   // 선택 상자를 바꾸면 바로 검색(필터 폼)
   document.querySelectorAll("form[data-autosubmit] select").forEach((select) => {
     select.addEventListener("change", () => select.form.requestSubmit());
+  });
+
+  // 문제 알림 팝업(스캔 로직 문제 등)은 화면을 열면 바로 띄운다.
+  document.querySelectorAll("dialog[data-auto-open]").forEach((dialog) => {
+    if (!dialog.open) dialog.showModal();
   });
 })();

@@ -1,4 +1,4 @@
-"""CAN 분석에서 쓰는 외부 AI 호출(결과지 판독, 보고서 요약).
+"""CAN 분석에서 쓰는 외부 AI 호출(결과지 판독, 보고서 요약, 스캔 로직 최적안).
 
 관리자 'AI 연결'에서 'CAN 분석' 용도를 켠 연결만 쓴다. 키는 호출 순간에만 복호화한다.
 """
@@ -119,6 +119,35 @@ REPORT_SYSTEM = (
     "너는 전기차·하이브리드 고전압 배터리 진단 보고서를 쓰는 정비 전문가다. 주어진 측정값과 판정 근거만 사용하고 "
     "없는 값을 지어내지 않는다. 확정되지 않은 수식(가설)으로 계산된 값은 그렇다고 밝힌다. 한국어 존댓말로 쓴다."
 )
+
+
+LOGIC_SYSTEM = (
+    "너는 자동차 진단(OBD2·UDS) 스캔 로직을 검토하는 엔지니어다. 목표는 우리 스캐너가 위스캔(기준 진단기)과 같은 "
+    "명령을 보내고 같은 결과를 내는 것이다. 주어진 항목만 판단하고 없는 명령·수식을 만들지 않는다. "
+    "검증 상태가 '가설'인 수식은 근거가 충분할 때만 고른다. 한국어로 짧게 이유를 쓴다."
+)
+
+
+def advise_logic(items: list[dict]) -> tuple[dict[str, dict], str, str]:
+    """변경 전후 항목마다 before/after/exclude 중 하나를 고르게 한다. ({key: {choice, reason}}, 요약, 공급자)"""
+    prompt = (
+        "다음은 스캔 로직의 변경 전(before)·변경 후(after) 항목이다. kind=command는 진단기에 보낼 명령, "
+        "kind=signal은 응답 바이트를 값으로 바꾸는 수식이다. 각 항목의 options 중 하나를 골라라. "
+        'JSON 객체로만 답하라: {"summary": 전체 의견 2~3문장, "items": [{"key": 항목 key, "choice": 고른 값, '
+        '"reason": 한 문장}]}\n\n' + json.dumps(items, ensure_ascii=False)
+    )
+    text, provider = ask(LOGIC_SYSTEM, prompt)
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    try:
+        data = json.loads(match.group(0)) if match else {}
+    except json.JSONDecodeError:
+        data = {}
+    rows = data.get("items") if isinstance(data, dict) else None
+    if not isinstance(rows, list):
+        raise ServiceError("AI 최적안을 읽지 못했습니다.", 502)
+    advice = {str(r.get("key")): {"choice": str(r.get("choice", "")), "reason": str(r.get("reason", ""))[:300]}
+              for r in rows if isinstance(r, dict) and r.get("key")}
+    return advice, str(data.get("summary", ""))[:1000], provider
 
 
 def summarize_report(facts: dict) -> tuple[str, str]:

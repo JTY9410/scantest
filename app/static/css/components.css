@@ -382,6 +382,33 @@
   }
 
   /* 빈 화면 */
+  /* 코드 보기(실행하지 않는 예시 코드) */
+  .code-block {
+    overflow-x: auto;
+    padding: var(--wc-space-3) var(--wc-space-4);
+    border-radius: var(--wc-radius-sm);
+    background: var(--wc-color-ink);
+    color: var(--wc-color-on-ink);
+    font-family: var(--wc-font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+  }
+
+  /* 알림 대화상자(<dialog>). 열면 초점이 안으로 가고 Escape로 닫힌다. */
+  .dialog {
+    width: min(40rem, calc(100vw - 2 * var(--wc-space-4)));
+    max-height: calc(100dvh - 2 * var(--wc-space-8));
+    padding: 0;
+    border: 1px solid var(--wc-color-border);
+    border-radius: var(--wc-radius-lg);
+    background: var(--wc-color-surface);
+    color: var(--wc-color-text);
+    box-shadow: var(--wc-shadow-lg);
+  }
+  .dialog::backdrop {
+    background: var(--wc-color-backdrop);
+  }
+
   .empty {
     display: grid;
     justify-items: center;
