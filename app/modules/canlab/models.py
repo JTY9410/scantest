@@ -55,10 +55,11 @@ class RuleStatus(enum.StrEnum):
 class TruthSource(enum.StrEnum):
     AI_OCR = "ai_ocr"
     MANUAL = "manual"
+    PDF_TEXT = "pdf_text"
 
     @property
     def label(self) -> str:
-        return {"ai_ocr": "AI 판독", "manual": "직접 입력"}[self.value]
+        return {"ai_ocr": "AI 판독", "manual": "직접 입력", "pdf_text": "PDF 글자"}[self.value]
 
 
 class CanDataset(TimestampMixin, db.Model):
@@ -106,7 +107,7 @@ class GroundTruthValue(TimestampMixin, db.Model):
 
     __tablename__ = "ground_truth_values"
     __table_args__ = (
-        CheckConstraint("source IN ('ai_ocr', 'manual')", name="source_valid"),
+        CheckConstraint("source IN ('ai_ocr', 'manual', 'pdf_text')", name="source_valid"),
         Index("ix_ground_truth_values_dataset_id", "dataset_id"),
     )
 

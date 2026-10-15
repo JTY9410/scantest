@@ -34,6 +34,8 @@ CONFLICT = "다른 관리자가 먼저 바꿨습니다. 새로고침한 뒤 다�
 TRACE_EXTENSIONS = (".trc", ".txt", ".log")
 VALUE_EXTENSIONS = (".txt", ".csv", ".tsv")
 MAX_TRUTH_LINES = 200
+MAX_PDF_PAGES = 20
+MAX_AI_PAGES = 3
 MAX_SERIES_POINTS = 120
 MAX_COMMANDS = 200
 # 스캔 로직에 넣을 수 있는 읽기 서비스. 세션 변경·보안 접근·쓰기·루틴·지우기는 넣지 않는다.
@@ -192,9 +194,16 @@ def page_image(dataset: CanDataset, page: int) -> tuple[str, bytes]:
     reader = _pdf_reader(get_dataset(dataset.id, with_content=True).content)
     if not 1 <= page <= len(reader.pages):
         raise ServiceError("페이지를 찾을 수 없습니다.", 404)
-    images = list(reader.pages[page - 1].images)
-    if not images:
+    image = _largest_image(reader.pages[page - 1])
+    if image is None:
         raise ServiceError("이 페이지에는 그림이 없습니다.", 404)
+    return image
+
+
+def _largest_image(page) -> tuple[str, bytes] | None:
+    images = list(page.images)
+    if not images:
+        return None
     largest = max(images, key=lambda img: img.image.width * img.image.height)
     buffer = io.BytesIO()
     largest.image.convert("RGB").save(buffer, "JPEG", quality=88)
@@ -272,7 +281,7 @@ def add_truths(actor: User, dataset: CanDataset, text: str) -> int:
 def values_file_text(filename: str, content: bytes) -> str:
     """최종값 파일(.txt/.tsv는 '항목 | 값 | 단위' 줄, .csv는 항목,값,단위 열)을 입력 줄로 바꾼다."""
     if not filename.lower().endswith(VALUE_EXTENSIONS):
-        raise ServiceError("최종값 파일은 .txt, .csv, .tsv 파일이어야 합니다.")
+        raise ServiceError("최종값 파일은 .pdf, .txt, .csv, .tsv 파일이어야 합니다.")
     if len(content) > current_app.config["CANLAB_MAX_UPLOAD_BYTES"]:
         raise ServiceError("최종값 파일이 너무 큽니다.", 413)
     try:
@@ -287,16 +296,59 @@ def values_file_text(filename: str, content: bytes) -> str:
     return text
 
 
+def _numeric(value: str) -> bool:
+    return re.fullmatch(r"-?\d+(\.\d+)?", value.strip().replace(",", "")) is not None
+
+
+def pdf_values(filename: str, content: bytes) -> list[tuple[str, str, str, int, str]]:
+    """결과지 PDF의 (항목, 값, 단위, 쪽, 출처). PDF 글자를 먼저 읽고, 글자로 읽은 값이 없으면
+    (그림으로 된 PDF) 앞쪽 페이지를 AI로 판독한다."""
+    if not (filename.lower().endswith(".pdf") and content.startswith(b"%PDF")):
+        raise ServiceError("최종값 PDF 파일이 올바르지 않습니다.")
+    if len(content) > current_app.config["CANLAB_MAX_UPLOAD_BYTES"]:
+        raise ServiceError("최종값 파일이 너무 큽니다.", 413)
+    pages = list(_pdf_reader(content).pages)[:MAX_PDF_PAGES]
+    rows = [(label, value, unit, number, TruthSource.PDF_TEXT)
+            for number, page in enumerate(pages, 1)
+            for label, value, unit in parse_truth_lines(page.extract_text() or "") if _numeric(value)]
+    if rows:
+        return rows[:MAX_TRUTH_LINES]
+    problem = None
+    for number, page in enumerate(pages[:MAX_AI_PAGES], 1):
+        if (image := _largest_image(page)) is None:
+            continue
+        try:
+            found, _ = ai.read_table(image=image)
+        except ServiceError as error:
+            if error.status not in (502, 504):
+                raise ServiceError(f"PDF에 글자가 없어 AI 판독이 필요합니다. {error.message}") from error
+            problem = error.message
+            continue
+        rows += [(r["label"], r["value"], r["unit"], number, TruthSource.AI_OCR) for r in found if _numeric(r["value"])]
+    if not rows:
+        reason = f" {problem}" if problem else ""
+        raise ServiceError(f"PDF에서 최종값을 읽지 못했습니다.{reason} 값을 붙여 넣으세요.")
+    return rows[:MAX_TRUTH_LINES]
+
+
 def upload_wescan(actor: User, *, filename: str, content: bytes, vehicle: str, values_text: str,
-                  note: str | None = None) -> CanDataset:
-    """위스캔 스캔 데이터: 통신 기록(명령·응답)과 위스캔이 화면에 보여 준 최종값을 함께 등록한다."""
-    numeric = [row for row in parse_truth_lines(values_text)
-               if re.fullmatch(r"-?\d+(\.\d+)?", row[1].strip().replace(",", ""))]
-    if not numeric:
+                  values_pdf: tuple[str, bytes] | None = None, note: str | None = None) -> CanDataset:
+    """위스캔 스캔 데이터: 통신 기록(명령·응답)과 위스캔이 화면에 보여 준 최종값을 함께 등록한다.
+    붙여 넣은 값은 확인된 값, 결과지 PDF에서 읽은 값은 데이터 화면에서 확인할 미확인 값이 된다."""
+    typed = [row for row in parse_truth_lines(values_text) if _numeric(row[1])]
+    from_pdf = pdf_values(*values_pdf) if values_pdf else []
+    if not typed and not from_pdf:
         raise ServiceError("위스캔 최종값을 '항목명 | 값 | 단위' 형식으로 올리거나 붙여 넣으세요(숫자 값 1개 이상).")
     dataset = upload_dataset(actor, filename=filename, content=content, kind=DatasetKind.WECAN_TRC,
                              vehicle=vehicle, note=note)
-    add_truths(actor, dataset, values_text)
+    truths = [_truth(dataset, label, value, unit, None, TruthSource.MANUAL, True) for label, value, unit in typed]
+    truths += [_truth(dataset, label, value, unit, page, source, False)
+               for label, value, unit, page, source in from_pdf]
+    db.session.add_all(truths)
+    audit.record("위스캔 최종값 등록", "CanDataset", dataset.id, user_id=actor.id,
+                 changes={"typed": len(typed), "pdf": len(from_pdf),
+                          "ai": sum(1 for row in from_pdf if row[4] == TruthSource.AI_OCR)})
+    db.session.commit()
     return dataset
 
 

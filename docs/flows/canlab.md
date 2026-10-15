@@ -6,7 +6,7 @@
 
 | 사용자 행동 | route | service (`canlab/service.py`) | 저장 | 결과 |
 | --- | --- | --- | --- | --- |
-| 위스캔값 입력 | `POST /admin/canlab/wescan` | `upload_wescan` (`values_file_text`) | 데이터셋(`wecan_trc`), 최종값(정답값), 감사기록 | 통신 기록(.trc/.txt/.log)과 최종값(붙여넣기 또는 .txt/.csv/.tsv, "항목 \| 값 \| 단위"). 숫자 최종값이 없으면 400. 명령·응답 추출 |
+| 위스캔값 입력 | `POST /admin/canlab/wescan` | `upload_wescan` (`values_file_text`, `pdf_values`) | 데이터셋(`wecan_trc`), 최종값(정답값), 감사기록 | 통신 기록(.trc/.txt/.log)과 최종값(붙여넣기 또는 .txt/.csv/.tsv, "항목 \| 값 \| 단위", 또는 결과지 PDF). PDF는 글자를 먼저 읽고(`pdf_text`), 글자가 없으면 앞 3쪽을 AI 판독(`ai_ocr`, AI 연결 없으면 400) — PDF 값은 미확인으로 저장되어 데이터 화면에서 확정. PDF 파일은 저장하지 않음. 숫자 최종값이 없으면 400. 명령·응답 추출 |
 | 리버스데이터 입력 | `POST /admin/canlab/reverse` | `upload_dataset` | 데이터셋(`gscan_trc`) | PCAN TRC. 명령·응답 추출 |
 | 명령·산출 결과 추출 | (등록할 때) | `extract_commands` | 데이터셋 요약 `commands` | 명령(주소+요청)마다 서비스, DID, 횟수, 긍정·부정 응답, 응답 예시, 스캔 로직에 넣을 수 있는지(`sendable`: 읽기 서비스, 11비트 주소) |
 | 기타 데이터 등록 | `POST /admin/canlab/datasets` | `upload_dataset` | 데이터셋, 감사기록 | 결과지 PDF 등. 같은 파일은 409, 4MB 초과는 413 |

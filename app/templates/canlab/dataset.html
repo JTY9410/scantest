@@ -119,7 +119,7 @@
             <label class="sr-only" for="value-{{ t.id }}">{{ t.label }} 값</label>
             <span class="flex items-center gap-2"><input class="input max-w-36 tabular-nums" id="value-{{ t.id }}" name="value-{{ t.id }}" value="{{ t.value_text }}" inputmode="decimal"> <span class="text-sm">{{ t.unit or "" }}</span></span>
           </td>
-          <td data-label="출처">{{ badge(t.source_label, "info" if t.source == "ai_ocr" else "") }}</td>
+          <td data-label="출처">{{ badge(t.source_label, "" if t.source == "manual" else "info") }}</td>
           <td data-label="확인"><input type="checkbox" class="size-5 accent-ink" name="confirmed-{{ t.id }}" aria-label="{{ t.label }} 확인" {% if t.confirmed %}checked{% endif %}></td>
           <td data-label="삭제"><input type="checkbox" class="size-5" name="delete-{{ t.id }}" aria-label="{{ t.label }} 삭제"></td>
         </tr>

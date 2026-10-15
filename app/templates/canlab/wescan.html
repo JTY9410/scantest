@@ -11,7 +11,7 @@
   <form method="post" enctype="multipart/form-data" class="mt-4 grid gap-4 md:grid-cols-2" novalidate>
     {{ form.csrf_token }}
     {{ field(form.file, help="위스캔 사용 중 기록한 PCAN TRC(.trc) 또는 위카 ELM 기록(.txt/.log). 4MB 이하", accept=".trc,.txt,.log") }}
-    {{ field(form.values_file, help="위스캔 최종값 파일(.txt/.tsv: '항목 | 값 | 단위' 줄, .csv: 항목,값,단위 열). 아래에 붙여 넣어도 됩니다.", accept=".txt,.csv,.tsv") }}
+    {{ field(form.values_file, help="위스캔 결과지 PDF 또는 최종값 파일(.txt/.tsv: '항목 | 값 | 단위' 줄, .csv: 항목,값,단위 열). PDF는 글자를 읽고, 그림으로 된 PDF는 AI로 판독합니다. PDF에서 읽은 값은 등록 후 확인해 확정합니다.", accept=".pdf,.txt,.csv,.tsv") }}
     {{ field(form.values_text, help="한 줄에 하나씩 '항목명 | 값 | 단위'. 예: 배터리 팩 전압 | 263.2 | V. 항목명이 신호 목록과 같으면 신호가 자동으로 정해집니다.", rows=6, class_="md:col-span-2") }}
     {{ field(form.vehicle, placeholder="예: 그랜저 HEV 2024") }}
     {{ field(form.note) }}

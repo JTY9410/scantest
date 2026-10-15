@@ -41,6 +41,21 @@ def _pdf() -> bytes:
     return buffer.getvalue()
 
 
+def _text_pdf(*lines: str) -> bytes:
+    from reportlab.pdfgen.canvas import Canvas
+
+    from app.modules.scanner.pdf import FONT, _fonts
+
+    _fonts()
+    buffer = io.BytesIO()
+    canvas = Canvas(buffer)
+    canvas.setFont(FONT, 11)
+    for number, line in enumerate(lines):
+        canvas.drawString(72, 760 - number * 20, line)
+    canvas.save()
+    return buffer.getvalue()
+
+
 def _wecan_trace() -> str:
     return trc(exchange(0x7E4, b"\x22\x01\x01", bms_0101(soc=37.5, voltage=256.5, current=5.5,
                                                           cell_max=3.56, cell_min=3.54)))
@@ -241,6 +256,38 @@ def test_wescan_values_from_csv_file_and_missing_values(app, admin_client):
 
     missing = _upload_wescan(admin_client, content=bms_session(count=2).encode(), values="메모만 있음")
     assert missing.status_code == 400 and "위스캔 최종값을" in missing.get_data(as_text=True)
+
+
+def test_wescan_values_from_text_pdf_are_unconfirmed(app, admin_client):
+    pdf = _text_pdf("위스캔 진단 결과", "배터리 충전 상태(BMS) 94.5 %", "배터리 팩 전압 785.5 V")
+    response = _upload_wescan(admin_client, values="최소 셀 전압 | 4.06 | V",
+                              values_file=(io.BytesIO(pdf), "result.pdf"))
+
+    assert response.status_code == 302
+    assert "PDF에서 읽은 2개는 아래 표에서 확인하고 확정하세요" in admin_client.get(
+        response.headers["Location"]).get_data(as_text=True)
+    with app.app_context():
+        rows = db.session.scalars(select(GroundTruthValue).order_by(GroundTruthValue.id)).all()
+        assert [(r.signal_key, r.confirmed, r.source, r.page) for r in rows] == [
+            ("min_cell_v", True, "manual", None),
+            ("soc", False, "pdf_text", 1), ("pack_voltage", False, "pdf_text", 1)]
+
+
+def test_wescan_values_from_image_pdf_use_ai(app, admin_client, monkeypatch):
+    no_ai = _upload_wescan(admin_client, values="", values_file=(io.BytesIO(_pdf()), "scan.pdf"))
+    assert no_ai.status_code == 400 and "PDF에 글자가 없어 AI 판독이 필요합니다" in no_ai.get_data(as_text=True)
+    with app.app_context():
+        assert db.session.scalar(select(func.count(CanDataset.id))) == 0
+
+    monkeypatch.setattr(ai, "read_table", lambda image=None, page_text=None: (
+        [{"label": "배터리 팩 전압", "value": "785.5", "unit": "V"},
+         {"label": "고객 메모", "value": "확인 필요", "unit": ""}], "openai"))
+    response = _upload_wescan(admin_client, values="", values_file=(io.BytesIO(_pdf()), "scan.pdf"))
+
+    assert response.status_code == 302
+    with app.app_context():
+        rows = db.session.scalars(select(GroundTruthValue)).all()
+        assert [(r.signal_key, r.confirmed, r.source, r.page) for r in rows] == [("pack_voltage", False, "ai_ocr", 1)]
 
 
 def test_reverse_upload_extracts_commands(app, admin_client):

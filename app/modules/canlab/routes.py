@@ -139,18 +139,23 @@ def wescan():
     if form.validate_on_submit():
         upload = form.file.data
         try:
-            text = form.values_text.data or ""
+            text, pdf = form.values_text.data or "", None
             values = form.values_file.data
-            if values and values.filename:
+            if values and values.filename and values.filename.lower().endswith(".pdf"):
+                pdf = (values.filename, values.read())
+            elif values and values.filename:
                 text += "\n" + service.values_file_text(values.filename, values.read())
             dataset = service.upload_wescan(current_user, filename=upload.filename or "wescan.trc",
                                             content=upload.read(), vehicle=form.vehicle.data,
-                                            values_text=text, note=form.note.data)
+                                            values_text=text, values_pdf=pdf, note=form.note.data)
         except ServiceError as error:
             status = _flash_error(error)
         else:
+            unconfirmed = sum(1 for t in dataset.truths if not t.confirmed)
             flash(f"위스캔 데이터를 등록했습니다. 명령 {len(dataset.summary['commands'])}개, "
-                  f"최종값 {len(dataset.truths)}개를 추출했습니다.", "success")
+                  f"최종값 {len(dataset.truths)}개를 추출했습니다."
+                  + (f" PDF에서 읽은 {unconfirmed}개는 아래 표에서 확인하고 확정하세요." if unconfirmed else ""),
+                  "success")
             return redirect(url_for("canlab.dataset", dataset_id=dataset.id))
     elif request.method == "POST":
         status = 400
