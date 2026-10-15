@@ -3,7 +3,6 @@
 .env.*
 
 # 배포에 필요 없는 파일
-/_storage/
 /data/
 /instance/
 /node_modules/

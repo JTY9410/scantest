@@ -91,11 +91,11 @@ docker push wecarmobility/wecarscan_dh:latest && docker push wecarmobility/wecar
 
 ## CAN/UDS/BMS 역분석 도구
 
-위스캔 스캔 데이터와 리버스 데이터(TRC)를 비교하는 역분석, 스캔 로직 적용, 운영 결과지는 관리자 메뉴 "CAN 분석"(`app/modules/canlab/`)에서 합니다(`docs/flows/canlab.md`). 쌓인 CAN 분석 데이터는 `flask canlab reset`(건수 확인) → `flask canlab reset --yes`로 지웁니다. 요구사항은 `CAN_UDS_BMS_Reverse_Engineering_Cursor_통합_개별요구사항 (1).md`입니다.
+위스캔 스캔 데이터와 리버스 데이터(TRC)를 비교하는 역분석, 스캔 로직 적용, 운영 결과지는 관리자 메뉴 "CAN 분석"(`app/modules/canlab/`)에서 합니다(`docs/flows/canlab.md`). 쌓인 CAN 분석 데이터는 `flask canlab reset`(건수 확인) → `flask canlab reset --yes`로 지웁니다.
 
-실제 차량 데이터(TRC·PDF)는 VIN 같은 차량 정보가 들어 있어 로컬 `data/can/`에만 두고 git·Docker·Vercel에서 제외합니다. 화면에서 올리면 DB에 저장됩니다.
+실제 차량 데이터(TRC·PDF)는 VIN 같은 차량 정보가 들어 있어 저장소에 넣지 않고 화면에서 올립니다(DB에 저장). 로컬에 둘 때는 git·Docker·Vercel에서 제외되는 `data/`에 둡니다.
 
 ## 남은 제약
 
 - SMS 발송, 진단서 PDF, 이메일 발송은 이전 서버처럼 응답만 유지하고 실제 발송·생성은 하지 않습니다.
-- 이전 MySQL 데이터는 자동으로 옮기지 않습니다.
+- 이전 Laravel 서버의 MySQL 데이터는 옮기지 않았습니다.

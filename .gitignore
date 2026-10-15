@@ -20,8 +20,7 @@ htmlcov/
 # Vercel
 /.vercel/
 
-# 로컬 데이터(이전 Laravel 실행 데이터 포함)
-/_storage/
+# 로컬 데이터
 /instance/
 
 # 실제 차량 데이터(TRC·결과지 PDF, VIN 등 포함)
