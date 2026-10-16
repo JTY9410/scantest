@@ -24,6 +24,7 @@ from app.modules.canlab.models import (
     RuleIncident,
     RuleStatus,
     ScanLogic,
+    ScanWescanCompare,
 )
 from app.modules.obd.models import ObdProfile
 from app.modules.scanner.plan import build_plan
@@ -560,7 +561,7 @@ def test_reset_cli_counts_then_deletes_all_canlab_data(app, admin_client, traine
     assert done.exit_code == 0 and "모두 삭제했습니다" in done.output
     with app.app_context():
         for model in (CanDataset, GroundTruthValue, AnalysisRun, DecodeRule, ScanLogic, DiagnosticReport,
-                      RuleChange, RuleIncident):
+                      RuleChange, RuleIncident, ScanWescanCompare):
             assert db.session.scalar(select(func.count()).select_from(model)) == 0
         assert db.session.scalar(select(Activity.relation_type).where(Activity.relation_type == "CAN 분석 초기화"))
 
@@ -903,3 +904,48 @@ def test_obdb_sync_saves_approved_references(app, admin_client, monkeypatch):
     assert _post(admin_client, f"{page}/sync", page).status_code == 302
     with app.app_context():
         assert db.session.scalar(select(func.count(CanReference.id))) == 1
+
+
+def test_compare_tab_and_scan_wescan_compare(app, admin_client, trained):
+    html = admin_client.get("/admin/canlab/compare").get_data(as_text=True)
+    assert "스캔·위스캔 비교" in html and "비교하고 후보 만들기" in html
+    assert str(trained["wescan"]) in html
+
+    token = csrf_token(admin_client, "/admin/canlab/compare")
+    response = admin_client.post("/admin/canlab/compare", content_type="multipart/form-data", data={
+        "csrf_token": token, "dataset_id": str(trained["wescan"]), "values_text": TRUTHS,
+        "scan_file": (io.BytesIO(b""), ""),
+    })
+    assert response.status_code == 302, response.get_data(as_text=True)
+    compare_id = int(re.search(r"/compare/(\d+)", response.headers["Location"]).group(1))
+    show = admin_client.get(f"/admin/canlab/compare/{compare_id}").get_data(as_text=True)
+    assert "신호별 차이" in show and "디코딩 규칙 후보" in show
+    with app.app_context():
+        row = db.session.get(ScanWescanCompare, compare_id)
+        assert row.scan_dataset_id == trained["wescan"] and row.logic_id and row.diff
+        assert db.session.get(ScanLogic, row.logic_id).status == LogicStatus.DRAFT
+
+
+def test_compare_upload_file_without_dataset(app, admin_client, trained):
+    token = csrf_token(admin_client, "/admin/canlab/compare")
+    # 이미 올린 위스캔 TRC와 SHA가 겹치지 않게 다른 응답을 쓴다.
+    content = trc(exchange(0x7E4, b"\x22\x01\x01", bms_0101(soc=40.0, voltage=260.0))).encode()
+    response = admin_client.post("/admin/canlab/compare", content_type="multipart/form-data", data={
+        "csrf_token": token, "dataset_id": "0",
+        "scan_file": (io.BytesIO(content), "scan-compare.txt"),
+        "values_text": "배터리 충전 상태(BMS) | 40 | %\n배터리 팩 전압 | 260 | V\n",
+    })
+    assert response.status_code == 302, response.get_data(as_text=True)
+    with app.app_context():
+        row = db.session.scalar(select(ScanWescanCompare).order_by(ScanWescanCompare.id.desc()))
+        assert row is not None and row.scan_dataset.kind == "live_capture"
+        assert row.scan_dataset.filename == "scan-compare.txt"
+
+
+def test_compare_requires_scan_and_truths(admin_client):
+    token = csrf_token(admin_client, "/admin/canlab/compare")
+    empty = admin_client.post("/admin/canlab/compare", content_type="multipart/form-data", data={
+        "csrf_token": token, "dataset_id": "0", "values_text": "",
+    })
+    assert empty.status_code == 400
+    assert "스캔 통신기록" in empty.get_data(as_text=True) or "고르거나" in empty.get_data(as_text=True)

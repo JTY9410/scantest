@@ -99,6 +99,8 @@ def test_run_then_result_page_shows_wescan_format(admin_client):
     assert "분석 요약" in html and "배출 점검(레디니스)" in html and "불꽃 점화" in html
     show = admin_client.get(f"/admin/scans/{saved['id']}").get_data(as_text=True)
     assert "위스캔 결과" in show and "스캔 오류 1건" in show and f"/admin/scan/{saved['id']}/pdf" in show
+    assert "/admin/canlab/datasets/" in show and "/admin/canlab/compare?dataset_id=" in show
+    assert f"scan_id={saved['id']}" in show
 
     assert "data-pdf-auto" not in html
     assert "data-pdf-auto" in admin_client.get(f"{saved['url']}?pdf=1").get_data(as_text=True)

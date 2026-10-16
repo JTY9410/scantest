@@ -10,6 +10,7 @@
   const P = window.WecarObdPlan;
 
   const NAME_PREFIXES = [
+    "bwsi", "BWSI", "Bwsi",  // 위스캔 전용 BLE(예: bwsia846749d8a76)
     "OBD", "ELM", "Vlink", "vLinker", "VLINK", "V-LINK", "IOS-Vlink", "Android-Vlink", "VEEPEAK", "Veepeak",
     "FMM003", "KONNWEI", "Viecar", "Carista", "iCar", "Vgate", "KIWI", "Kiwi", "LELink", "BlueDriver",
     "Bluetooth OBD", "V-Checker", "Autophix", "THINKCAR", "Topdon", "Foxwell", "WiCAN", "CANable", "SLCAN",

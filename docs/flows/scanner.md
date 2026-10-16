@@ -17,6 +17,8 @@
 | 결과 저장 | `POST /admin/scan/run` | `run_scan` | 통신 기록(`live_capture`), 결과지, 스캔·스캔 코드, 결과 PDF(`scan_documents`), 감사기록 | 201 `{id, status, url}` 후 결과 화면(`?pdf=1`)으로 이동하며 PDF를 내려받음 |
 | 결과 보기 | `GET /admin/scan/<id>` | `scan_result` | - | 위스캔 결과 형식. 운영 데이터 스캔 상세의 "위스캔 결과" 버튼도 이 화면 |
 | PDF 내려받기 | `GET /admin/scan/<id>/pdf` | `scan_document` (`scanner/pdf.py`) | 없으면 지금 만들어 저장 | A4 PDF. 결과 화면 "PDF 내려받기", 스캔 상세 "결과 PDF" |
+| 스캔 이력 | `GET /admin/scans` | `monitoring.search_scans` | - | 차량번호·기간·차종·기기(`device`, 예: `bwsi`)·테스터(`user_id`) 필터 |
+| 스캔 상세 | `GET /admin/scans/<id>` | `monitoring.get_scan` | - | 위스캔 결과·PDF·결과지·통신기록·스캔·위스캔 비교(해당 dataset 프리셀렉트) 링크 |
 
 ## 스캔 계획 (`scanner/plan.py`)
 

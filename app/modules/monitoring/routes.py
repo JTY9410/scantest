@@ -42,10 +42,11 @@ def _filters(params: dict[str, Any], **extra: Any) -> dict[str, Any]:
 def scans():
     params = _common()
     scan_type = request.args.get("type", "")
-    page = service.search_scans(scan_type=scan_type, **params)
+    device = (request.args.get("device") or "").strip()[:100]
+    page = service.search_scans(scan_type=scan_type, device=device, **params)
     return render_template(
-        "monitoring/scans.html", page=page, params=params, scan_type=scan_type,
-        types=list(ScanType), filters=_filters(params, type=scan_type),
+        "monitoring/scans.html", page=page, params=params, scan_type=scan_type, device=device,
+        types=list(ScanType), filters=_filters(params, type=scan_type, device=device),
         member=service.member_name(params["user_id"]),
     )
 

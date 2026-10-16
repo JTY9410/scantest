@@ -14,6 +14,10 @@
       {% for t in types %}<option value="{{ t.value }}" {% if scan_type == t.value %}selected{% endif %}>{{ t.label }}</option>{% endfor %}
     </select>
   </div>
+  <div class="field">
+    <label for="device" class="field-label">기기</label>
+    <input id="device" name="device" type="search" value="{{ device }}" class="input" placeholder="예: bwsi" enterkeyhint="search">
+  </div>
 {% endcall %}
 
 <section class="card overflow-hidden" aria-label="스캔 목록">

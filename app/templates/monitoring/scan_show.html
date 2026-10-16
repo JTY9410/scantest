@@ -11,6 +11,10 @@
   <a class="btn btn-secondary" href="{{ url_for('scanner.pdf', scan_id=scan.id) }}" download>결과 PDF</a>
   {% if canlab_report_exists(scanned.report_id) %}<a class="btn btn-secondary" href="{{ url_for('canlab.report', report_id=scanned.report_id) }}">결과지</a>
   {% elif scanned.report_id %}<span class="btn btn-secondary" aria-disabled="true">결과지 삭제됨</span>{% endif %}
+  {% if scanned.dataset_id %}
+  <a class="btn btn-secondary" href="{{ url_for('canlab.dataset', dataset_id=scanned.dataset_id) }}">통신기록</a>
+  <a class="btn btn-secondary" href="{{ url_for('canlab.compare', dataset_id=scanned.dataset_id, scan_id=scan.id) }}">스캔·위스캔 비교</a>
+  {% endif %}
   {% endif %}
 {% endcall %}
 

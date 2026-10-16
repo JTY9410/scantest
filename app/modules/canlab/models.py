@@ -387,3 +387,31 @@ class DiagnosticReport(db.Model):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
     dataset: Mapped[CanDataset | None] = relationship(lazy="joined")
+
+
+class ScanWescanCompare(ScopeMixin, db.Model):
+    """스캔 통신기록과 위스캔 결과치 비교. 차이표·AI 요약·규칙 후보(logic)를 남긴다.
+
+    decoded: {signal_key: {label, value, unit, formula?, rule_id?}}
+    diff: [{signal_key, label, status, scan_value, wescan_value, unit, note}]
+    status: match | mismatch | scan_only | wescan_only | no_rule
+    """
+
+    __tablename__ = "scan_wescan_compares"
+    __table_args__ = (Index("ix_scan_wescan_compares_created_at", "created_at"),)
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    scan_dataset_id: Mapped[int] = mapped_column(ForeignKey("can_datasets.id", ondelete="CASCADE"))
+    scan_id: Mapped[int | None] = mapped_column(BigInteger)
+    analysis_run_id: Mapped[int | None] = mapped_column(ForeignKey("analysis_runs.id", ondelete="SET NULL"))
+    logic_id: Mapped[int | None] = mapped_column(ForeignKey("scan_logics.id", ondelete="SET NULL"))
+    decoded: Mapped[dict] = mapped_column(JSON, default=dict)
+    diff: Mapped[list[dict]] = mapped_column(JSON, default=list)
+    ai_summary: Mapped[str | None] = mapped_column(Text)
+    ai_provider: Mapped[str | None] = mapped_column(String(20))
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+    scan_dataset: Mapped[CanDataset] = relationship(lazy="joined", foreign_keys=[scan_dataset_id])
+    logic: Mapped[ScanLogic | None] = relationship(lazy="joined")
+    creator: Mapped[User | None] = relationship(lazy="joined")

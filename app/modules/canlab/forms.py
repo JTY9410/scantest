@@ -25,6 +25,14 @@ class InputForm(FlaskForm):
     reverse_files = MultipleFileField("리버스데이터")
 
 
+class CompareForm(FlaskForm):
+    dataset_id = SelectField("저장된 스캔 통신기록", coerce=lambda v: int(v) if v else 0,
+                             validators=[Optional()])
+    scan_file = FileField("스캔 통신기록 파일")
+    values_file = FileField("위스캔 결과치 파일")
+    values_text = TextAreaField("위스캔 결과치 붙여넣기", validators=[Optional()])
+
+
 class ReferenceUrlForm(FlaskForm):
     url = StringField("자료 주소", validators=[DataRequired("자료 주소를 입력하세요."), Length(max=500)])
     title = StringField("제목", validators=[Optional(), Length(max=200)])

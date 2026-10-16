@@ -6,7 +6,7 @@ from app.modules.auth.access import admin_required
 from app.modules.canlab import references, service
 from app.modules.canlab.engine import signals
 from app.modules.canlab.forms import (
-    ActionForm, InputForm, ObdbSyncForm, ReferenceUrlForm, ReportForm, TruthTextForm, UploadForm,
+    ActionForm, CompareForm, InputForm, ObdbSyncForm, ReferenceUrlForm, ReportForm, TruthTextForm, UploadForm,
 )
 from app.modules.canlab.models import DatasetKind, DatasetSource, LogicStatus, ReferenceStatus, RuleStatus
 
@@ -215,6 +215,52 @@ def apply_run(run_id: int):
         return redirect(url_for("canlab.run", run_id=run_id))
     logic = service.draft_logic(current_user, service.get_run(run_id))
     return redirect(url_for("canlab.logic", logic_id=logic.id))
+
+
+@bp.route("/compare", methods=["GET", "POST"])
+@admin_required
+def compare():
+    form = CompareForm()
+    choices = [(0, "— 파일로 올리기 —")] + [
+        (d.id, service.dataset_choice_label(d)) for d in service.scan_trace_datasets()
+    ]
+    form.dataset_id.choices = choices
+    preselect = request.args.get("dataset_id", type=int)
+    if request.method == "GET" and preselect and any(preselect == c[0] for c in choices):
+        form.dataset_id.data = preselect
+    if form.validate_on_submit():
+        try:
+            text, pdf = form.values_text.data or "", None
+            values = form.values_file.data
+            if values and values.filename and values.filename.lower().endswith(".pdf"):
+                pdf = (values.filename, values.read())
+            elif values and values.filename:
+                text += "\n" + service.values_file_text(values.filename, values.read())
+            scan_upload = form.scan_file.data
+            scan_file = None
+            if scan_upload and scan_upload.filename:
+                scan_file = (scan_upload.filename, scan_upload.read())
+            scan_id = request.args.get("scan_id", type=int) or request.form.get("scan_id", type=int)
+            compare_row = service.start_compare(
+                current_user,
+                dataset_id=form.dataset_id.data or None,
+                scan_file=scan_file,
+                values_text=text,
+                values_pdf=pdf,
+                scan_id=scan_id,
+            )
+        except ServiceError as error:
+            _flash_error(error)
+            return render_template("canlab/compare.html", form=form, compares=service.list_compares()), error.status
+        flash("스캔·위스캔 비교를 완료했습니다. AI 초안을 확인하세요.", "success")
+        return redirect(url_for("canlab.compare_show", compare_id=compare_row.id))
+    return render_template("canlab/compare.html", form=form, compares=service.list_compares())
+
+
+@bp.get("/compare/<int:compare_id>")
+@admin_required
+def compare_show(compare_id: int):
+    return render_template("canlab/compare_show.html", compare=service.get_compare(compare_id), action=ActionForm())
 
 
 def _render_logic(logic, status: int = 200):

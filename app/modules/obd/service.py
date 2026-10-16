@@ -13,6 +13,7 @@ from app.modules.accounts.models import User
 from app.modules.obd.models import ObdDialect, ObdProfile, ObdTransport
 
 CONFLICT = "다른 관리자가 먼저 이 프로필을 수정했습니다. 새로고침한 뒤 다시 저장하세요."
+BWSI_PROFILE_NAME = "위스캔 BLE(BWSI)"
 
 UUID_PATTERN = re.compile(
     r"[0-9a-f]{4}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", re.IGNORECASE
@@ -31,6 +32,23 @@ def command_lines(text: str | None) -> list[str]:
 def _optional(value: str | None, transform=str.strip) -> str | None:
     value = (value or "").strip()
     return transform(value) if value else None
+
+
+def ensure_bwsi_profile() -> ObdProfile:
+    """위스캔 전용 BLE(광고 이름 bwsi…) 프로필이 없으면 만든다.
+    UUID는 흔한 BLE UART 힌트(fff0/fff2/fff1)만 두고, 연결 시 ATI로 실제 채널을 찾는다."""
+    existing = db.session.scalar(select(ObdProfile).where(ObdProfile.name == BWSI_PROFILE_NAME))
+    if existing is not None:
+        return existing
+    profile = ObdProfile(
+        name=BWSI_PROFILE_NAME, transport=ObdTransport.BLE, device_name_prefix="bwsi",
+        service_uuid="fff0", write_uuid="fff2", notify_uuid="fff1",
+        init_commands=[], read_commands=[], response_timeout_ms=2000, enabled=True,
+        dialect=ObdDialect.ELM327,
+    )
+    db.session.add(profile)
+    db.session.commit()
+    return profile
 
 
 def list_profiles() -> list[ObdProfile]:

@@ -30,6 +30,8 @@ def _index(device_form=None, new_token=None, status=200):
 @bp.get("/")
 @admin_required
 def index():
+    # 관리자 OBD 목록을 열 때 위스캔 BLE 기본 프로필이 없으면 한 번 만든다(웹 이름 필터는 obd-link.js에도 있음).
+    service.ensure_bwsi_profile()
     return _index()
 
 

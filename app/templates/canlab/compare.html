@@ -1,0 +1,52 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge, empty, field %}
+{% block title %}스캔·위스캔 비교{% endblock %}
+
+{% block content %}
+{{ page_header("스캔·위스캔 비교", "스캔 통신기록을 적용 중 규칙으로 읽고 위스캔 결과치와 비교합니다. 차이로 수식 후보(DRAFT)를 만들며, 규칙은 '디코딩 규칙'에서 관리자가 적용할 때만 바뀝니다. 데이터입력분석(위스캔 통신 vs 리버스)과 역할이 다릅니다.") }}
+{% include "canlab/_tabs.html" %}
+
+<form method="post" enctype="multipart/form-data" class="grid gap-6" novalidate>
+  {{ form.csrf_token }}
+  {% if request.args.get('scan_id') %}<input type="hidden" name="scan_id" value="{{ request.args.get('scan_id') }}">{% endif %}
+  <section class="card card-body" aria-labelledby="scan-title">
+    <h2 id="scan-title" class="text-lg font-bold">1. 스캔 통신기록</h2>
+    <p class="mt-1 text-sm text-muted">저장된 실시간 수집·업로드 기록을 고르거나, WECAR-ELM/TRC 파일을 올리세요.</p>
+    <div class="mt-4 grid gap-4 md:grid-cols-2">
+      {{ field(form.dataset_id) }}
+      {{ field(form.scan_file, help="저장된 기록을 고르지 않을 때. .trc / .txt / .log", accept=".trc,.txt,.log") }}
+    </div>
+  </section>
+
+  <section class="card card-body" aria-labelledby="truth-title">
+    <h2 id="truth-title" class="text-lg font-bold">2. 위스캔 결과치</h2>
+    <div class="mt-4 grid gap-4 md:grid-cols-2">
+      {{ field(form.values_file, help="PDF 또는 최종값 파일(.txt/.tsv/.csv). PDF 값은 데이터 화면에서 확인이 필요합니다.", accept=".pdf,.txt,.csv,.tsv") }}
+      {{ field(form.values_text, help="한 줄에 '항목명 | 값 | 단위'. 예: 배터리 팩 전압 | 263.2 | V", rows=5, class_="md:col-span-2") }}
+    </div>
+    <div class="mt-4"><button class="btn btn-primary" type="submit">비교하고 후보 만들기</button></div>
+  </section>
+</form>
+
+<section class="card mt-6 overflow-hidden" aria-labelledby="compares-title">
+  <h2 id="compares-title" class="card-body pb-0 text-lg font-bold">비교 기록</h2>
+  {% if compares %}
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">번호</th><th scope="col">실행</th><th scope="col">차종</th><th scope="col">스캔</th><th scope="col">요약</th></tr></thead>
+    <tbody>
+      {% for c in compares %}
+      <tr>
+        <td data-primary><a class="font-semibold underline" href="{{ url_for('canlab.compare_show', compare_id=c.id) }}">#{{ c.id }}</a></td>
+        <td data-label="실행">{{ c.created_at|kst }}{% if c.creator %} · {{ c.creator.name }}{% endif %}</td>
+        <td data-label="차종">{{ c.scope_label }}</td>
+        <td data-label="스캔" class="text-sm">데이터 #{{ c.scan_dataset_id }}{% if c.scan_id %} · 스캔 #{{ c.scan_id }}{% endif %}</td>
+        <td data-label="요약" class="text-sm">{{ c.ai_summary or "-" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("아직 비교 기록이 없습니다.", "스캔 기록과 위스캔 결과치를 올리고 비교하세요.") }}
+  {% endif %}
+</section>
+{% endblock %}

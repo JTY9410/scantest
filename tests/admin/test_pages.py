@@ -16,10 +16,13 @@ def sample_data(app, admin_client, make_user, make_company):
     tester_id = make_user("kim01", name="김테스터", company_id=company_id)
     with app.app_context():
         code = Code(type="ev", code="P0A80", unit_name="BMS", desc="배터리 교체 필요")
-        scan = Scan(type="ev", device_type="obd", device_uid="u1", tester_id=tester_id,
+        scan = Scan(type="ev", device_type="ble", device_uid="bwsia846749d8a76", tester_id=tester_id,
                     company_id=company_id, car_no="12가3456", car_vin="KMH0000000000001",
                     car_model="아이오닉5", car_distance=12345, car_battery_capacity=Decimal("72.6"))
-        db.session.add_all([code, scan])
+        other = Scan(type="ice", device_type="serial", device_uid="USB 진단기", tester_id=tester_id,
+                     company_id=company_id, car_no="34나5678", car_vin="KMH0000000000002",
+                     car_model="쏘렌토", car_distance=1000)
+        db.session.add_all([code, scan, other])
         db.session.flush()
         db.session.add(ScanCode(type="ev", scan_id=scan.id, code_id=code.id))
         db.session.add(Applog(timestamp=datetime.now(UTC), user_id=tester_id, type="error",
@@ -94,6 +97,12 @@ def test_member_filter_links_from_detail(sample_data, admin_client):
     html = admin_client.get("/admin/scans?user_id=2").get_data(as_text=True)
 
     assert "회원: 김테스터 (kim01)" in html and "12가3456" in html
+
+
+def test_scan_list_filters_by_bwsi_device(sample_data, admin_client):
+    html = admin_client.get("/admin/scans?device=bwsi").get_data(as_text=True)
+    assert "12가3456" in html and "34나5678" not in html
+    assert 'name="device"' in html and 'value="bwsi"' in html
 
 
 def test_missing_scan_shows_error_page(sample_data, admin_client):

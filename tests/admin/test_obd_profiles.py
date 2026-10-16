@@ -2,6 +2,7 @@ from sqlalchemy import select
 
 from app.core.audit import Activity
 from app.extensions import db
+from app.modules.obd import service as obd_service
 from app.modules.obd.models import ObdProfile
 from tests.conftest import api_login, csrf_token
 
@@ -116,6 +117,15 @@ def test_app_api_lists_only_enabled_profiles(app, client, admin_client, make_use
         "canBitrate": None,
         "updatedAt": data[0]["updatedAt"],
     }
+
+
+def test_bwsi_profile_is_seeded_on_admin_list(app, admin_client):
+    html = admin_client.get("/admin/obd/").get_data(as_text=True)
+    assert "위스캔 BLE(BWSI)" in html and "bwsi" in html
+    with app.app_context():
+        profile = obd_service.ensure_bwsi_profile()
+        assert profile.device_name_prefix == "bwsi" and profile.transport == "ble"
+        assert obd_service.ensure_bwsi_profile().id == profile.id
 
 
 def test_slcan_profile_takes_bitrate_and_no_adapter_commands(app, admin_client):

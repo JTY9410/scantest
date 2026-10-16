@@ -26,7 +26,8 @@ from app.modules.canlab.engine.search import GroundTruth, Layout, Samples, searc
 from app.modules.canlab.engine.validate import judge
 from app.modules.canlab.models import (
     AnalysisRun, CanDataset, ChangeAction, DatasetKind, DatasetSource, DecodeRule, DiagnosticReport,
-    GroundTruthValue, LogicStatus, RuleChange, RuleIncident, RuleStatus, ScanLogic, TruthSource,
+    GroundTruthValue, LogicStatus, RuleChange, RuleIncident, RuleStatus, ScanLogic, ScanWescanCompare,
+    TruthSource,
 )
 from app.modules.obd import devices as obd_devices
 from app.modules.obd.service import list_profiles
@@ -1479,8 +1480,222 @@ def chart_data(report: DiagnosticReport) -> dict:
             "compare": compare}
 
 
-RESET_MODELS = (DiagnosticReport, RuleIncident, RuleChange, ScanLogic, DecodeRule, AnalysisRun, GroundTruthValue,
-                CanDataset)
+def _attach_wescan_truths(actor: User, dataset: CanDataset, values_text: str,
+                          values_pdf: tuple[str, bytes] | None) -> int:
+    """위스캔 결과치를 스캔 데이터셋에 확인된(또는 PDF면 미확인) 정답값으로 넣는다."""
+    typed = [row for row in parse_truth_lines(values_text) if _numeric(row[1])]
+    from_pdf = pdf_values(*values_pdf) if values_pdf else []
+    if not typed and not from_pdf:
+        raise ServiceError("위스캔 결과치를 '항목명 | 값 | 단위'로 올리거나 붙여 넣으세요(숫자 값 1개 이상).")
+    truths = [_truth(dataset, label, value, unit, None, TruthSource.MANUAL, True) for label, value, unit in typed]
+    truths += [_truth(dataset, label, value, unit, page, source, False)
+               for label, value, unit, page, source in from_pdf]
+    truths = [t for t in truths if t is not None]
+    db.session.add_all(truths)
+    audit.record("스캔·위스캔 비교 정답값", "CanDataset", dataset.id, user_id=actor.id,
+                 changes={"typed": len(typed), "pdf": len(from_pdf)})
+    db.session.commit()
+    return len(truths)
+
+
+def _compare_diff(decoded: dict, truths: list[GroundTruth], car: dict | None = None) -> list[dict]:
+    """적용 규칙으로 읽은 값과 위스캔 결과치를 신호별로 나란히 본다."""
+    by_key = {t.signal_key: t for t in truths}
+    active_keys = set(rules_for(car))
+    rows = []
+    order = [s.key for s in signals.SIGNALS]
+    keys = sorted(set(decoded) | set(by_key), key=lambda k: order.index(k) if k in order else len(order))
+    for key in keys:
+        signal = signals.BY_KEY.get(key)
+        label = signal.label if signal else key
+        unit = signal.unit if signal else ""
+        scan = decoded.get(key)
+        truth = by_key.get(key)
+        scan_value = scan["value"] if scan else None
+        wescan_value = truth.value if truth else None
+        if scan is None and truth is not None:
+            if key not in active_keys:
+                status, note = "no_rule", "적용 중 규칙이 없습니다."
+            else:
+                status, note = "wescan_only", "규칙으로 값을 읽지 못했습니다."
+        elif truth is None:
+            status, note = "scan_only", "위스캔 결과치에 없습니다."
+        elif abs(scan_value - wescan_value) <= truth.tolerance:
+            status, note = "match", "일치"
+        else:
+            status, note = "mismatch", f"오차 {abs(scan_value - wescan_value):.4g} (허용 {truth.tolerance})"
+        rows.append({"signal_key": key, "label": label, "unit": unit, "status": status,
+                     "scan_value": scan_value, "wescan_value": wescan_value, "note": note,
+                     "formula": (scan or {}).get("formula"), "rule_id": (scan or {}).get("rule_id")})
+    return rows
+
+
+def run_scan_truth_analysis(actor: User, dataset: CanDataset) -> AnalysisRun:
+    """스캔 기록 표본과 그 데이터에 붙인 위스캔 결과치로 수식을 찾는다(리버스 없이). 규칙은 바꾸지 않는다."""
+    truths = ground_truths(dataset)
+    if not truths:
+        raise ServiceError("위스캔 결과치 중 신호가 지정된 확인 값이 없습니다. 값을 확인하고 신호를 고르세요.")
+    started = time.perf_counter()
+    samples = merged_samples([dataset.id])
+    if not samples:
+        raise ServiceError("스캔 기록에 데이터 조회(0x22) 응답이 없습니다.")
+    car = scope_car(dataset.maker, dataset.model)
+    index = references.hypotheses(car)
+    ranked = search(samples, truths, index)
+    decisions = judge(truths, ranked, samples)
+    run = AnalysisRun(trace_dataset_ids=[dataset.id], reverse_dataset_ids=[], truth_dataset_id=dataset.id,
+                      commands={"common": [], "wescan_only": [], "reverse_only": []},
+                      maker=dataset.maker, model=dataset.model,
+                      vehicle=(dataset.summary or {}).get("car"), interpretation=[],
+                      created_by=actor.id, created_at=_now(), result={})
+    db.session.add(run)
+    db.session.flush()
+    active = rules_for(car)
+    result = {}
+    for truth in truths:
+        decision = decisions[truth.signal_key]
+        if decision.activate and (blocked := _guard(truth.signal_key, decision.candidate.layout, active)):
+            decision.activate, decision.reasons = False, blocked
+        signal = signals.BY_KEY[truth.signal_key]
+        entry = {
+            "label": signal.label, "unit": signal.unit, "truth": truth.value, "activate": decision.activate,
+            "reasons": list(decision.reasons), "status": "UNKNOWN",
+            "candidates": [
+                {"formula": c.layout.formula(), "source": f"{c.layout.request_id:03X} 22 {c.layout.did:04X}",
+                 "decoded": c.decoded, "error": round(c.error, 6), "score": round(c.score, 3),
+                 "support": round(c.support, 3), "references": c.references, "rivals": c.rivals,
+                 "conflict": c.conflict}
+                for c in ranked.get(truth.signal_key, [])[:5]
+            ],
+        }
+        if decision.candidate is not None:
+            best = decision.candidate
+            current = active.get(truth.signal_key)
+            entry.update(status="확정" if decision.activate else "가설", decoded=best.decoded,
+                         formula=best.layout.formula(), layout=best.layout.to_dict(),
+                         score=round(best.score, 3),
+                         evidence=best.evidence(truth) | {"reasons": decision.reasons, "analysis_run_id": run.id},
+                         code=decoder_code(truth.signal_key, best.layout),
+                         matches_active=current is not None and _layout(current) == best.layout)
+        result[truth.signal_key] = entry
+    run.result = result
+    run.duration_ms = int((time.perf_counter() - started) * 1000)
+    audit.record("스캔·위스캔 비교 역산", "AnalysisRun", run.id, user_id=actor.id,
+                 changes={"dataset": dataset.id, "signals": len(truths), "scope": scope_label(run.maker, run.model)})
+    db.session.commit()
+    return run
+
+
+def compare_scan_wescan(actor: User, *, dataset: CanDataset, values_text: str,
+                        values_pdf: tuple[str, bytes] | None = None,
+                        scan_id: int | None = None) -> ScanWescanCompare:
+    """스캔 통신기록을 적용 규칙으로 읽고 위스캔 결과치와 비교한 뒤, 수식 후보·AI 최적안 DRAFT를 만든다."""
+    if not dataset.is_trace:
+        raise ServiceError("비교할 스캔은 통신 기록이어야 합니다.")
+    _attach_wescan_truths(actor, dataset, values_text, values_pdf)
+    dataset = get_dataset(dataset.id)
+    if any(not t.confirmed for t in dataset.truths):
+        raise ServiceError("PDF에서 읽은 미확인 결과치가 있습니다. 데이터 화면에서 확인한 뒤 다시 비교하세요.", 409)
+    car = scope_car(dataset.maker, dataset.model)
+    trace = load_trace(decode_text(get_dataset(dataset.id, with_content=True).content))
+    decoded_full, _ = _interpret(trace, car)
+    decoded = {k: {"label": v["label"], "value": v["value"], "unit": v["unit"],
+                   "formula": v.get("formula"), "rule_id": v.get("rule_id")} for k, v in decoded_full.items()}
+    truths = ground_truths(dataset)
+    diff = _compare_diff(decoded, truths, car)
+    run = run_scan_truth_analysis(actor, dataset)
+    logic = draft_logic(actor, run)
+    problem = None
+    try:
+        _, problem = advise_logic(actor, logic)
+    except ServiceError as error:
+        problem = error.message
+    logic = get_logic(logic.id)
+    summary = (logic.ai_advice or {}).get("summary") or (
+        f"차이 {sum(1 for d in diff if d['status'] == 'mismatch')}건, 규칙 없음 "
+        f"{sum(1 for d in diff if d['status'] == 'no_rule')}건."
+        + (f" ({problem})" if problem else "")
+    )
+    compare = ScanWescanCompare(
+        scan_dataset_id=dataset.id, scan_id=scan_id, analysis_run_id=run.id, logic_id=logic.id,
+        maker=dataset.maker, model=dataset.model, decoded=decoded, diff=diff,
+        ai_summary=summary, ai_provider=(logic.ai_advice or {}).get("provider"),
+        created_by=actor.id, created_at=_now(),
+    )
+    db.session.add(compare)
+    db.session.flush()
+    audit.record("스캔·위스캔 비교", "ScanWescanCompare", compare.id, user_id=actor.id,
+                 changes={"dataset": dataset.id, "diff": len(diff), "logic": logic.id, "run": run.id})
+    db.session.commit()
+    return compare
+
+
+def start_compare(actor: User, *, dataset_id: int | None, scan_file: tuple[str, bytes] | None,
+                  values_text: str, values_pdf: tuple[str, bytes] | None = None,
+                  scan_id: int | None = None) -> ScanWescanCompare:
+    """저장된 스캔 dataset 또는 업로드 파일로 비교를 시작한다."""
+    if dataset_id:
+        dataset = get_dataset(dataset_id)
+    elif scan_file:
+        filename, content = scan_file
+        try:
+            dataset = upload_dataset(actor, filename=filename, content=content,
+                                     kind=DatasetKind.LIVE_CAPTURE, vehicle="스캔 비교")
+        except ServiceError as error:
+            if error.status != 409 or "dataset_id" not in error.extra:
+                raise
+            dataset = get_dataset(error.extra["dataset_id"])
+            if not dataset.is_trace:
+                raise ServiceError(f"'{filename}'은 스캔 통신 기록으로 쓸 수 없습니다.") from error
+    else:
+        raise ServiceError("저장된 스캔 통신기록을 고르거나 파일을 올리세요.")
+    if scan_id and not (dataset.maker and dataset.model):
+        from app.modules.scans.models import Scan
+
+        scan = db.session.get(Scan, scan_id)
+        if scan is not None:
+            dataset.maker = dataset.maker or scan.car_maker
+            dataset.model = dataset.model or scan.car_model
+            car = dict((dataset.summary or {}).get("car") or {})
+            car.setdefault("car_no", scan.car_no)
+            car.setdefault("maker", scan.car_maker)
+            car.setdefault("model", scan.car_model)
+            dataset.summary = dict(dataset.summary or {}, car=car)
+            db.session.commit()
+    return compare_scan_wescan(actor, dataset=dataset, values_text=values_text,
+                               values_pdf=values_pdf, scan_id=scan_id)
+
+
+def list_compares(limit: int = 50) -> list[ScanWescanCompare]:
+    return list(db.session.scalars(select(ScanWescanCompare).order_by(ScanWescanCompare.id.desc()).limit(limit)))
+
+
+def get_compare(compare_id: int) -> ScanWescanCompare:
+    row = db.session.get(ScanWescanCompare, compare_id)
+    if row is None:
+        raise ServiceError("비교 기록을 찾을 수 없습니다.", 404)
+    return row
+
+
+def dataset_choice_label(dataset: CanDataset) -> str:
+    car = ((dataset.summary or {}).get("car") or {}).get("car_no") or ""
+    label = f"#{dataset.id} {dataset.filename}"
+    if car:
+        label += f" · {car}"
+    elif dataset.vehicle:
+        label += f" · {dataset.vehicle}"
+    return label
+
+
+def scan_trace_datasets() -> list[CanDataset]:
+    """비교에 고를 수 있는 스캔·수집 통신 기록(실시간 수집·업로드 TRC)."""
+    kinds = [DatasetKind.LIVE_CAPTURE.value, DatasetKind.GSCAN_TRC.value, DatasetKind.WECAN_TRC.value]
+    return list(db.session.scalars(select(CanDataset).where(CanDataset.kind.in_(kinds))
+                                   .order_by(CanDataset.id.desc()).limit(100)))
+
+
+RESET_MODELS = (ScanWescanCompare, DiagnosticReport, RuleIncident, RuleChange, ScanLogic, DecodeRule, AnalysisRun,
+                GroundTruthValue, CanDataset)
 
 
 def reset_counts() -> dict[str, int]:

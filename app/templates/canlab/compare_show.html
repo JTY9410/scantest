@@ -1,0 +1,55 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge, empty %}
+{% block title %}비교 #{{ compare.id }}{% endblock %}
+
+{% macro status_badge(status) -%}
+{{ badge({"match": "일치", "mismatch": "불일치", "scan_only": "스캔만", "wescan_only": "위스캔만", "no_rule": "규칙 없음"}.get(status, status),
+         {"match": "success", "mismatch": "danger", "no_rule": "warning", "wescan_only": "warning"}.get(status, "")) }}
+{%- endmacro %}
+
+{% block content %}
+{{ page_header("비교 #" ~ compare.id,
+               compare.scope_label ~ " · " ~ (compare.created_at|kst),
+               back=(url_for('canlab.compare'), "스캔·위스캔 비교")) }}
+{% include "canlab/_tabs.html" %}
+
+<section class="card card-body mb-6" aria-labelledby="summary-title">
+  <h2 id="summary-title" class="text-lg font-bold">AI 요약</h2>
+  <p class="mt-2">{{ compare.ai_summary or "요약이 없습니다." }}</p>
+  {% if compare.ai_provider %}<p class="mt-1 text-sm text-muted">제공자: {{ compare.ai_provider }}</p>{% endif %}
+  <div class="mt-4 flex flex-wrap gap-2">
+    <a class="btn btn-secondary" href="{{ url_for('canlab.dataset', dataset_id=compare.scan_dataset_id) }}">통신기록 #{{ compare.scan_dataset_id }}</a>
+    {% if compare.analysis_run_id %}
+    <a class="btn btn-secondary" href="{{ url_for('canlab.run', run_id=compare.analysis_run_id) }}">역산 #{{ compare.analysis_run_id }}</a>
+    {% endif %}
+    {% if compare.logic_id %}
+    <a class="btn btn-primary" href="{{ url_for('canlab.logic', logic_id=compare.logic_id) }}">디코딩 규칙 후보 #{{ compare.logic_id }}</a>
+    {% endif %}
+  </div>
+</section>
+
+<section class="card mb-6 overflow-hidden" aria-labelledby="diff-title">
+  <div class="card-body pb-0">
+    <h2 id="diff-title" class="text-lg font-bold">신호별 차이</h2>
+    <p class="mt-1 text-sm text-muted">스캔 쪽은 적용 중 규칙으로 읽은 값, 위스캔 쪽은 올린 결과치입니다.</p>
+  </div>
+  {% if compare.diff %}
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">신호</th><th scope="col">상태</th><th scope="col" class="num">스캔</th><th scope="col" class="num">위스캔</th><th scope="col">비고</th></tr></thead>
+    <tbody>
+      {% for row in compare.diff %}
+      <tr>
+        <td data-primary>{{ row.label }} <span class="mono text-sm text-muted">{{ row.signal_key }}</span></td>
+        <td data-label="상태">{{ status_badge(row.status) }}</td>
+        <td data-label="스캔" class="num tabular-nums">{% if row.scan_value is not none %}{{ row.scan_value }} {{ row.unit or "" }}{% else %}-{% endif %}</td>
+        <td data-label="위스캔" class="num tabular-nums">{% if row.wescan_value is not none %}{{ row.wescan_value }} {{ row.unit or "" }}{% else %}-{% endif %}</td>
+        <td data-label="비고" class="text-sm">{{ row.note }}{% if row.formula %} <span class="mono text-muted">{{ row.formula }}</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("비교할 신호가 없습니다.") }}
+  {% endif %}
+</section>
+{% endblock %}
