@@ -75,6 +75,7 @@ def test_scan_detail_shows_clear_history(app, admin_client, make_user):
             status="ok",
             token_hash="test_hash_12345678901234567890123456789012",
             expires_at=utcnow() + timedelta(minutes=30),
+            created_at=utcnow(),
             result={"cleared": 2, "failed": 0},
         )
         db.session.add(log)
