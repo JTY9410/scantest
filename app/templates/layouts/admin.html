@@ -71,6 +71,12 @@
                '<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/>') }}
         {{ nav(url_for('catalog.codes'), "진단코드", endpoint in ("catalog.codes", "catalog.code_form"),
                '<path d="M8 6l-6 6 6 6M16 6l6 6-6 6"/>') }}
+        {{ nav(url_for('knowledge.overview'), "지식 현황", endpoint == "knowledge.overview",
+               '<path d="M4 19V5M4 19h16M8 16V9M12 16V7M16 16v-4"/>') }}
+        {{ nav(url_for('knowledge.commands'), "진단 명령", endpoint == "knowledge.commands",
+               '<path d="M4 6h16M4 12h10M4 18h13"/>') }}
+        {{ nav(url_for('knowledge.dtcs'), "지식 고장코드", endpoint == "knowledge.dtcs",
+               '<path d="M8 6l-6 6 6 6M16 6l6 6-6 6"/>') }}
       </ul>
       <p class="nav-group">설정</p>
       <ul class="grid gap-0.5">

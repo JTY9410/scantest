@@ -35,6 +35,7 @@ def test_commands_page_shows_collected_data(admin_client, app):
     page = response.get_data(as_text=True)
     assert response.status_code == 200
     assert "010C" in page and "수집:" in page and "((A * 256) + B) / 4" in page
+    assert "진단 명령" in page and "지식 고장코드" in page
 
 
 def test_save_command_updates_collected_formula(app):
