@@ -94,7 +94,7 @@ def _register_blueprints(app: Flask) -> None:
 
     csrf.exempt(api_bp)
     for blueprint in (public_bp, api_bp, auth_bp, admin_bp, members_bp, catalog_bp, monitoring_bp,
-                      obd_bp, canlab_bp, scanner_bp):
+                      obd_bp, canlab_bp, scanner_bp, knowledge_bp):
         app.register_blueprint(blueprint)
 
 

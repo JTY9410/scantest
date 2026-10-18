@@ -29,6 +29,7 @@ from app.modules.canlab.models import (
     GroundTruthValue, LogicStatus, RuleChange, RuleIncident, RuleStatus, ScanLogic, ScanWescanCompare,
     TruthSource,
 )
+from app.modules.knowledge import service as knowledge_service
 from app.modules.obd import devices as obd_devices
 from app.modules.obd.service import list_profiles
 from app.modules.scans import car_info
@@ -1726,4 +1727,11 @@ def overview() -> dict:
         "runs": db.session.scalar(select(func.count(AnalysisRun.id))),
         "reports": db.session.scalar(select(func.count(DiagnosticReport.id))),
     }
-    return count | {"signals": len(signals.SIGNALS), "ai_ready": ai.available_connection() is not None}
+    # Knowledge base stats
+    kb_commands = len(knowledge_service.list_commands(status="verified", limit=1000))
+    kb_formulas = len(knowledge_service.list_formulas(status="verified", limit=1000))
+    kb_dtcs = len(knowledge_service.list_dtcs(status="verified", limit=10000))
+    return count | {
+        "signals": len(signals.SIGNALS), "ai_ready": ai.available_connection() is not None,
+        "kb_commands": kb_commands, "kb_formulas": kb_formulas, "kb_dtcs": kb_dtcs,
+    }
