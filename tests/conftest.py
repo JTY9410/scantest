@@ -33,6 +33,8 @@ def _clean_database(app):
         if "sqlite" in app.config["SQLALCHEMY_DATABASE_URI"]:
             for table in reversed(db.metadata.sorted_tables):
                 db.session.execute(text(f"DELETE FROM {table.name}"))
+            # Reset SQLite sequences
+            db.session.execute(text("DELETE FROM sqlite_sequence"))
             db.session.commit()
         else:
             tables = ", ".join(t.name for t in db.metadata.sorted_tables)
