@@ -39,10 +39,11 @@ def _size() -> int:
 
 
 def search_scans(*, q: str, scan_type: str, user_id: int | None, start: date | None,
-                 end: date | None, page: int, device: str = "") -> Page:
+                 end: date | None, page: int, device: str = "", maker: str = "", model: str = "") -> Page:
     stmt = (
         select(Scan)
-        .options(joinedload(Scan.tester), joinedload(Scan.owner), joinedload(Scan.company))
+        .options(joinedload(Scan.tester), joinedload(Scan.owner), joinedload(Scan.company),
+                 selectinload(Scan.scan_codes))
         .where(Scan.deleted_at.is_(None), *_day_range(Scan.created_at, start, end))
     )
     if scan_type in ("ev", "ice"):
@@ -51,10 +52,14 @@ def search_scans(*, q: str, scan_type: str, user_id: int | None, start: date | N
         stmt = stmt.where(or_(Scan.tester_id == user_id, Scan.owner_id == user_id))
     if device:
         stmt = stmt.where(Scan.device_uid.ilike(f"%{device.strip()[:100]}%"))
+    if maker:
+        stmt = stmt.where(Scan.car_maker.ilike(f"%{maker.strip()[:50]}%"))
+    if model:
+        stmt = stmt.where(Scan.car_model.ilike(f"%{model.strip()[:50]}%"))
     if q:
         pattern = f"%{q}%"
         stmt = stmt.where(or_(Scan.car_no.ilike(pattern), Scan.car_vin.ilike(pattern),
-                              Scan.car_model.ilike(pattern)))
+                              Scan.scan_vin.ilike(pattern), Scan.car_model.ilike(pattern)))
     return paginate(stmt.order_by(Scan.created_at.desc(), Scan.id.desc()), page, _size())
 
 

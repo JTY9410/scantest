@@ -6,13 +6,21 @@
 {% block content %}
 {{ page_header("스캔 기록", "앱에서 올라온 차량 진단 결과입니다. 이 화면에서는 조회만 할 수 있습니다.") }}
 
-{% call filter_bar("monitoring.scans", params, "차량번호, 차대번호, 모델", member) %}
+{% call filter_bar("monitoring.scans", params, "차량번호, VIN, 차대번호, 모델", member) %}
   <div class="field">
     <label for="type" class="field-label">차종</label>
     <select id="type" name="type" class="input">
       <option value="">전체</option>
       {% for t in types %}<option value="{{ t.value }}" {% if scan_type == t.value %}selected{% endif %}>{{ t.label }}</option>{% endfor %}
     </select>
+  </div>
+  <div class="field">
+    <label for="maker" class="field-label">제조사</label>
+    <input id="maker" name="maker" type="search" value="{{ maker }}" class="input" placeholder="예: 현대" enterkeyhint="search">
+  </div>
+  <div class="field">
+    <label for="model" class="field-label">모델</label>
+    <input id="model" name="model" type="search" value="{{ model }}" class="input" placeholder="예: 아반떼" enterkeyhint="search">
   </div>
   <div class="field">
     <label for="device" class="field-label">기기</label>
@@ -23,9 +31,22 @@
 <section class="card overflow-hidden" aria-label="스캔 목록">
   {% if page.items %}
   <table class="rtable">
-    <thead><tr><th scope="col">차량</th><th scope="col">차종</th><th scope="col">검사자</th><th scope="col">소속</th><th scope="col" class="num">주행거리</th><th scope="col">검사일</th></tr></thead>
+    <thead>
+      <tr>
+        <th scope="col">차량</th>
+        <th scope="col">VIN</th>
+        <th scope="col">차종</th>
+        <th scope="col" class="num">고장코드</th>
+        <th scope="col" class="num">주행거리</th>
+        <th scope="col">배터리</th>
+        <th scope="col">검사자</th>
+        <th scope="col">검사일</th>
+      </tr>
+    </thead>
     <tbody>
       {% for s in page.items %}
+      {% set data = s.bms_data if s.bms_data is mapping else {} %}
+      {% set dtc_count = s.scan_codes|length %}
       <tr>
         <td data-primary>
           <a href="{{ url_for('monitoring.scan_show', scan_id=s.id) }}" class="inline-flex min-h-11 flex-col justify-center font-semibold hover:underline">
@@ -33,10 +54,26 @@
             <span class="text-sm font-normal text-muted">{{ s.car_maker or "" }} {{ s.car_model }}</span>
           </a>
         </td>
+        <td data-label="VIN" class="mono text-sm">{{ (s.scan_vin or s.car_vin or "-")[:17] }}</td>
         <td data-label="차종">{{ badge(s.type_label, "info" if s.type == "ev" else "") }}</td>
+        <td data-label="고장코드" class="num">
+          {% if dtc_count %}
+            <span class="badge badge-danger">{{ dtc_count }}건</span>
+          {% else %}
+            <span class="text-success">정상</span>
+          {% endif %}
+        </td>
+        <td data-label="주행거리" class="num tabular-nums">{{ "{:,} km".format(s.car_distance) if s.car_distance is not none else "-" }}</td>
+        <td data-label="배터리">
+          {% if s.type == "ev" and s.car_battery_capacity %}
+            {% if data.get("wescan", {}).get("sensor", {}).get("ev", {}).get("bms_soh") %}
+              SOH {{ data.wescan.sensor.ev.bms_soh }}%
+            {% else %}
+              {{ s.car_battery_capacity }} kWh
+            {% endif %}
+          {% else %}-{% endif %}
+        </td>
         <td data-label="검사자">{{ s.tester.name if s.tester else "-" }}</td>
-        <td data-label="소속">{{ s.company.name if s.company else "-" }}</td>
-        <td data-label="주행거리" class="num">{{ "{:,} km".format(s.car_distance) if s.car_distance is not none else "-" }}</td>
         <td data-label="검사일" class="tabular-nums">{{ s.created_at|kst }}</td>
       </tr>
       {% endfor %}

@@ -1,11 +1,11 @@
 from io import BytesIO
 
-from flask import Blueprint, render_template, request, send_file, url_for
+from flask import Blueprint, current_app, render_template, request, send_file, url_for
 from flask_login import current_user
 
 from app.core import audit
 from app.core.errors import ServiceError
-from app.extensions import db
+from app.extensions import db, limiter
 from app.modules.auth.access import admin_required
 from app.modules.canlab.service import obd_config
 from app.modules.scanner import analysis, clear_service, service

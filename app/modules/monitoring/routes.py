@@ -44,10 +44,13 @@ def scans():
     params = _common()
     scan_type = request.args.get("type", "")
     device = (request.args.get("device") or "").strip()[:100]
-    page = service.search_scans(scan_type=scan_type, device=device, **params)
+    maker = (request.args.get("maker") or "").strip()[:50]
+    model = (request.args.get("model") or "").strip()[:50]
+    page = service.search_scans(scan_type=scan_type, device=device, maker=maker, model=model, **params)
     return render_template(
         "monitoring/scans.html", page=page, params=params, scan_type=scan_type, device=device,
-        types=list(ScanType), filters=_filters(params, type=scan_type, device=device),
+        maker=maker, model=model, types=list(ScanType),
+        filters=_filters(params, type=scan_type, device=device, maker=maker, model=model),
         member=service.member_name(params["user_id"]),
     )
 
