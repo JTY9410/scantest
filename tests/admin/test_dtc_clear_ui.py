@@ -10,7 +10,7 @@ from app.modules.scans.models import Scan
 def test_clear_button_hidden_without_permission(client, app, make_user):
     """권한이 없으면 DTC 삭제 버튼이 표시되지 않는다."""
     # 권한이 없는 관리자 생성
-    make_user(
+    admin_id = make_user(
         "test_no_clear_admin",
         type="admin",
         name="일반 관리자",
@@ -27,6 +27,9 @@ def test_clear_button_hidden_without_permission(client, app, make_user):
             car_maker="현대",
             car_model="아반떼",
             type="ice",
+            device_type="ble",
+            device_uid="test-device",
+            tester_id=admin_id,
         )
         db.session.add(scan)
         db.session.commit()

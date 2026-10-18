@@ -8,6 +8,8 @@ def test_search_scans_with_filters(client, app, make_user):
     from app.extensions import db
     from app.modules.scans.models import Scan
     
+    tester_id = make_user("tester1", type="tester", name="Tester")
+    
     with app.app_context():
         # Create test scans
         scan1 = Scan(
@@ -15,12 +17,18 @@ def test_search_scans_with_filters(client, app, make_user):
             car_maker="현대",
             car_model="아반떼",
             type="ice",
+            device_type="ble",
+            device_uid="test-device-1",
+            tester_id=tester_id,
         )
         scan2 = Scan(
             car_no="34나5678",
             car_maker="기아",
             car_model="쏘렌토",
             type="ev",
+            device_type="ble",
+            device_uid="test-device-2",
+            tester_id=tester_id,
         )
         db.session.add_all([scan1, scan2])
         db.session.commit()
