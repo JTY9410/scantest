@@ -82,7 +82,6 @@ def get_scan_clear_logs(scan_id: int) -> list[DtcClearLog]:
     return list(
         db.session.scalars(
             select(DtcClearLog)
-            .options(joinedload(DtcClearLog.user))
             .where(DtcClearLog.scan_id == scan_id)
             .order_by(DtcClearLog.created_at.desc(), DtcClearLog.id.desc())
         ).all()
