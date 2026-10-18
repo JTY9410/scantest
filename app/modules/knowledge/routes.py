@@ -42,9 +42,9 @@ def formulas():
 @admin_required
 def dtcs():
     """List DTC meanings."""
-    status = request.args.get("status", "verified")
+    status = request.args.get("status", "all")
     maker = request.args.get("maker", "").strip()[:50] or None
-    items = service.list_dtcs(status=status, maker=maker)
+    items = service.list_dtcs(status=None if status == "all" else status, maker=maker)
     return render_template("knowledge/dtcs.html", items=items, status=status, maker=maker or "")
 
 

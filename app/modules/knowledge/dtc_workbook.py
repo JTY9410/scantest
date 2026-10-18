@@ -14,6 +14,7 @@ from sqlalchemy.exc import IntegrityError
 from app.core.errors import ServiceError
 from app.extensions import db
 from app.modules.knowledge.models import KnowledgeDTC, KnowledgeTerm
+from app.modules.scans.models import Code
 
 _NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 _SOURCE = "workbook"
@@ -110,7 +111,25 @@ def _upsert_dtc(row: list[str], *, maker: str | None, generic: bool) -> bool:
     existing.source_detail = "공통_DTC" if generic else "제조사별_DTC"
     existing.status = "verified" if generic else "draft"
     existing.confidence = 1.0 if generic else 0.4
+    _upsert_code(code, korean, english, major, ecu, parts, caution, generic)
     return created
+
+
+def _upsert_code(code, korean, english, major, ecu, parts, caution, generic) -> None:
+    """스캔과 진단코드 화면이 읽는 마스터에도 같은 설명을 둔다."""
+    kind = "ev" if any(word in f"{major} {korean}" for word in ("전기", "하이브리드", "배터리", "EV")) else "ice"
+    detail = " · ".join(part for part in (english, parts, caution) if part)
+    if not generic:
+        detail = "제조사 자료(확인 전). " + detail
+    row = db.session.scalar(select(Code).where(Code.code == code, Code.deleted_at.is_(None)))
+    if row is None:
+        db.session.add(Code(
+            type=kind, code=code, unit_name=(ecu or major or "OBD")[:255],
+            desc=korean[:2000], detail_desc=detail[:4000] or None))
+        return
+    row.desc = korean[:2000]
+    row.detail_desc = detail[:4000] or row.detail_desc
+    row.unit_name = row.unit_name or (ecu or major or "OBD")[:255]
 
 
 def _terms(sheets: dict[str, list[list[str]]]) -> int:

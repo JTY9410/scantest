@@ -42,6 +42,7 @@
     <div class="field">
       <label for="status" class="field-label">상태</label>
       <select id="status" name="status" class="input">
+        <option value="all" {% if status == "all" %}selected{% endif %}>전체</option>
         <option value="verified" {% if status == "verified" %}selected{% endif %}>검증됨</option>
         <option value="draft" {% if status == "draft" %}selected{% endif %}>초안</option>
       </select>

@@ -32,9 +32,11 @@ def list_formulas(*, status: str = "verified", maker: str | None = None, limit: 
     return db.session.scalars(stmt).all()
 
 
-def list_dtcs(*, status: str = "verified", maker: str | None = None, limit: int = 1000):
-    """고장코드 뜻. 기본은 검증된 항목만."""
-    stmt = select(KnowledgeDTC).where(KnowledgeDTC.status == status).order_by(KnowledgeDTC.code)
+def list_dtcs(*, status: str | None = "verified", maker: str | None = None, limit: int = 1000):
+    """고장코드 뜻. 상태를 비우면 검증과 초안을 함께 보여 준다."""
+    stmt = select(KnowledgeDTC).order_by(KnowledgeDTC.code)
+    if status:
+        stmt = stmt.where(KnowledgeDTC.status == status)
     if maker:
         stmt = stmt.where(or_(KnowledgeDTC.maker == maker, KnowledgeDTC.maker.is_(None)))
     stmt = stmt.limit(limit)

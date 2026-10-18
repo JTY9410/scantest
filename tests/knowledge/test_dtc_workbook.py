@@ -5,6 +5,7 @@ from sqlalchemy import func, select
 from app.extensions import db
 from app.modules.knowledge.dtc_workbook import import_workbook
 from app.modules.knowledge.models import KnowledgeDTC, KnowledgeTerm
+from app.modules.scans.models import Code
 from app.modules.scanner.service import _describe
 
 
@@ -22,6 +23,8 @@ def test_workbook_import_is_idempotent_and_splits_generic_from_maker(app):
         again = import_workbook()
         copies = db.session.scalar(select(func.count()).select_from(KnowledgeDTC).where(
             KnowledgeDTC.code == "P0010", KnowledgeDTC.source == "workbook"))
+        catalog = db.session.scalar(select(Code).where(Code.code == "P1106", Code.deleted_at.is_(None)))
+        catalog_desc = catalog.desc if catalog else None
         described = [{"code": "P0010"}, {"code": "P1106"}]
         _describe(described, "현대")
     assert first["dtcs"] >= 30 and first["terms"] >= 1
@@ -29,6 +32,7 @@ def test_workbook_import_is_idempotent_and_splits_generic_from_maker(app):
     assert saved[4] == "Hyundai" and saved[5] == "draft"
     assert makers >= 1
     assert again == {"dtcs": 0, "terms": 0} and copies == 1
-    assert described[0]["desc"] == saved[3]
-    assert described[1]["desc"] is None
+    assert described[0]["desc"] == saved[1]
+    assert described[1]["desc"] == saved[6]
     assert described[1]["workbook_ref"] == saved[6]
+    assert catalog_desc == saved[6]
