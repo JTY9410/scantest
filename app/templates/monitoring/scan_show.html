@@ -63,6 +63,27 @@
   </section>
 </div>
 
+{% if answered %}
+<section class="card mt-6 overflow-hidden" aria-labelledby="answered-title">
+  <div class="card-body pb-2">
+    <h2 id="answered-title" class="text-lg font-bold">이 스캔에서 응답한 명령 <span class="text-muted">{{ answered|length }}</span></h2>
+    <p class="mt-1 text-sm text-muted">읽기 명령만 모았습니다. 같은 제조사·차종의 누적 기록은 <a class="underline" href="{{ url_for('monitoring.scan_commands', maker=scan.car_maker) }}">학습 명령</a>에서 봅니다.</p>
+  </div>
+  <table class="rtable">
+    <thead><tr><th scope="col">주소</th><th scope="col">명령</th><th scope="col">이름</th></tr></thead>
+    <tbody>
+      {% for c in answered %}
+      <tr>
+        <td data-primary class="mono">{{ c.header or "기본" }}</td>
+        <td data-label="명령" class="mono">{{ c.command }}</td>
+        <td data-label="이름">{{ c.label or "-" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
 <section class="card mt-6 overflow-hidden" aria-labelledby="codes-title">
   <div class="card-body pb-2"><h2 id="codes-title" class="text-lg font-bold">검출된 고장코드 <span class="text-muted">{{ scan.scan_codes|length }}</span></h2></div>
   {% if scan.scan_codes %}
