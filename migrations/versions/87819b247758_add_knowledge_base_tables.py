@@ -1,7 +1,7 @@
 """add knowledge base tables
 
 Revision ID: 87819b247758
-Revises: e20e2fe1bff4
+Revises: d5e6f7a8b9c0
 Create Date: 2026-10-18 01:42:00.000000
 
 """
@@ -11,7 +11,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = '87819b247758'
-down_revision = 'e20e2fe1bff4'
+down_revision = 'd5e6f7a8b9c0'
 branch_labels = None
 depends_on = None
 
