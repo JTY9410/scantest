@@ -147,12 +147,16 @@ def test_scan_detail_shows_clear_logs(app, admin_client, make_user):
         db.session.commit()
         scan_id = scan.id
         
+        from app.core.time import utcnow
+        from datetime import timedelta
+        
         log = DtcClearLog(
             scan_id=scan_id,
             user_id=admin_id,
             source="web",
             status="ok",
             token_hash="test_hash_12345678901234567890123456789012",
+            expires_at=utcnow() + timedelta(minutes=30),
             result={"cleared": 2, "failed": 0},
         )
         db.session.add(log)
