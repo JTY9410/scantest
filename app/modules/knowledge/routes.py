@@ -1,9 +1,10 @@
 """Knowledge base routes."""
-from flask import Blueprint, jsonify, render_template, request
+from flask import Blueprint, Response, jsonify, render_template, request
 from flask_login import current_user
 
+from app.core.errors import ServiceError
 from app.modules.auth.access import admin_required
-from app.modules.knowledge import service
+from app.modules.knowledge import importer, service
 
 bp = Blueprint("knowledge", __name__, url_prefix="/admin/knowledge")
 

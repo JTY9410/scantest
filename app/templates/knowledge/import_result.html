@@ -1,0 +1,109 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge %}
+{% block title %}로그 분석 결과{% endblock %}
+
+{% block content %}
+{{ page_header("로그 분석 결과", parsed_count ~ "개 요청/응답 쌍을 분석했습니다.") }}
+
+<section class="card card-body mb-6">
+  <h2 class="text-lg font-bold">요약</h2>
+  <ul class="mt-3 space-y-2">
+    <li><strong>알려진 명령어:</strong> {{ diff.known|length }}개</li>
+    <li><strong>미지의 요청:</strong> {{ diff.unknown_request|length }}개</li>
+    <li><strong>새 DID/PID 후보:</strong> {{ diff.new_did_pid|length }}개</li>
+  </ul>
+  <a href="{{ url_for('knowledge.import_logs') }}" class="btn btn-secondary mt-4">다시 분석</a>
+</section>
+
+{% if diff.known %}
+<section class="card overflow-hidden mb-6">
+  <h2 class="card-body pb-0 text-lg font-bold">알려진 명령어</h2>
+  <table class="rtable mt-3">
+    <thead>
+      <tr>
+        <th scope="col">요청</th>
+        <th scope="col">응답</th>
+        <th scope="col">매칭 명령어</th>
+        <th scope="col">라벨</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in diff.known[:20] %}
+      <tr>
+        <td class="mono text-sm">{{ item.request[:30] }}</td>
+        <td class="mono text-sm">{{ (item.response or "-")[:30] }}</td>
+        <td class="mono text-sm">{{ item.matched_command }}</td>
+        <td>{{ item.label or "-" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if diff.unknown_request %}
+<section class="card overflow-hidden mb-6">
+  <h2 class="card-body pb-0 text-lg font-bold">미지의 요청</h2>
+  <table class="rtable mt-3">
+    <thead>
+      <tr>
+        <th scope="col">요청</th>
+        <th scope="col">응답</th>
+        <th scope="col">액션</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in diff.unknown_request[:50] %}
+      <tr>
+        <td class="mono text-sm">{{ item.request }}</td>
+        <td class="mono text-sm">{{ item.response or "-" }}</td>
+        <td><button type="button" class="btn btn-sm btn-secondary" onclick="addToKB('{{ item.request }}', '{{ item.response or '' }}')">KB에 추가 (후보)</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if diff.new_did_pid %}
+<section class="card overflow-hidden mb-6">
+  <h2 class="card-body pb-0 text-lg font-bold">새 DID/PID 후보</h2>
+  <table class="rtable mt-3">
+    <thead>
+      <tr>
+        <th scope="col">서비스</th>
+        <th scope="col">PID/DID</th>
+        <th scope="col">응답</th>
+        <th scope="col">액션</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in diff.new_did_pid[:50] %}
+      <tr>
+        <td>{{ item.service }}</td>
+        <td class="mono font-semibold">{{ item.pid }}</td>
+        <td class="mono text-sm">{{ item.response or "-" }}</td>
+        <td><button type="button" class="btn btn-sm btn-primary" onclick="addFormula('{{ item.service }}', '{{ item.pid }}', '{{ item.response or '' }}')">공식 후보 만들기</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+<script>
+function addToKB(request, response) {
+  const label = prompt("명령어 라벨을 입력하세요:");
+  if (!label) return;
+  alert("KB 추가 기능은 관리자가 직접 /admin/knowledge/commands 에서 수동으로 입력하세요. (자동 추가 API는 미구현)");
+}
+
+function addFormula(service, pid, response) {
+  const label = prompt("PID 라벨을 입력하세요 (예: 실주행거리):");
+  if (!label) return;
+  const formula = prompt("디코드 공식을 입력하세요 (예: (A*256+B)/10):");
+  if (!formula) return;
+  alert("공식 추가 기능은 관리자가 직접 /admin/knowledge/formulas 에서 수동으로 입력하세요. (자동 추가 API는 미구현)");
+}
+</script>
+{% endblock %}

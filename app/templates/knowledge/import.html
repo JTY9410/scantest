@@ -1,0 +1,43 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header %}
+{% block title %}로그 Import{% endblock %}
+
+{% block content %}
+{{ page_header("통신 로그 Import 및 분석", "WESCAN 앱 로그, ELM327 로그, G-Scan 출력을 업로드하여 알려진 명령어와 비교하고 새 항목을 발견합니다.") }}
+
+<section class="card card-body">
+  <form method="post" class="space-y-4">
+    <div class="field">
+      <label for="log_type" class="field-label">로그 형식</label>
+      <select id="log_type" name="log_type" class="input">
+        <option value="elm">ELM327 / AT 로그 (> 요청, < 응답)</option>
+        <option value="gscan">G-Scan 텍스트 (REQ:, RES:)</option>
+      </select>
+    </div>
+    
+    <div class="field">
+      <label for="maker" class="field-label">제조사 (선택)</label>
+      <input id="maker" name="maker" type="text" class="input" placeholder="예: 현대">
+      <p class="field-help">제조사별 알려진 명령어와 비교합니다.</p>
+    </div>
+    
+    <div class="field">
+      <label for="content" class="field-label">로그 내용</label>
+      <textarea id="content" name="content" class="input" rows="15" placeholder="> 01 00
+< 41 00 BE 3E B8 11
+> 22 1050
+< 62 1050 12 34 56"></textarea>
+    </div>
+    
+    <button type="submit" class="btn btn-primary">분석하기</button>
+  </form>
+</section>
+
+<section class="card card-body mt-6">
+  <h2 class="text-lg font-bold">표준 OBD2 데이터 시딩</h2>
+  <p class="mt-2 text-muted">SAE J1979 Mode 01 PIDs, UDS 서비스, NRC 코드, 일반 DTC를 지식베이스에 추가합니다.</p>
+  <form method="post" action="{{ url_for('knowledge.seed_standard') }}" class="mt-3">
+    <button type="submit" class="btn btn-secondary">표준 데이터 시딩</button>
+  </form>
+</section>
+{% endblock %}
