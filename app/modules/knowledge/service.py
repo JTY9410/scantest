@@ -175,8 +175,13 @@ def lookup_dtcs(codes: set[str]) -> dict[str, KnowledgeDTC]:
     if not codes:
         return {}
     rows = db.session.scalars(select(KnowledgeDTC).where(
-        KnowledgeDTC.code.in_(codes), KnowledgeDTC.status == "verified"))
-    return {row.code: row for row in rows}
+        KnowledgeDTC.code.in_(codes), KnowledgeDTC.status == "verified").order_by(KnowledgeDTC.id))
+    chosen: dict[str, KnowledgeDTC] = {}
+    for row in rows:
+        current = chosen.get(row.code)
+        if current is None or (current.source != "public_docs" and row.source == "public_docs"):
+            chosen[row.code] = row
+    return chosen
 
 
 _UNKNOWN_DTC = "공개된 설명이 없습니다. 역분석 또는 관리자 확인 전입니다."

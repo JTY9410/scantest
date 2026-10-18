@@ -95,8 +95,9 @@ def _failed_result(steps: list[dict], message: str) -> dict:
             "counts": {"total": len(steps), "ok": 0, "unsupported": 0, "errors": 1}, "notes": [DOIP_NOTE]}
 
 
-def _describe(dtcs: list[dict]) -> dict[str, Code]:
+def _describe(dtcs: list[dict], maker: str | None = None) -> dict[str, Code]:
     """고장코드 마스터의 설명·원인·조치를 붙인다. 마스터가 없으면 검증된 지식베이스 명칭을 쓴다."""
+    from app.modules.knowledge.dtc_workbook import workbook_hints
     from app.modules.knowledge.service import lookup_dtcs
 
     keys = {d["code"] for d in dtcs} | {d["code"][:5] for d in dtcs}
@@ -105,6 +106,7 @@ def _describe(dtcs: list[dict]) -> dict[str, Code]:
     found = {c.code: c for c in db.session.scalars(
         select(Code).where(Code.code.in_(keys), Code.deleted_at.is_(None)).order_by(Code.id))}
     known = lookup_dtcs(keys)
+    hints = workbook_hints(keys, maker)
     matched = {}
     for dtc in dtcs:
         code = found.get(dtc["code"]) or found.get(dtc["code"][:5])
@@ -114,6 +116,10 @@ def _describe(dtcs: list[dict]) -> dict[str, Code]:
         dtc["root_cause"] = code.root_cause if code else None
         dtc["howto"] = [h for h in (code.howto_fix1, code.howto_fix2, code.howto_fix3) if h] if code else []
         dtc["unit_name"] = (code.unit_name if code else None) or (row.category if row else None)
+        hint = hints.get(dtc["code"]) or hints.get(dtc["code"][:5])
+        if hint is not None:
+            dtc["workbook_ref"] = hint.detail_name
+            dtc["workbook_note"] = hint.notes
         if code:
             matched[dtc["code"]] = code
     return matched
@@ -206,7 +212,7 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
         _add_error(result, "client", "스캔 진행", "client_error", str(client_error))
     logic = active_logic(car or None)
     _check_logic(result, logic, car or None)
-    matched = _describe(result["dtcs"])
+    matched = _describe(result["dtcs"], car.get("diag_company"))
     from app.modules.knowledge.service import remember_unknown_dtcs
     remember_unknown_dtcs(car.get("diag_company"), [d["code"] for d in result["dtcs"] if not d.get("desc")])
     if result["vin"] and car.get("diag_car_id"):

@@ -219,6 +219,7 @@
         <td data-label="제어기" class="mono">{{ d.ecu }} <span class="text-sm text-muted">{{ (d.sources or [d.source])|join(", ") }}</span></td>
         <td data-label="설명" class="text-sm">
           <p class="font-semibold">{{ d.desc or "고장코드 마스터에 설명이 없습니다." }}</p>
+          {% if d.workbook_ref %}<p class="mt-1 text-muted">제조사 자료(확인 전): {{ d.workbook_ref }}{% if d.workbook_note %} · {{ d.workbook_note }}{% endif %}</p>{% endif %}
           {% if d.root_cause %}<p class="mt-1">원인: {{ d.root_cause }}</p>{% endif %}
           {% if d.howto %}<ol class="mt-1 list-decimal pl-5">{% for h in d.howto %}<li>{{ h }}</li>{% endfor %}</ol>{% endif %}
         </td>

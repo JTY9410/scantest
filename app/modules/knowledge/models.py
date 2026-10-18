@@ -114,7 +114,10 @@ class KnowledgeDTC(db.Model):
     # DTC details
     code: Mapped[str] = mapped_column(String(20), nullable=False)
     detail_name: Mapped[str | None] = mapped_column(String(200))
+    english_name: Mapped[str | None] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, nullable=False)
+    subsystem: Mapped[str | None] = mapped_column(String(50))
+    parts: Mapped[str | None] = mapped_column(String(200))
     severity: Mapped[str | None] = mapped_column(String(20))
     category: Mapped[str | None] = mapped_column(String(50))
     notes: Mapped[str | None] = mapped_column(Text)
@@ -134,6 +137,8 @@ class KnowledgeDTC(db.Model):
         Index("ix_knowledge_dtcs_maker", "maker"),
         Index("ix_knowledge_dtcs_ecu_name", "ecu_name"),
         Index("ix_knowledge_dtcs_code", "code", "maker"),
+        Index("uq_knowledge_dtcs_code_maker_source", "code", "maker", "source",
+              unique=True, postgresql_nulls_not_distinct=True),
         Index("ix_knowledge_dtcs_source", "source"),
         Index("ix_knowledge_dtcs_status", "status"),
         Index("ix_knowledge_dtcs_scope", "maker", "model", "ecu_name"),

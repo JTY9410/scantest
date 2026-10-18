@@ -49,6 +49,14 @@ def register_cli(app: Flask) -> None:
 
     app.cli.add_command(canlab)
 
+    @app.cli.command("import-dtc-workbook")
+    def import_dtc_workbook() -> None:
+        """제조사별 고장코드 문서를 지식베이스에 넣는다."""
+        from app.modules.knowledge.dtc_workbook import import_workbook
+
+        stats = import_workbook()
+        click.echo(f"고장코드 {stats['dtcs']}건, 용어 {stats['terms']}건")
+
     @app.cli.command("collect-knowledge")
     def collect_knowledge() -> None:
         """공개 OBD 명령·수식·고장코드 명칭을 지식베이스에 넣는다."""
