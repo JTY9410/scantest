@@ -29,9 +29,15 @@ def _clean_database(app):
     yield
     with app.app_context():
         db.session.remove()
-        tables = ", ".join(t.name for t in db.metadata.sorted_tables)
-        db.session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
-        db.session.commit()
+        # SQLite doesn't support TRUNCATE, use DELETE instead
+        if "sqlite" in app.config["SQLALCHEMY_DATABASE_URI"]:
+            for table in reversed(db.metadata.sorted_tables):
+                db.session.execute(text(f"DELETE FROM {table.name}"))
+            db.session.commit()
+        else:
+            tables = ", ".join(t.name for t in db.metadata.sorted_tables)
+            db.session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+            db.session.commit()
     limiter.reset()
 
 
