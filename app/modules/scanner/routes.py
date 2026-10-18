@@ -99,6 +99,7 @@ def pdf(scan_id: int):
 
 @bp.post("/<int:scan_id>/clear-plan")
 @admin_required
+@limiter.limit("5 per hour")
 def clear_plan(scan_id: int):
     """고장코드 지우기 계획(1회용). 확인 창의 차량번호·상태 확인이 필요하다."""
     data = _body()
@@ -113,6 +114,7 @@ def clear_plan(scan_id: int):
 
 @bp.post("/<int:scan_id>/clear")
 @admin_required
+@limiter.limit("5 per hour")
 def clear_save(scan_id: int):
     data = _body()
     try:
