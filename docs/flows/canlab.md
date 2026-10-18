@@ -11,7 +11,7 @@
 | 최종값 확인 | `GET/POST /admin/canlab/analysis/pending/<위스캔 id>?reverse=…` | `update_truths` → `run_analysis` | 최종값 | PDF에서 읽은 미확인 값이 있으면 이 화면을 거침. "확정하고 분석"은 체크한 값만 씀 |
 | 분석(3단계) | (추출하기·확정 뒤 자동) | `run_analysis` (`references.hypotheses`, `interpret_reverse`, `compare_commands`, `search`, `judge`) | 분석 기록(범위, 차량, 해석) | 1) 리버스 명령·결과를 참고자료로 해석 2) 위스캔 통신기록과 명령·응답 구조 대조 3) 위스캔 최종값과 일치하는 수식·명령. 규칙은 바뀌지 않음 |
 | 디코딩 규칙 후보 만들기 | `POST /admin/canlab/analysis/<id>/apply` | `draft_logic` (`backtest`) | 스캔 로직(적용 전, 차종 범위) | 항목마다 변경 전/후, 같은 차종 과거 데이터 비교. 후보가 더 나쁘면 기본안을 "변경 전 유지"로 |
-| 스캔·위스캔 비교 | `GET/POST /admin/canlab/compare` | `start_compare` → `compare_scan_wescan` (`_compare_diff`, `run_scan_truth_analysis`, `draft_logic`, `advise_logic`) | 비교 기록(`scan_wescan_compares`), 분석 기록, 스캔 로직(DRAFT) | 저장된 스캔 통신기록 또는 파일 + 위스캔 결과치. 적용 규칙으로 읽은 값과 결과치를 신호별로 비교하고 AI 최적안 DRAFT를 만듦. 규칙은 적용 확정 전까지 바뀌지 않음. 데이터입력분석(위스캔 통신 vs 리버스)과 역할이 다름. `?dataset_id=`·`scan_id`로 프리셀렉트 |
+| 스캔·위스캔 비교 | `GET/POST /admin/canlab/compare` | `start_compare` → `compare_scan_wescan` (`_compare_diff`, `run_scan_truth_analysis`, `draft_logic`, `advise_logic`) | 비교 기록(`scan_wescan_compares`), 분석 기록, 스캔 로직(DRAFT) | 저장된 스캔 통신기록 또는 파일 + 위스캔 결과치. PDF에서 읽은 미확인 값이 있으면 데이터 화면에서 확인한 값만으로 비교를 이어 감. 적용 규칙으로 읽은 값과 결과치를 신호별로 비교하고 AI 최적안 DRAFT를 만듦. 규칙은 적용 확정 전까지 바뀌지 않음. 데이터입력분석(위스캔 통신 vs 리버스)과 역할이 다름. `?dataset_id=`·`scan_id`로 프리셀렉트 |
 | 비교 상세 | `GET /admin/canlab/compare/<id>` | `get_compare` | - | 차이표, AI 요약, 통신기록·역산·규칙 후보 링크 |
 | AI 최적안 | `POST /admin/canlab/logics/<id>/advise` | `advise_logic` | 스캔 로직 `ai_advice` | 추천만. AI가 없으면 규칙 기반 기본안 |
 | 적용 확정 | `POST /admin/canlab/logics/<id>/confirm` | `confirm_logic` | 스캔 로직(적용 중), 규칙(그 범위), 변경 이력, 감사기록 | 고른 항목만 그 범위에 적용. 버전이 다르면 409 |

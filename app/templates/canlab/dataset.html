@@ -97,13 +97,14 @@
 <section id="truths" class="card mt-6 overflow-hidden" aria-labelledby="truths-title">
   <div class="card-body pb-0">
     <h2 id="truths-title" class="text-lg font-bold">{{ "위스캔 최종값(정답값)" if dataset.kind == "wecan_trc" else "정답값" }}</h2>
-    <p class="mt-1 text-sm text-muted">확인(체크)한 숫자 값 중 신호가 지정된 것만 역산에 씁니다. 항목명이 결과지와 같으면 신호가 자동으로 정해집니다.</p>
+    <p class="mt-1 text-sm text-muted">확인(체크)한 숫자 값 중 신호가 지정된 것만 비교와 역산에 씁니다. 항목명이 결과지와 같으면 신호가 자동으로 정해집니다.
+      {% if next_step == "compare" %}PDF에서 읽은 값은 틀릴 수 있습니다. 확인에 체크한 값만 스캔 기록과 비교합니다.{% endif %}</p>
   </div>
   {% if dataset.truths %}
-  <form method="post" action="{{ url_for('canlab.update_truths', dataset_id=dataset.id) }}">
+  <form method="post" action="{{ url_for('canlab.update_truths', dataset_id=dataset.id, next=next_step or none, scan_id=scan_id) }}">
     {{ action.csrf_token }}
     {{ truth_table(dataset, signals) }}
-    <div class="card-body"><button class="btn btn-primary" type="submit">정답값 저장</button></div>
+    <div class="card-body"><button class="btn btn-primary" type="submit">{{ "확인하고 비교" if next_step == "compare" else "정답값 저장" }}</button></div>
   </form>
   {% else %}
   {{ empty("정답값이 없습니다.", "결과지 AI 판독을 하거나 아래에 직접 붙여 넣으세요.") }}

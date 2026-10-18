@@ -926,6 +926,44 @@ def test_compare_tab_and_scan_wescan_compare(app, admin_client, trained):
         assert db.session.get(ScanLogic, row.logic_id).status == LogicStatus.DRAFT
 
 
+def test_pdf_compare_waits_until_values_are_confirmed(app, admin_client, monkeypatch):
+    monkeypatch.setattr(service, "pdf_values", lambda filename, content: [
+        ("배터리 충전 상태(BMS)", "55", "%", 1, "pdf_text")])
+    content = trc(exchange(0x7E4, b"\x22\x01\x01", bms_0101(soc=40.0))).encode()
+    token = csrf_token(admin_client, "/admin/canlab/compare")
+    response = admin_client.post("/admin/canlab/compare", content_type="multipart/form-data", data={
+        "csrf_token": token, "dataset_id": "0", "values_text": "",
+        "values_file": (io.BytesIO(b"%PDF-1.4"), "wescan.pdf"),
+        "scan_file": (io.BytesIO(content), "scan-pdf.txt"),
+    })
+    assert response.status_code == 302, response.get_data(as_text=True)
+    location = response.headers["Location"]
+    dataset_id = int(re.search(r"/datasets/(\d+)", location).group(1))
+    assert "next=compare" in location
+    with app.app_context():
+        rules = db.session.scalar(select(func.count(DecodeRule.id)))
+        truth = db.session.scalar(select(GroundTruthValue).where(GroundTruthValue.dataset_id == dataset_id))
+        truth_id, signal = truth.id, truth.signal_key or "soc"
+        assert truth.confirmed is False and db.session.scalar(select(func.count(ScanWescanCompare.id))) == 0
+
+    page = admin_client.get(location)
+    assert "확인하고 비교" in page.get_data(as_text=True)
+    truths_url = f"/admin/canlab/datasets/{dataset_id}/truths?next=compare"
+    held = _post(admin_client, truths_url, location, **{f"value-{truth_id}": "55", f"key-{truth_id}": signal})
+    assert held.status_code == 302 and "/compare/" not in held.headers["Location"]
+    done = _post(admin_client, truths_url, location, **{
+        f"value-{truth_id}": "55", f"key-{truth_id}": signal, f"confirmed-{truth_id}": "on"})
+    assert done.status_code == 302 and "/compare/" in done.headers["Location"]
+    show = admin_client.get(done.headers["Location"]).get_data(as_text=True)
+    assert "이 초안은 아직 스캔에 적용되지 않습니다" in show and "신호별 차이" in show
+    with app.app_context():
+        row = db.session.scalar(select(ScanWescanCompare).order_by(ScanWescanCompare.id.desc()))
+        assert row.logic_id and db.session.get(ScanLogic, row.logic_id).status == LogicStatus.DRAFT
+        assert db.session.scalar(select(func.count(DecodeRule.id))) == rules
+        assert db.session.scalar(select(func.count(GroundTruthValue.id)).where(
+            GroundTruthValue.dataset_id == dataset_id)) == 1
+
+
 def test_compare_upload_file_without_dataset(app, admin_client, trained):
     token = csrf_token(admin_client, "/admin/canlab/compare")
     # 이미 올린 위스캔 TRC와 SHA가 겹치지 않게 다른 응답을 쓴다.

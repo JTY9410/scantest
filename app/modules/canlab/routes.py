@@ -57,7 +57,9 @@ def dataset(dataset_id: int):
     item = service.get_dataset(dataset_id)
     return render_template("canlab/dataset.html", dataset=item, truth_form=TruthTextForm(),
                            action=ActionForm(), signals=signals.SIGNALS,
-                           ai_ready=service.ai.available_connection() is not None)
+                           ai_ready=service.ai.available_connection() is not None,
+                           next_step=request.args.get("next") or "",
+                           scan_id=request.args.get("scan_id", type=int))
 
 
 @bp.get("/datasets/<int:dataset_id>/pages/<int:page>.jpg")
@@ -108,18 +110,31 @@ def _truth_rows(item) -> dict:
     }
 
 
+def _dataset_truths_url(dataset_id: int, next_step: str = "", scan_id: int | None = None):
+    return url_for("canlab.dataset", dataset_id=dataset_id, next=next_step or None,
+                   scan_id=scan_id, _anchor="truths")
+
+
 @bp.post("/datasets/<int:dataset_id>/truths")
 @admin_required
 def update_truths(dataset_id: int):
+    next_step = request.args.get("next") or request.form.get("next") or ""
+    scan_id = request.args.get("scan_id", type=int) or request.form.get("scan_id", type=int)
     if ActionForm().validate_on_submit():
         item = service.get_dataset(dataset_id)
         try:
             service.update_truths(current_user, item, _truth_rows(item))
+            if next_step == "compare":
+                compare_row = service.compare_scan_wescan(
+                    current_user, dataset=item, values_text="", scan_id=scan_id, resume=True)
         except ServiceError as error:
             _flash_error(error)
         else:
+            if next_step == "compare":
+                flash("스캔·위스캔 비교를 완료했습니다. AI 초안을 확인하세요. 적용은 디코딩 규칙에서 확정할 때 됩니다.", "success")
+                return redirect(url_for("canlab.compare_show", compare_id=compare_row.id))
             flash("정답값을 저장했습니다.", "success")
-    return redirect(url_for("canlab.dataset", dataset_id=dataset_id, _anchor="truths"))
+    return redirect(_dataset_truths_url(dataset_id, next_step, scan_id))
 
 
 @bp.post("/datasets/<int:dataset_id>/delete")
@@ -250,6 +265,9 @@ def compare():
                 scan_id=scan_id,
             )
         except ServiceError as error:
+            if error.extra.get("needs_confirm"):
+                flash(error.message, "warning")
+                return redirect(_dataset_truths_url(error.extra["dataset_id"], "compare", error.extra.get("scan_id")))
             _flash_error(error)
             return render_template("canlab/compare.html", form=form, compares=service.list_compares()), error.status
         flash("스캔·위스캔 비교를 완료했습니다. AI 초안을 확인하세요.", "success")

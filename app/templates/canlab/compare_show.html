@@ -15,6 +15,12 @@
 
 <section class="card card-body mb-6" aria-labelledby="summary-title">
   <h2 id="summary-title" class="text-lg font-bold">AI 요약</h2>
+  {% set ns = namespace(mismatch=0, no_rule=0) %}
+  {% for row in compare.diff or [] %}
+    {% if row.status == "mismatch" %}{% set ns.mismatch = ns.mismatch + 1 %}{% endif %}
+    {% if row.status == "no_rule" %}{% set ns.no_rule = ns.no_rule + 1 %}{% endif %}
+  {% endfor %}
+  <p class="mt-2 text-sm text-muted">불일치 {{ ns.mismatch }}건, 규칙 없음 {{ ns.no_rule }}건. 이 초안은 아직 스캔에 적용되지 않습니다. 관리자가 디코딩 규칙에서 고른 항목만 적용됩니다.</p>
   <p class="mt-2">{{ compare.ai_summary or "요약이 없습니다." }}</p>
   {% if compare.ai_provider %}<p class="mt-1 text-sm text-muted">제공자: {{ compare.ai_provider }}</p>{% endif %}
   <div class="mt-4 flex flex-wrap gap-2">

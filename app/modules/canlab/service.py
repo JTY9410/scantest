@@ -1615,14 +1615,24 @@ def run_scan_truth_analysis(actor: User, dataset: CanDataset) -> AnalysisRun:
 
 def compare_scan_wescan(actor: User, *, dataset: CanDataset, values_text: str,
                         values_pdf: tuple[str, bytes] | None = None,
-                        scan_id: int | None = None) -> ScanWescanCompare:
-    """스캔 통신기록을 적용 규칙으로 읽고 위스캔 결과치와 비교한 뒤, 수식 후보·AI 최적안 DRAFT를 만든다."""
+                        scan_id: int | None = None, resume: bool = False) -> ScanWescanCompare:
+    """스캔 통신기록을 적용 규칙으로 읽고 위스캔 결과치와 비교한 뒤, 수식 후보·AI 최적안 DRAFT를 만든다.
+
+    resume면 이미 저장한 결과치를 다시 붙이지 않고, 확인된 값만 비교한다.
+    """
     if not dataset.is_trace:
         raise ServiceError("비교할 스캔은 통신 기록이어야 합니다.")
-    _attach_wescan_truths(actor, dataset, values_text, values_pdf)
-    dataset = get_dataset(dataset.id)
-    if any(not t.confirmed for t in dataset.truths):
-        raise ServiceError("PDF에서 읽은 미확인 결과치가 있습니다. 데이터 화면에서 확인한 뒤 다시 비교하세요.", 409)
+    if not resume:
+        _attach_wescan_truths(actor, dataset, values_text, values_pdf)
+        dataset = get_dataset(dataset.id)
+        if any(not t.confirmed for t in dataset.truths):
+            raise ServiceError(
+                "PDF에서 읽은 값을 데이터 화면에서 확인한 뒤 비교를 이어 가세요.",
+                409, needs_confirm=True, dataset_id=dataset.id, scan_id=scan_id)
+    else:
+        dataset = get_dataset(dataset.id)
+    if not ground_truths(dataset):
+        raise ServiceError("확인한 숫자 값이 없습니다. 값과 신호를 고르고 확인에 체크하세요.")
     car = scope_car(dataset.maker, dataset.model)
     trace = load_trace(decode_text(get_dataset(dataset.id, with_content=True).content))
     decoded_full, _ = _interpret(trace, car)
