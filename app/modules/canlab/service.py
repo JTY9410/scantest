@@ -1334,10 +1334,15 @@ def _describe_dtcs(diagnosis: dict) -> None:
     keys = {d["code"] for d in dtcs} | {d["code"][:5] for d in dtcs}
     if not keys:
         return
+    from app.modules.knowledge.service import lookup_dtcs
+
     found = {c.code: c.desc for c in db.session.scalars(
         select(Code).where(Code.code.in_(keys), Code.deleted_at.is_(None)))}
+    known = lookup_dtcs(keys)
     for dtc in dtcs:
-        dtc["desc"] = found.get(dtc["code"]) or found.get(dtc["code"][:5])
+        row = known.get(dtc["code"]) or known.get(dtc["code"][:5])
+        dtc["desc"] = found.get(dtc["code"]) or found.get(dtc["code"][:5]) or (row.description if row else None)
+        dtc["detail_name"] = (row.detail_name if row else None) or dtc["desc"]
 
 
 def _interpret(trace: Trace, car: dict | None = None) -> tuple[dict, dict]:

@@ -111,7 +111,7 @@ def import_from_commands_json(commands_data: list[dict]) -> int:
 
 
 _READ = re.compile(r"^([0-9A-F]{2}){1,8}$")
-_BLOCKED = {"10", "27", "2E", "31"}
+_BLOCKED = {"10", "27", "2E", "31", "04", "14"}
 
 
 def _scope(maker: str | None):
@@ -155,6 +155,24 @@ def verified_layouts(maker: str | None = None, limit: int = 40) -> list[dict]:
         if len(found) >= limit:
             break
     return found
+
+
+def formula_names() -> dict[str, str]:
+    """검증된 공개 수식의 세부 명칭. 키는 PID 16진수(0C)."""
+    rows = db.session.scalars(select(KnowledgeFormula).where(
+        KnowledgeFormula.status == "verified",
+        KnowledgeFormula.detail_name.is_not(None),
+    ))
+    return {row.pid.upper(): row.detail_name for row in rows if row.pid and row.detail_name}
+
+
+def lookup_dtcs(codes: set[str]) -> dict[str, KnowledgeDTC]:
+    """검증된 고장코드 명칭. 스캔 설명은 진단코드 마스터가 비어 있을 때 이걸 쓴다."""
+    if not codes:
+        return {}
+    rows = db.session.scalars(select(KnowledgeDTC).where(
+        KnowledgeDTC.code.in_(codes), KnowledgeDTC.status == "verified"))
+    return {row.code: row for row in rows}
 
 
 def _command_row(maker, model, header, command) -> KnowledgeCommand | None:

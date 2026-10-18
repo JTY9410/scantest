@@ -218,6 +218,14 @@ def interpret(steps: list[dict], rules: list, record: str, car: dict | None = No
     ecus: dict[str, dict] = {}
     freeze: dict[str, Any] = {"dtc": None, "values": []}
     odometers: dict[tuple[str, str], int] = {}
+    from flask import has_app_context
+
+    formula_labels: dict[str, str] = {}
+    if has_app_context():
+        from app.modules.knowledge.service import formula_names
+
+        names = formula_names()
+        formula_labels = {spec.key: names[f"{pid:02X}"] for pid, spec in obd.PIDS.items() if f"{pid:02X}" in names}
 
     for step in steps:
         command = (step.get("command") or "").upper()
@@ -276,6 +284,8 @@ def interpret(steps: list[dict], rules: list, record: str, car: dict | None = No
                         (readiness if pid == 0x01 else drive_readiness)[address] = state
                     else:
                         for value in obd.mode01_values(payload):
+                            if value["key"] in formula_labels:
+                                value["label"] = formula_labels[value["key"]]
                             ecu_values.setdefault(address, {})[value["key"]] = value
                 elif service == 0x06:
                     monitor_tests += [t | {"ecu": address} for t in obd.mode06_tests(payload)]

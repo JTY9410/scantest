@@ -28,6 +28,7 @@ class KnowledgeCommand(db.Model):
     header: Mapped[str | None] = mapped_column(String(10))
     command: Mapped[str] = mapped_column(String(200), nullable=False)
     label: Mapped[str | None] = mapped_column(String(200))
+    detail_name: Mapped[str | None] = mapped_column(String(200))
     description: Mapped[str | None] = mapped_column(Text)
     
     # Metadata
@@ -68,6 +69,7 @@ class KnowledgeFormula(db.Model):
     command: Mapped[str | None] = mapped_column(String(200))
     pid: Mapped[str | None] = mapped_column(String(20))
     label: Mapped[str] = mapped_column(String(200), nullable=False)
+    detail_name: Mapped[str | None] = mapped_column(String(200))
     formula: Mapped[str] = mapped_column(Text, nullable=False)
     unit: Mapped[str | None] = mapped_column(String(20))
     example_input: Mapped[str | None] = mapped_column(String(500))
@@ -111,6 +113,7 @@ class KnowledgeDTC(db.Model):
     
     # DTC details
     code: Mapped[str] = mapped_column(String(20), nullable=False)
+    detail_name: Mapped[str | None] = mapped_column(String(200))
     description: Mapped[str] = mapped_column(Text, nullable=False)
     severity: Mapped[str | None] = mapped_column(String(20))
     category: Mapped[str | None] = mapped_column(String(50))

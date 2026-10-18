@@ -95,19 +95,24 @@ def _failed_result(steps: list[dict], message: str) -> dict:
 
 
 def _describe(dtcs: list[dict]) -> dict[str, Code]:
-    """고장코드 마스터의 설명·원인·조치를 붙인다. 고장유형 바이트를 뺀 5자리로도 찾는다."""
+    """고장코드 마스터의 설명·원인·조치를 붙인다. 마스터가 없으면 검증된 지식베이스 명칭을 쓴다."""
+    from app.modules.knowledge.service import lookup_dtcs
+
     keys = {d["code"] for d in dtcs} | {d["code"][:5] for d in dtcs}
     if not keys:
         return {}
     found = {c.code: c for c in db.session.scalars(
         select(Code).where(Code.code.in_(keys), Code.deleted_at.is_(None)).order_by(Code.id))}
+    known = lookup_dtcs(keys)
     matched = {}
     for dtc in dtcs:
         code = found.get(dtc["code"]) or found.get(dtc["code"][:5])
-        dtc["desc"] = code.desc if code else None
+        row = known.get(dtc["code"]) or known.get(dtc["code"][:5])
+        dtc["desc"] = (code.desc if code and code.desc else None) or (row.description if row else None)
+        dtc["detail_name"] = (row.detail_name if row and row.detail_name else None) or (code.desc if code else None)
         dtc["root_cause"] = code.root_cause if code else None
         dtc["howto"] = [h for h in (code.howto_fix1, code.howto_fix2, code.howto_fix3) if h] if code else []
-        dtc["unit_name"] = code.unit_name if code else None
+        dtc["unit_name"] = (code.unit_name if code else None) or (row.category if row else None)
         if code:
             matched[dtc["code"]] = code
     return matched

@@ -1,5 +1,5 @@
 """지식베이스 화면."""
-from flask import Blueprint, Response, jsonify, render_template, request
+from flask import Blueprint, Response, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user
 
 from app.core.errors import ServiceError
@@ -100,6 +100,18 @@ def import_logs():
             return jsonify({"error": str(e)}), 500
     
     return render_template("knowledge/import.html")
+
+
+@bp.post("/collect")
+@admin_required
+def collect():
+    """공개 표준 명령·수식·고장코드 명칭을 모은다."""
+    from app.modules.knowledge.collect import collect_public
+
+    stats = collect_public()
+    flash(f"공개 표준을 저장했습니다. 명령 {stats['commands']}건, 수식 {stats['formulas']}건, "
+          f"고장코드 {stats['dtcs']}건, AI 명칭 {stats['ai']}건.", "success")
+    return redirect(url_for("knowledge.dtcs"))
 
 
 @bp.post("/seed")

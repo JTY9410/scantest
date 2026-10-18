@@ -5,6 +5,12 @@
 {% block content %}
 {{ page_header("지식베이스: 고장코드(DTC)", "차량 고장코드 의미 목록입니다.") }}
 
+<form method="post" action="{{ url_for('knowledge.collect') }}" class="mb-4">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit" class="btn btn-secondary">AI로 공개 표준 명칭 수집</button>
+  <p class="mt-2 text-sm text-muted">SAE·ISO에 공개된 명령, 수식, 고장코드만 저장합니다. 제조사 전용 코드는 만들지 않고, 지우기·세션 변경 명령은 스캔에 넣지 않습니다.</p>
+</form>
+
 <section class="card mb-6">
   <form method="get" class="flex gap-4 items-end">
     <div class="field flex-1">
@@ -28,6 +34,7 @@
     <thead>
       <tr>
         <th scope="col">코드</th>
+        <th scope="col">세부 명칭</th>
         <th scope="col">설명</th>
         <th scope="col">심각도</th>
         <th scope="col">제조사</th>
@@ -40,6 +47,7 @@
       {% for item in items %}
       <tr>
         <td data-primary class="mono font-semibold">{{ item.code }}</td>
+        <td>{{ item.detail_name or "-" }}</td>
         <td>{{ item.description }}</td>
         <td>{{ item.severity or "-" }}</td>
         <td>{{ item.maker or "전체" }}</td>

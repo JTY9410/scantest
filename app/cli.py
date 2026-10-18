@@ -48,3 +48,14 @@ def register_cli(app: Flask) -> None:
         click.echo("CAN 분석 데이터를 모두 삭제했습니다.")
 
     app.cli.add_command(canlab)
+
+    @app.cli.command("collect-knowledge")
+    def collect_knowledge() -> None:
+        """공개 OBD 명령·수식·고장코드 명칭을 지식베이스에 넣는다."""
+        from app.modules.knowledge.collect import collect_public
+
+        stats = collect_public()
+        click.echo(
+            f"명령 {stats['commands']}건, 수식 {stats['formulas']}건, "
+            f"고장코드 {stats['dtcs']}건, AI 명칭 {stats['ai']}건"
+        )
