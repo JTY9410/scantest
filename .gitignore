@@ -4,9 +4,11 @@
 !.env.example
 
 # Python
+venv/
+.venv/
 __pycache__/
 *.py[cod]
-.venv/
+*.pyc
 .pytest_cache/
 .coverage
 htmlcov/
