@@ -109,7 +109,7 @@
       <dt>연결 방식</dt><dd>{{ transports.get(result.transport, result.transport) }}</dd>
       <dt>단말기</dt><dd>{{ result.device or "-" }}</dd>
       <dt>통신 방식</dt><dd>{{ protocol.name or "알 수 없음" }}</dd>
-      <dt>차량 전압</dt><dd class="tabular-nums">{{ "%.1f V"|format(result.voltage) if result.voltage is not none else "-" }}</dd>
+      <dt>차량 전압</dt><dd class="tabular-nums">{{ "%.1f V"|format(result.voltage) if result.voltage is number else "-" }}</dd>
       <dt>경고등(MIL)</dt><dd>{% if result.monitor %}{{ badge("켜짐", "danger") if result.monitor.mil else badge("꺼짐", "success") }} · 저장 고장코드 {{ result.monitor.dtc_count }}개{% else %}-{% endif %}</dd>
       <dt>응답한 제어기</dt><dd class="tabular-nums">{{ result.ecus|length }}곳</dd>
       <dt>단계</dt><dd class="tabular-nums">성공 {{ result.counts.ok }} · 지원 안 함 {{ result.counts.unsupported }} · 오류 {{ result.counts.errors }} / 전체 {{ result.counts.total }}</dd>
@@ -279,11 +279,11 @@
 <div class="mt-6 grid gap-6 lg:grid-cols-2">
   <section class="card overflow-hidden" aria-labelledby="values-title">
     <h2 id="values-title" class="card-body pb-0 text-lg font-bold">실시간 데이터</h2>
-    {% if result["values"] %}
+    {% if result.get("values") %}
     <table class="rtable mt-3">
       <thead><tr><th scope="col">항목</th><th scope="col" class="num">값</th></tr></thead>
       <tbody>
-        {% for v in result["values"] %}
+        {% for v in result.get("values") %}
         <tr><td data-primary class="font-semibold">{{ v.label }}</td><td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}</td></tr>
         {% endfor %}
       </tbody>

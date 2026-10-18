@@ -161,7 +161,6 @@ class KnowledgeTerm(db.Model):
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now(), nullable=False)
 
     __table_args__ = (
-        Index("ix_knowledge_terms_term", "term"),
         Index("ix_knowledge_terms_category", "category"),
         Index("ix_knowledge_terms_source", "source"),
         Index("ix_knowledge_terms_status", "status"),
