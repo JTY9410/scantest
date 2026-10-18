@@ -1,0 +1,81 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge, empty %}
+{% block title %}지식베이스 - 디코드 공식{% endblock %}
+
+{% block content %}
+{{ page_header("지식베이스: 디코드 공식", "진단 응답을 해석하는 디코드 공식 목록입니다.") }}
+
+<section class="card mb-6">
+  <form method="get" class="flex gap-4 items-end">
+    <div class="field flex-1">
+      <label for="maker" class="field-label">제조사</label>
+      <input id="maker" name="maker" type="search" value="{{ maker }}" class="input" placeholder="예: 현대">
+    </div>
+    <div class="field">
+      <label for="status" class="field-label">상태</label>
+      <select id="status" name="status" class="input">
+        <option value="verified" {% if status == "verified" %}selected{% endif %}>검증됨</option>
+        <option value="draft" {% if status == "draft" %}selected{% endif %}>초안</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">검색</button>
+  </form>
+</section>
+
+<section class="card overflow-hidden" aria-label="공식 목록">
+  {% if items %}
+  <table class="rtable">
+    <thead>
+      <tr>
+        <th scope="col">PID</th>
+        <th scope="col">라벨</th>
+        <th scope="col">공식</th>
+        <th scope="col">단위</th>
+        <th scope="col">제조사</th>
+        <th scope="col">출처</th>
+        <th scope="col">상태</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td data-primary class="mono text-sm">{{ item.pid or "-" }}</td>
+        <td>{{ item.label }}</td>
+        <td class="mono text-sm">{{ item.formula[:50] }}{% if item.formula|length > 50 %}...{% endif %}</td>
+        <td>{{ item.unit or "-" }}</td>
+        <td>{{ item.maker or "전체" }}</td>
+        <td>{{ badge(item.source, "info") }}</td>
+        <td>
+          {% if item.status == "verified" %}
+            {{ badge("검증됨", "success") }}
+          {% elif item.status == "draft" %}
+            {{ badge("초안", "warning") }}
+            <button type="button" class="btn btn-sm btn-primary" onclick="verify({{ item.id }}, 'formula')">검증</button>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("공식이 없습니다.") }}
+  {% endif %}
+</section>
+
+<script type="module">
+async function verify(id, type) {
+  if (!confirm("이 공식을 검증하시겠습니까?")) return;
+  try {
+    const res = await fetch(`/admin/knowledge/${type}s/${id}/verify`, { method: "POST" });
+    if (res.ok) {
+      location.reload();
+    } else {
+      alert("검증 실패");
+    }
+  } catch (error) {
+    alert("오류: " + error.message);
+  }
+}
+window.verify = verify;
+</script>
+{% endblock %}
