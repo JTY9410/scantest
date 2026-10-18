@@ -53,6 +53,7 @@ def test_scan_detail_shows_clear_history(client, app, make_user):
     with app.app_context():
         scan = Scan(
             car_no="12가3456",
+            car_vin="KMHE341CBLU123456",
             car_maker="현대",
             type="ice",
             device_type="ble",
