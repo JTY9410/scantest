@@ -37,7 +37,8 @@ def test_clear_button_hidden_without_permission(client, app, make_user):
         scan_id = scan.id
     
     # 권한 체크
-    response = client.get(url_for("monitoring.scan_show", scan_id=scan_id))
+    with app.test_request_context():
+        response = client.get(url_for("monitoring.scan_show", scan_id=scan_id))
     html = response.get_data(as_text=True)
     assert response.status_code == 200
 
@@ -72,7 +73,8 @@ def test_clear_button_visible_with_permission(client, app, make_user):
         scan_id = scan.id
     
     # MFA와 권한이 모두 있어야 함
-    response = client.get(url_for("monitoring.scan_show", scan_id=scan_id))
+    with app.test_request_context():
+        response = client.get(url_for("monitoring.scan_show", scan_id=scan_id))
     html = response.get_data(as_text=True)
     assert response.status_code == 200
 
@@ -104,7 +106,8 @@ def test_clear_dialog_shows_warnings(client, app, make_user):
         db.session.commit()
         scan_id = scan.id
     
-    response = client.get(url_for("monitoring.scan_show", scan_id=scan_id))
+    with app.test_request_context():
+        response = client.get(url_for("monitoring.scan_show", scan_id=scan_id))
     html = response.get_data(as_text=True)
     assert response.status_code == 200
 
