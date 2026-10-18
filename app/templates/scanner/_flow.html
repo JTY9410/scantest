@@ -9,9 +9,12 @@
     <li class="badge" data-stage="{{ key }}">{{ label }}</li>
     {% endfor %}
   </ol>
-  <div class="flex flex-wrap gap-2">
+  <div class="flex flex-wrap items-center gap-2">
     <button class="btn btn-primary" type="button" data-scan-run>스캔하기</button>
     <button class="btn btn-secondary" type="button" data-scan-stop disabled>중지</button>
+    <label class="inline-flex min-h-11 items-center gap-2 text-sm">
+      <input type="checkbox" data-scan-clear> 고장코드 지우기(확인한 경우만)
+    </label>
   </div>
   <p class="font-semibold" role="status" aria-live="polite" data-scan-notice>시동을 켜고 진단기를 연결한 뒤 '스캔하기'를 누르세요.</p>
 

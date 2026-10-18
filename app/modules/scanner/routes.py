@@ -57,8 +57,9 @@ def lookup():
 @bp.post("/plan")
 @admin_required
 def plan():
-    car = _body().get("car")
-    return build_plan(car if isinstance(car, dict) else None, expand=True)
+    body = _body()
+    car = body.get("car")
+    return build_plan(car if isinstance(car, dict) else None, expand=True, clear=bool(body.get("clear")))
 
 
 @bp.post("/run")

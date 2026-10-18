@@ -248,6 +248,8 @@
 
     async function scan() {
       if (state.running) return;
+      const clearBox = root.querySelector("[data-scan-clear]");
+      if (clearBox?.checked && !window.confirm("고장코드를 지웁니다. 확인한 경우에만 지우기 명령을 보냅니다.")) return;
       if (!link.ready) {
         stage("connect", true);
         notice.textContent = "진단기 연결이 끊겼습니다. 다시 연결한 뒤 '조회 없이 스캔 계속' 또는 '스캔하기'를 누르세요.";
@@ -272,7 +274,8 @@
       let clientError = null;
       try {
         scanStatus.textContent = "스캔 계획을 받는 중…";
-        const plan = await post(config.planUrl, { car: state.car });
+        const clear = Boolean(root.querySelector("[data-scan-clear]")?.checked);
+        const plan = await post(config.planUrl, { car: state.car, clear });
         await runPlan(plan.steps, results);
       } catch (error) {
         clientError = `${results.length ? `${results.length}번째 단계 뒤 ` : ""}스캔이 중단되었습니다: ${error.message}`;

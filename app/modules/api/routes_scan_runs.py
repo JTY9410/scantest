@@ -15,7 +15,8 @@ from app.modules.scans.car_info import CarInfoError
 @bp.get("/scanPlan")
 @require_api_auth
 def scan_plan():
-    car_no = api_input().get("car_no")
+    data = api_input()
+    car_no = data.get("car_no")
     try:
         found, lookup_error = service.lookup_car(current_user(), car_no), None
     except CarInfoError as error:
@@ -23,7 +24,7 @@ def scan_plan():
             raise
         found, lookup_error = {"car_no": car_info.normalize_car_no(car_no), "car": None}, error.guide
     return respond({"data": {"car_no": found["car_no"], "car": found["car"], "lookup_error": lookup_error,
-                             **build_plan(found["car"], expand=True)}})
+                             **build_plan(found["car"], expand=True, clear=bool(data.get("clear")))}})
 
 
 @bp.post("/scanRuns")

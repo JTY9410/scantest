@@ -10,7 +10,7 @@ from app.modules.canlab.engine.search import Layout
 from app.modules.canlab.models import CanDataset, DecodeRule, DiagnosticReport, LogicStatus, RuleStatus, ScanLogic
 from app.modules.scanner import service
 from app.modules.scanner.plan import build_plan
-from app.modules.scans.models import Code, Scan, ScanCode, ScanDocument
+from app.modules.scans.models import Code, MakerScanCommand, Scan, ScanCode, ScanDocument
 from tests.canlab.synthetic import bms_0101, isotp_frames
 
 KONA_EV = {"diag_car_id": "KMHK381GFMU000001", "diag_company": "현대", "diag_model": "코나 일렉트릭",
@@ -377,3 +377,34 @@ def test_result_page_pops_up_logic_problems_and_handles_deleted_report(app, admi
 def test_bad_steps_are_rejected(bad):
     with pytest.raises(ServiceError):
         service.clean_steps(bad)
+
+
+def test_clear_commands_only_when_confirmed(app):
+    with app.app_context():
+        plain = {s["command"] for s in build_plan(AVANTE)["steps"]}
+        confirmed = {s["command"] for s in build_plan(AVANTE, clear=True)["steps"]}
+    assert "04" not in plain and "14FFFFFF" not in plain
+    assert {"04", "14FFFFFF"} <= confirmed
+
+
+def test_wescan_report_and_learned_command(app, admin):
+    steps = [
+        _step("ATDPN", "A6\r\r>", group="device"),
+        _step("010C", "7E8 04 41 0C 0C 80", group="pid"),
+        _step("03", "NO DATA", optional=True, group="dtc"),
+        _step("220101", _can_reply("7EC", bms_0101(soc=80.5, voltage=759.0)), header="7E4",
+              optional=True, bus="can", group="maker"),
+        _step("22AABB", _can_reply("7ED", bytes.fromhex("62AABB01")), header="7E5",
+              optional=True, bus="can", group="uds"),
+    ]
+    scan = service.run_scan(admin, car_no="49마5814", car=KONA_EV, steps=steps, transport="ble")
+    report = scan.bms_data["wescan"]
+    assert report["diagnosis_info"]["diagnosis_type"] == "BASIC"
+    assert report["vehicle"]["manufacturer"] == "현대"
+    assert report["sensor"]["ev"]["bms_soc"] == 80.5 or report["sensor"]["ev"].get("bms_pack_voltage")
+    assert report["sensor"]["ice"] is None
+    with app.app_context():
+        remembered = db.session.scalars(select(MakerScanCommand.command)).all()
+        assert "22AABB" in remembered and "03" not in remembered and "ATDPN" not in remembered
+        learned = {s["command"] for s in build_plan(KONA_EV)["steps"] if s["group"] == "learned"}
+    assert "22AABB" in learned

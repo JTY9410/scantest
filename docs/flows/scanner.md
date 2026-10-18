@@ -12,7 +12,8 @@
 | --- | --- | --- | --- | --- |
 | 스캔하기 화면 | `GET /admin/scan/` | `obd_config`, `flow_config` | - | 진단기 연결 패널, 스캔 흐름 |
 | 차량번호 조회 | `POST /admin/scan/lookup` | `lookup_car` (`carinfo`) | 조회 캐시, 실패 시 감사기록 "차량정보 조회 실패" | 차량 정보. 실패하면 `{message, kind, detail}`와 안내 |
-| 스캔 계획 받기 | `POST /admin/scan/plan` | `build_plan` (`scanner/plan.py`) | - | 명령 단계 목록과 안내 |
+| 스캔 계획 받기 | `POST /admin/scan/plan` | `build_plan` (`scanner/plan.py`) | - | 명령 단계 목록과 안내. `clear: true`일 때만 고장코드 지우기(`04`, `14FFFFFF`)를 넣음 |
+| 응답한 명령 | `GET /admin/scans/commands` | `scanner.learn.list_commands` | `maker_scan_commands` | 제조사 필터. 성공한 읽기 명령만, 다음 `build_plan`에 `learned`로 합침 |
 | 스캔하기 | 브라우저가 단계별로 진단기에 전송 (`static/js/components/obd-scan.js`) | - | - | 진행률, 단계별 성공·오류 수 |
 | 결과 저장 | `POST /admin/scan/run` | `run_scan` | 통신 기록(`live_capture`), 결과지, 스캔·스캔 코드, 결과 PDF(`scan_documents`), 감사기록 | 201 `{id, status, url}` 후 결과 화면(`?pdf=1`)으로 이동하며 PDF를 내려받음 |
 | 결과 보기 | `GET /admin/scan/<id>` | `scan_result` | - | 위스캔 결과 형식. 운영 데이터 스캔 상세의 "위스캔 결과" 버튼도 이 화면 |
@@ -22,7 +23,7 @@
 
 ## 스캔 계획 (`scanner/plan.py`)
 
-서버가 계획(명령 단계와 조건)을 만들고, 웹(`obd-plan.js`)·앱(`obd_plan.dart`)·LTE 단말기가 같은 규칙으로 실행합니다. 진단 세션 변경(`10`)·보안 접근(`27`)·쓰기(`2E`)·루틴(`31`)은 보내지 않습니다(기본 세션에서 읽기만). 고장코드 지우기(`04`, `14 FF FF FF`)는 앱에서 사용자가 확인했을 때만 보냅니다.
+서버가 계획(명령 단계와 조건)을 만들고, 웹(`obd-plan.js`)·앱(`obd_plan.dart`)·LTE 단말기가 같은 규칙으로 실행합니다. 진단 세션 변경(`10`)·보안 접근(`27`)·쓰기(`2E`)·루틴(`31`)은 보내지 않습니다(기본 세션에서 읽기만). 고장코드 지우기(`04`, `14FFFFFF`)는 웹에서 «고장코드 지우기»를 체크해 확인했거나 앱이 `clear=true`로 계획을 요청했을 때만 계획에 넣고, 기본 스캔은 지우지 않습니다. `run_scan`은 성공한 읽기 명령만 제조사·차종당 40개까지 기억하고(`AT`·지우기·`NO DATA`·`7F`·ELM 오류 제외), 다음 계획은 그 차종 기록이 있으면 그것만, 없으면 제조사 기록을 `learned`로 붙입니다. `GET /api/scanPlan`은 같은 `build_plan`입니다. `POST /api/scans`(고장코드만)는 학습하지 않습니다. 스캔 결과는 `bms_data.wescan`에 기본 보고서(`diagnosis_info`, `vehicle`, `report`, `dtc.enhanced.ecus`, 전기차 `sensor.ev`·내연기관 `sensor.ice`)로 남깁니다. 전기·하이브리드 배터리 값은 적용 규칙과 OBDb(CC BY-SA) 정의를 그대로 읽습니다. 테슬라·아우디·BMW·렉서스는 그 OBDb 정의가 있을 때만 DID를 넣습니다.
 
 | 묶음 | 명령 | 조건(`when`) | 내용 |
 | --- | --- | --- | --- |
@@ -37,6 +38,8 @@
 | UDS 전체 | `190209`, `190204`, `1915` | CAN만 | 기능 주소 고장코드(위카 앱과 같음) |
 | UDS 제어기 | `22F190`(응답 확인), `1902FF`, `1904<DTC>FF`(최대 3개, 웹·앱), `22F187`, `22F195` | CAN만, 응답 없는 제어기는 건너뜀 | `7E0`~`7E7`, 현대·기아는 `7E4`·`7C6`·`7D1`·`7D4` 추가 |
 | 현대·기아 전동차 BMS | `7E4`의 `220101`·`220105`·OBDb 셀 DID, 구형 `2101`·`2105` | CAN만 | 배터리 값, 셀 전압 |
+| 위스캔 앱 명령 | `ATSH7DF`·`ATSH7E0`~`7E8`, `1902FFFFFF` | 선택 | 앱 활성 명령. 이미 있는 `03`·`07`·`0A`·`0902`·`22F190`·`190209`는 그대로 |
+| 학습 명령 | 이전에 응답한 읽기 명령 | 차종 기록, 없으면 제조사 | `learned`, 선택, 계획에 없는 것만 |
 | 스캔 로직·적용 규칙 | CAN 분석에서 이 차량 범위(차종 → 제조사 → 공통)에 적용한 스캔 로직의 명령("스캔 로직: …"), 그다음 규칙의 요청(`capture_requests(car)`) | CAN만 | 계획에 없는 것만. `7DF`는 기본 주소와 같게 봄 |
 
 - 주소: 11비트는 `ATSH7E0`+`ATCRA7E8`(응답 필터), 29비트는 `ATCP18`+`ATSH DA10F1`+`ATCRA18DAF110`. 기능 주소 요청 전에는 `ATSH7DF`(29비트 `ATCP18`+`ATSH DB33F1`)+`ATCRA`(필터 해제). 29비트 주소가 없는 제어기는 29비트 차량에서 건너뜁니다.

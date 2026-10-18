@@ -105,6 +105,31 @@ class Scan(TimestampMixin, SoftDeleteMixin, db.Model):
             return self.type
 
 
+class MakerScanCommand(db.Model):
+    """제조사·차종에서 실제로 응답한 읽기 명령. 다음 스캔 계획에 다시 넣는다.
+
+    model·header가 비어 있으면 제조사 공통·기능 주소다. 고유 키는 NULL도 서로 같다.
+    """
+
+    __tablename__ = "maker_scan_commands"
+    __table_args__ = (
+        Index(
+            "uq_maker_scan_commands", "maker", "model", "header", "command",
+            unique=True, postgresql_nulls_not_distinct=True,
+        ),
+        Index("ix_maker_scan_commands_maker", "maker"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    maker: Mapped[str] = mapped_column(String(50))
+    model: Mapped[str | None] = mapped_column(String(100))
+    header: Mapped[str | None] = mapped_column(String(8))
+    command: Mapped[str] = mapped_column(String(32))
+    hits: Mapped[int] = mapped_column(Integer, default=1)
+    last_scan_id: Mapped[int | None] = mapped_column(BigInteger)
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
 class ScanCode(TimestampMixin, SoftDeleteMixin, db.Model):
     __tablename__ = "scan_codes"
     __table_args__ = (CheckConstraint("type IN ('ev', 'ice')", name="type_valid"),)

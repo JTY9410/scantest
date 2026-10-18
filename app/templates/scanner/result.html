@@ -27,6 +27,31 @@
   <a class="btn btn-primary print:hidden" href="{{ url_for('scanner.index', car_no=scan.car_no) }}">다시 스캔</a>
 {% endcall %}
 
+{% set report = result.wescan %}
+{% if report %}
+<section class="card card-body mb-6" aria-labelledby="wescan-title">
+  <h2 id="wescan-title" class="text-lg font-bold">제조사별 기본 보고서</h2>
+  <p class="mt-1 text-sm text-muted">{{ report.vehicle.manufacturer or "-" }} {{ report.vehicle.model or "" }} · {{ report.vehicle.fuel_type or "-" }}</p>
+  {% if report.dtc.enhanced.ecus %}
+  <ul class="mt-3 grid gap-2 text-sm">
+    {% for ecu in report.dtc.enhanced.ecus %}
+    <li><span class="font-semibold">{{ ecu.ecu_name }}</span>
+      {% if ecu.comm_status == "fail" %}{{ badge("통신 실패", "danger") }}
+      {% else %}{{ badge("통신 성공", "success") }} · 고장코드 {{ ecu.code_count }}
+        {% if ecu.codes %}<span class="mono">{% for code in ecu.codes %}{{ code.code }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+      {% endif %}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+  {% if report.sensor.ev %}
+  <p class="mt-3 text-sm">배터리 요약 · 팩 전압 {{ report.sensor.ev.bms_pack_voltage or "-" }} V · SOC {{ report.sensor.ev.bms_soc or report.sensor.ev.bms_display_soc or "-" }}% · SOH {{ report.sensor.ev.bms_soh or "-" }}%</p>
+  {% elif report.sensor.ice %}
+  <p class="mt-3 text-sm">주행거리 {{ report.sensor.ice.vehicle_mileage or "-" }} km</p>
+  {% endif %}
+  <a class="mt-3 inline-flex underline" href="{{ url_for('monitoring.scan_commands', maker=report.vehicle.manufacturer) }}">이 제조사에서 응답한 명령</a>
+</section>
+{% endif %}
+
 {% if result.status == "ok" %}
 <div class="flash flash-success mb-6"><span aria-hidden="true" class="font-bold">✓</span><p>스캔을 정상적으로 마쳤습니다.</p></div>
 {% elif result.status == "partial" %}

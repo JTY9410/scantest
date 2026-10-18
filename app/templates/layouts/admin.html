@@ -45,6 +45,8 @@
       <ul class="grid gap-0.5">
         {{ nav(url_for('monitoring.scans'), "스캔 기록", endpoint in ("monitoring.scans", "monitoring.scan_show"),
                '<path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3M7 12h10"/>') }}
+        {{ nav(url_for('monitoring.scan_commands'), "학습 명령", endpoint == "monitoring.scan_commands",
+               '<path d="M4 6h16M4 12h10M4 18h13"/>') }}
         {{ nav(url_for('monitoring.reports'), "불일치 신고", endpoint == "monitoring.reports",
                '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9L1.8 18a2 2 0 001.7 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/>') }}
         {{ nav(url_for('monitoring.applogs'), "앱 로그", endpoint == "monitoring.applogs",

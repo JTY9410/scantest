@@ -1,0 +1,38 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, empty %}
+{% block title %}응답한 스캔 명령{% endblock %}
+
+{% block content %}
+{{ page_header("응답한 스캔 명령", "제조사·차종에서 실제로 응답한 읽기 명령입니다. 다음 스캔 계획에 다시 넣습니다.",
+               back=(url_for('monitoring.scans'), "스캔 기록")) }}
+
+<form method="get" class="card card-body mb-4 flex flex-wrap items-end gap-3" role="search">
+  <div class="field">
+    <label for="maker" class="field-label">제조사</label>
+    <input id="maker" name="maker" class="input" value="{{ maker }}" placeholder="예: 현대">
+  </div>
+  <button class="btn btn-primary" type="submit">보기</button>
+</form>
+
+<section class="card overflow-hidden">
+  {% if commands %}
+  <table class="rtable">
+    <thead><tr><th scope="col">제조사</th><th scope="col">모델</th><th scope="col">주소</th><th scope="col">명령</th><th scope="col" class="num">횟수</th><th scope="col">최근</th></tr></thead>
+    <tbody>
+      {% for c in commands %}
+      <tr>
+        <td data-primary>{{ c.maker }}</td>
+        <td data-label="모델">{{ c.model or "제조사 공통" }}</td>
+        <td data-label="주소" class="mono">{{ c.header or "기본" }}</td>
+        <td data-label="명령" class="mono">{{ c.command }}</td>
+        <td data-label="횟수" class="num">{{ c.hits }}</td>
+        <td data-label="최근">{{ c.last_seen|kst }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("아직 기억한 명령이 없습니다.", "스캔이 응답을 받으면 여기에 쌓입니다.") }}
+  {% endif %}
+</section>
+{% endblock %}

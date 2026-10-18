@@ -18,6 +18,8 @@ dtcs는 같은 ECU의 19 02 응답 중 확정 고장코드마다 19 04 <DTC> FF(
 이더넷 진단(DoIP, ISO 13400)은 OBD2 단자의 이더넷 핀과 전용 장비가 필요해 ELM327 계열로는 보낼 수 없다.
 """
 
+import re
+
 from app.modules.canlab.engine import obdb
 from app.modules.canlab.service import capture_requests, logic_commands
 from app.modules.scanner.obd import ECU_IDENT_DIDS, FREEZE_PIDS, MODE06_RANGES, PIDS, SUPPORT_PIDS
@@ -40,6 +42,27 @@ SNAPSHOT_LIMIT = 3
 DOIP_NOTE = "이더넷 진단(DoIP, ISO 13400)은 전용 장비가 필요해 이 스캔에서는 조회하지 않습니다."
 INFO09 = (("02", "차대번호(VIN)"), ("04", "소프트웨어 보정 ID"), ("06", "보정 검증 번호(CVN)"),
           ("0A", "ECU 이름"), ("08", "주행 중 진단 실행 비율(가솔린)"), ("0B", "주행 중 진단 실행 비율(디젤)"))
+# 위스캔 앱(obd_commands.dart, 793889c)의 활성 명령 중 계획에 아직 없는 것.
+# 지우기(04, 14FFFFFF)는 clear=True일 때만 넣는다. 세션(10)·보안(27)·쓰기(2E)·루틴(31)은 넣지 않는다.
+WECAR_STEPS = (
+    ("송신 헤더 브로드캐스트", "ATSH7DF", None, None),
+    ("송신 헤더 엔진", "ATSH7E0", None, None),
+    ("송신 헤더 변속기", "ATSH7E1", None, None),
+    ("송신 헤더 ABS", "ATSH7E2", None, None),
+    ("송신 헤더 배터리", "ATSH7E4", None, None),
+    ("송신 헤더 모터", "ATSH7E5", None, None),
+    ("송신 헤더 통합전력", "ATSH7E6", None, None),
+    ("송신 헤더 차량충전", "ATSH7E7", None, None),
+    ("송신 헤더 엔진 응답", "ATSH7E8", None, None),
+    ("확인된 모든 고장코드(19 02 FF FF FF)", "1902FFFFFF", None, "can"),
+)
+_BLOCKED = {"10", "27", "2E", "31"}
+_FOREIGN_OBDB = {"TESLA", "AUDI", "BMW", "LEXUS"}
+
+
+def _blocked(command: str) -> bool:
+    compact = re.sub(r"\s+", "", command or "").upper()
+    return len(compact) >= 2 and not compact.startswith("AT") and compact[:2] in _BLOCKED
 
 
 def _maker(car: dict | None) -> str:
@@ -55,7 +78,7 @@ def _is_hkmc_electrified(car: dict | None) -> bool:
     return _is_hkmc(car) and any(f.upper() in fuel for f in ELECTRIFIED)
 
 
-def build_plan(car: dict | None = None, *, expand: bool = False) -> dict:
+def build_plan(car: dict | None = None, *, expand: bool = False, clear: bool = False) -> dict:
     """steps: {id, group, label, header, header29, command, timeout, optional, probe, bus, when, expand…}
 
     header가 없으면 OBD 기본 주소(브로드캐스트)로 보낸다. probe는 그 ECU의 첫 명령이고,
@@ -135,12 +158,38 @@ def build_plan(car: dict | None = None, *, expand: bool = False) -> dict:
             add("maker", f"BMS 배터리 데이터(구형 21 {local_id})", f"21{local_id}", header="7E4",
                 timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
 
+    matched = obdb.match(car)
+    repo = str((matched or {}).get("repo") or "")
+    if repo.split("-", 1)[0].upper() in _FOREIGN_OBDB:
+        header = matched.get("request_id") or "7E4"
+        for did in matched.get("dids") or []:
+            add("maker", f"OBDb {repo} (22 {did})", f"22{did}", header=header,
+                timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
+
+    for label, command, header, bus in WECAR_STEPS:
+        add("wecar", label, command, header=header, optional=True, bus=bus,
+            timeout=UDS_TIMEOUT_MS if bus else DEFAULT_TIMEOUT_MS)
+
+    if clear:
+        # 위스캔 앱의 지우기 명령. 사용자가 확인했을 때만 계획에 넣는다.
+        add("clear", "고장코드 지우기(04)", "04", optional=True)
+        add("clear", "UDS 고장코드 지우기(14 FF FF FF)", "14FFFFFF", timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
+
     planned = {(s["header"], s["command"]) for s in steps}
+    from app.modules.scanner.learn import learned_requests
+
+    for request in learned_requests(car):
+        header = request["header"]
+        if _blocked(request["command"]) or (header, request["command"]) in planned:
+            continue
+        planned.add((header, request["command"]))
+        add("learned", f"이전 스캔에서 응답한 명령 {request['command']}", request["command"],
+            header=header, timeout=UDS_TIMEOUT_MS, optional=True, bus="can" if header else None)
     logic = {(c["header"], c["command"]): c for c in logic_commands(car or None)}
     for request in capture_requests(car or None):
         # 기능 주소(7DF) 요청은 계획의 기본 주소(header 없음)와 같다.
         header = None if request["header"] == "7DF" else request["header"]
-        if (header, request["command"]) in planned:
+        if _blocked(request["command"]) or (header, request["command"]) in planned:
             continue
         planned.add((header, request["command"]))
         command = logic.get((request["header"], request["command"]))

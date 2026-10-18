@@ -5,6 +5,7 @@ from flask import Blueprint, render_template, request
 from app.core.pagination import clamp_page
 from app.modules.auth.access import admin_required
 from app.modules.monitoring import service
+from app.modules.scanner.learn import answered_commands, list_commands
 from app.modules.scans.models import ScanType
 
 bp = Blueprint("monitoring", __name__, url_prefix="/admin")
@@ -51,10 +52,19 @@ def scans():
     )
 
 
+@bp.get("/scans/commands")
+@admin_required
+def scan_commands():
+    maker = (request.args.get("maker") or "").strip()[:50]
+    return render_template("monitoring/scan_commands.html", maker=maker, commands=list_commands(maker))
+
+
 @bp.get("/scans/<int:scan_id>")
 @admin_required
 def scan_show(scan_id: int):
-    return render_template("monitoring/scan_show.html", scan=service.get_scan(scan_id))
+    scan = service.get_scan(scan_id)
+    data = scan.bms_data if isinstance(scan.bms_data, dict) else {}
+    return render_template("monitoring/scan_show.html", scan=scan, answered=answered_commands(data.get("steps")))
 
 
 @bp.get("/activities")

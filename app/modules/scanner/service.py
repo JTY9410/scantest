@@ -29,6 +29,8 @@ from app.modules.canlab.service import (
 from app.modules.obd.models import ObdDialect
 from app.modules.scanner import pdf
 from app.modules.scanner.interpret import detect_protocol, interpret, record_text
+from app.modules.scanner.learn import remember
+from app.modules.scanner.report import basic_report
 from app.modules.scanner.obd import STATUS_LABELS, SYSTEMS
 from app.modules.scanner.plan import DOIP_NOTE
 from app.modules.scans import car_info
@@ -248,6 +250,14 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     )
     db.session.add(scan)
     db.session.flush()
+    result["wescan"] = basic_report(
+        scan_id=scan.id, diagnosed_at=scan.created_at or _now(), car_no=car_no, car=car, result=result,
+        report_id=report.id, pdf_url=f"/admin/scan/{scan.id}/pdf",
+        app_version=current_app.config.get("APP_VERSION"),
+        app_type=getattr(source, "value", source))
+    scan.bms_data = dict(scan.bms_data or {}, wescan=result["wescan"])
+    flag_modified(scan, "bms_data")
+    remember(scan, result["steps"])
     record_incidents(scan.id, logic, result["errors"])
     for code in {c.id: c for c in matched.values()}.values():
         db.session.add(ScanCode(type=scan.type, scan_id=scan.id, code_id=code.id))
