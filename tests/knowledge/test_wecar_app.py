@@ -27,7 +27,7 @@ def test_wecar_app_reads_are_drafts_and_idempotent(app):
         copies = db.session.scalar(select(func.count()).select_from(KnowledgeCommand).where(
             KnowledgeCommand.command == "220101", KnowledgeCommand.header == "7E4",
             KnowledgeCommand.source == "reverse_analysis"))
-    assert first["commands"] >= 15 and first["formulas"] >= 8 and first["dtcs"] == 2
+    assert first["commands"] >= 15 and first["formulas"] >= 8 and first["dtcs"] == 6
     assert saved == ("draft", "BMS", "BMS 배터리 데이터(22 0101)")
     assert formula_text == "A / 2"
     assert blocked == 0
