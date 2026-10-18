@@ -136,6 +136,7 @@ def test_scan_detail_shows_clear_logs(client, app, make_user):
             user_id=admin_id,
             source="web",
             status="ok",
+            token_hash="test_hash_12345678901234567890123456789012",
             result={"cleared": 2, "failed": 0},
         )
         db.session.add(log)
