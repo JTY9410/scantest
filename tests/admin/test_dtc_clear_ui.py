@@ -27,7 +27,6 @@ def test_clear_button_hidden_without_permission(client, app, make_user):
             car_maker="현대",
             car_model="아반떼",
             type="ice",
-            status="ok",
         )
         db.session.add(scan)
         db.session.commit()

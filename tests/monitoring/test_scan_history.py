@@ -15,14 +15,12 @@ def test_search_scans_with_filters(client, app, make_user):
             car_maker="현대",
             car_model="아반떼",
             type="ice",
-            status="ok",
         )
         scan2 = Scan(
             car_no="34나5678",
             car_maker="기아",
             car_model="쏘렌토",
             type="ev",
-            status="ok",
         )
         db.session.add_all([scan1, scan2])
         db.session.commit()
@@ -43,7 +41,7 @@ def test_scan_detail_shows_clear_history(client, app, make_user):
     admin_id = make_user("clear_admin", type="admin", name="Clear Admin")
     
     with app.app_context():
-        scan = Scan(car_no="12가3456", car_maker="현대", type="ice", status="ok")
+        scan = Scan(car_no="12가3456", car_maker="현대", type="ice")
         db.session.add(scan)
         db.session.commit()
         scan_id = scan.id
