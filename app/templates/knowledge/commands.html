@@ -6,6 +6,17 @@
 {{ page_header("지식베이스: 진단 명령어", "차량 진단에 사용되는 UDS/OBD-II 명령어 목록입니다. 스캔에서 응답한 읽기는 초안으로 쌓입니다.") }}
 
 <section class="card card-body mb-6">
+  <h2 class="text-lg font-bold">엑셀·PDF로 명령 넣기</h2>
+  <p class="mt-1 text-sm text-muted">주소, 명령, 이름이 있는 xlsx, pdf를 올리면 읽기 명령만 초안으로 저장합니다. 세션 변경과 지우기 명령은 넣지 않습니다.</p>
+  <form method="post" action="{{ url_for('knowledge.upload_commands') }}" enctype="multipart/form-data" class="mt-3 grid gap-3 sm:grid-cols-2">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="field">파일<input name="file" type="file" class="input" accept=".xlsx,.pdf" required></label>
+    <label class="field">제조사<input name="maker" class="input" maxlength="50"></label>
+    <button type="submit" class="btn btn-primary self-end">올리고 분석</button>
+  </form>
+</section>
+
+<section class="card card-body mb-6">
   <h2 class="text-lg font-bold">명령 추가</h2>
   <form method="post" action="{{ url_for('knowledge.save_command') }}" class="mt-3 grid gap-3 sm:grid-cols-2">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

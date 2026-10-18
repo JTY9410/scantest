@@ -72,3 +72,27 @@ DTCS = [
     {"code": "U0101", "type": "ice", "unit_name": "통신", "detail_name": "변속기 제어 모듈과 통신 두절", "description": "변속기 제어 모듈과 통신이 끊김", "root_cause": "제어기 전원, CAN 배선"},
     {"code": "U0121", "type": "ice", "unit_name": "통신", "detail_name": "ABS 제어 모듈과 통신 두절", "description": "잠김 방지 제동 시스템 제어 모듈과 통신이 끊김", "root_cause": "제어기 전원, CAN 배선"},
 ]
+
+# NHTSA 18-NA-342에 적힌 하이브리드/전기차 배터리 온도 센서 코드. 센서 번호별 성능·저전압·고전압.
+_BATTERY_TEMP = (
+    (1, "P0A9C", "P0A9D", "P0A9E"),
+    (2, "P0AC6", "P0AC7", "P0AC8"),
+    (3, "P0ACB", "P0ACC", "P0ACD"),
+    (4, "P0AE9", "P0AEA", "P0AEB"),
+    (5, "P0BC3", "P0BC4", "P0BC5"),
+    (6, "P0C34", "P0C35", "P0C36"),
+    (7, "P0C7D", "P0C7E", "P0C7F"),
+    (8, "P0C82", "P0C83", "P0C84"),
+    (9, "P0C89", "P0C8A", "P0C8B"),
+)
+_TEMP_CAUSE = "온도 센서, 배선. 공개 자료 NHTSA 18-NA-342. 제조사 세부 판정은 별도"
+for _number, _performance, _low, _high in _BATTERY_TEMP:
+    _base = f"하이브리드/전기차 배터리 온도 센서 {_number}"
+    DTCS.extend((
+        {"code": _performance, "type": "ev", "unit_name": "고전압 배터리", "detail_name": f"{_base} 성능",
+         "description": f"{_base} 성능이 기준을 벗어남", "root_cause": _TEMP_CAUSE},
+        {"code": _low, "type": "ev", "unit_name": "고전압 배터리", "detail_name": f"{_base} 회로 저전압",
+         "description": f"{_base} 회로 전압이 낮음", "root_cause": _TEMP_CAUSE},
+        {"code": _high, "type": "ev", "unit_name": "고전압 배터리", "detail_name": f"{_base} 회로 고전압",
+         "description": f"{_base} 회로 전압이 높음", "root_cause": _TEMP_CAUSE},
+    ))

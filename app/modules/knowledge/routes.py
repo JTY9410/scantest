@@ -99,6 +99,42 @@ def save_dtc():
     return _save(service.save_dtc, "knowledge.dtcs")
 
 
+@bp.post("/dtcs/upload")
+@admin_required
+def upload_dtcs():
+    """엑셀·PDF에서 고장코드를 읽어 초안으로 저장한다."""
+    return _upload(request, "dtc", "knowledge.dtcs")
+
+
+@bp.post("/commands/upload")
+@admin_required
+def upload_commands():
+    """엑셀·PDF에서 읽기 명령을 읽어 초안으로 저장한다."""
+    return _upload(request, "command", "knowledge.commands")
+
+
+def _upload(req, kind: str, redirect_to: str):
+    from app.modules.knowledge.uploads import import_command_file, import_dtc_file
+
+    file = req.files.get("file")
+    maker = (req.form.get("maker") or "").strip()[:50] or None
+    if file is None or not file.filename:
+        flash("파일을 선택하세요.", "error")
+        return redirect(url_for(redirect_to))
+    try:
+        content = file.read()
+        if kind == "dtc":
+            stats = import_dtc_file(file.filename, content, maker)
+            flash(f"고장코드 {stats['found']}건 중 {stats['saved']}건을 초안으로 저장했습니다.", "success")
+        else:
+            stats = import_command_file(file.filename, content, maker)
+            flash(f"명령 {stats['found']}건 중 {stats['saved']}건을 초안으로 저장했습니다. "
+                  f"세션·지우기 명령 {stats['skipped']}건은 넣지 않았습니다.", "success")
+    except ServiceError as exc:
+        flash(exc.message, "error")
+    return redirect(url_for(redirect_to, status="all"))
+
+
 @bp.post("/dtcs/<int:dtc_id>/delete")
 @admin_required
 def delete_dtc(dtc_id: int):
