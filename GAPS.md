@@ -33,36 +33,15 @@
 
 ## 남은 작업 (미구현 또는 부분 구현)
 
-### (3) 역분석 모듈 고도화 (부분)
-**현재 상태**: 기존 역분석 모듈(`/admin/canlab/`)은 완전히 작동하며, WESCAN 통신기록과 리버스 데이터를 비교하여 디코딩 규칙을 생성하고 검증하는 전체 워크플로우가 구현되어 있습니다.
+### (3) 역분석
+위스캔 통신기록과 리버스 통신기록을 비교해 스캔에 넣을 명령·수식 후보를 찾습니다. 관리자가 적용하면 그 범위의 디코딩 규칙이 되고, 같은 내용이 지식베이스(`reverse_analysis`, 검증됨)에도 쌓입니다. 다음 스캔 계획은 그 검증 명령을 읽고, 적용 규칙이 없는 신호만 검증 수식으로 해석합니다.
 
-**미구현 기능**:
-- [ ] 다양한 입력 형식 지원 개선
-  - 현재: TRC, ELM AT 로그, PDF, 텍스트
-  - 추가 필요: G-Scan 텍스트 출력, 추가 CSV 형식
-- [ ] 알려진 명령어와의 자동 diff 및 갭 하이라이트 UI
-- [ ] 후보 PID/디코드 공식 자동 제안 UI에 증거(evidence) 표시
-- [ ] 검증된 역분석 결과를 지식베이스로 자동 export
-  - 현재: 수동으로 `DecodeRule`에서 `KnowledgeFormula`로 복사해야 함
-  - 필요: "지식베이스로 내보내기" 버튼
+아직 없는 것: G-Scan·CSV 입력 확대, 후보 화면의 근거 강조, OBDb 참고자료를 지식베이스 명령으로 자동 복사.
 
-### (4) 지식베이스 완성
-**현재 상태**: DB 스키마, 마이그레이션, 기본 CRUD UI는 완성
+### (4) 지식베이스와 진단코드
+검증된 명령은 스캔 계획(`knowledge` 단계)에 들어갑니다. 진단코드 화면의 «AI로 설명 채우기»는 공개 OBD 표준만 `codes`와 지식베이스 초안에 넣습니다. 제조사 전용 코드는 설명을 만들지 않습니다.
 
-**미구현 기능**:
-- [ ] commands.json import 스크립트/UI
-  - Service 함수 `import_from_commands_json`은 구현됨
-  - CLI 또는 Admin UI에서 호출하는 인터페이스 없음
-- [ ] OBDb 데이터 import
-  - canlab/references에 OBDb 동기화 기능이 있으나 지식베이스와 연동 안 됨
-  - `CanReference` → `KnowledgeCommand/DTC` 변환 필요
-- [ ] CSV import UI (bulk upload)
-- [ ] AI/web-research hook
-  - DRAFT 항목만 생성, `KNOWLEDGE_AI_KEY` 환경변수로 enable/disable
-  - 예: OpenAI API로 DTC 설명 생성
-- [ ] 스캔 planning/interpretation에서 지식베이스 읽기
-  - 현재: `scanner/plan.py`, `scanner/interpret.py`는 하드코딩된 로직만 사용
-  - 필요: `knowledge_service.list_commands(maker=...)`, `list_formulas(maker=...)`를 참조하도록 수정
+아직 없는 것: CSV 일괄 등록, 웹 검색으로 문서를 자동 수집.
 
 ### (6) 테스트 및 빌드 검증
 **환경 제약**: Cloud Agent VM에 Docker와 Python 패키지가 설치되지 않음

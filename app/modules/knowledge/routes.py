@@ -1,4 +1,4 @@
-"""Knowledge base routes."""
+"""지식베이스 화면."""
 from flask import Blueprint, Response, jsonify, render_template, request
 from flask_login import current_user
 
@@ -82,7 +82,7 @@ def import_logs():
         maker = request.form.get("maker", "").strip()[:50] or None
         
         if not content:
-            return jsonify({"error": "No content provided"}), 400
+            return jsonify({"error": "로그 내용이 없습니다."}), 400
         
         try:
             if log_type == "elm":
@@ -90,7 +90,7 @@ def import_logs():
             elif log_type == "gscan":
                 parsed = importer.parse_gscan_log(content)
             else:
-                return jsonify({"error": "Unknown log type"}), 400
+                return jsonify({"error": "알 수 없는 로그 형식입니다."}), 400
             
             diff_result = importer.diff_against_known(parsed, maker=maker)
             
@@ -127,11 +127,11 @@ def export_json():
 def import_json():
     """Import knowledge from JSON."""
     if "file" not in request.files:
-        return jsonify({"error": "No file"}), 400
+        return jsonify({"error": "파일이 없습니다."}), 400
     
     file = request.files["file"]
     if not file.filename:
-        return jsonify({"error": "Empty filename"}), 400
+        return jsonify({"error": "파일 이름이 없습니다."}), 400
     
     try:
         data = file.read().decode("utf-8")

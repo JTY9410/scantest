@@ -46,6 +46,18 @@ def codes():
                            types=list(ScanType))
 
 
+@bp.post("/codes/fill")
+@admin_required
+def fill_codes():
+    try:
+        result = service.fill_codes_with_ai(current_user, request.form.get("codes") or "")
+    except ServiceError as error:
+        flash(error.message, "error")
+    else:
+        flash(f"진단코드 {result['saved']}건을 등록했습니다. 표준이 아닌 {result['skipped']}건은 비워 두었습니다.", "success")
+    return redirect(url_for("catalog.codes"))
+
+
 @bp.route("/codes/new", methods=["GET", "POST"])
 @bp.route("/codes/<int:code_id>/edit", methods=["GET", "POST"])
 @admin_required

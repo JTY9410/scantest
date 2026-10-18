@@ -1,5 +1,7 @@
 """회사·진단코드 마스터 관리 업무 규칙."""
 
+import json
+import re
 from typing import Any
 
 from flask import current_app
@@ -10,7 +12,8 @@ from app.core.errors import ServiceError
 from app.core.pagination import Page, paginate
 from app.extensions import db
 from app.modules.accounts.models import Company, User
-from app.modules.scans.models import Code
+from app.modules.knowledge.models import KnowledgeDTC
+from app.modules.scans.models import Code, Scan
 
 COMPANY_FIELDS = ("code", "name")
 CODE_FIELDS = ("type", "code", "unit_name", "unit_type", "desc", "detail_desc", "root_cause",
@@ -102,3 +105,94 @@ def save_code(actor: User, data: dict[str, Any], code: Code | None = None) -> Co
         return code
     _apply(actor, code, CODE_FIELDS, data, "Code", "진단코드 수정")
     return code
+
+
+_DTC = re.compile(r"^[PCBU][0-9A-F]{4}$", re.I)
+_AI_SYSTEM = (
+    "당신은 공개된 OBD-II(SAE J2012, ISO 15031-6) 고장코드 설명만 한글로 적습니다. "
+    "제조사 비공개 코드는 지어내지 말고 known을 false로 두세요. JSON 배열만 답합니다."
+)
+
+
+def _wanted_codes(text: str) -> list[str]:
+    found = []
+    for token in re.split(r"[\s,]+", (text or "").upper()):
+        if _DTC.fullmatch(token) and token not in found:
+            found.append(token)
+    return found[:40]
+
+
+def undescribed_codes(limit: int = 20) -> list[str]:
+    """최근 스캔에 있고 마스터 설명이 없는 고장코드."""
+    known = {row[0] for row in db.session.execute(
+        select(Code.code).where(Code.deleted_at.is_(None), Code.desc.is_not(None)))}
+    found = []
+    scans = db.session.scalars(select(Scan).where(Scan.deleted_at.is_(None)).order_by(Scan.id.desc()).limit(40))
+    for scan in scans:
+        data = scan.bms_data if isinstance(scan.bms_data, dict) else {}
+        for dtc in data.get("dtcs") or []:
+            code = str(dtc.get("code") or "").upper()
+            if _DTC.fullmatch(code) and code not in known and code not in found:
+                found.append(code)
+            if len(found) >= limit:
+                return found
+    return found
+
+
+def _parse_ai(text: str) -> list[dict]:
+    match = re.search(r"\[.*\]", text, re.S)
+    if not match:
+        raise ServiceError("AI가 고장코드 목록을 돌려주지 않았습니다.")
+    try:
+        rows = json.loads(match.group(0))
+    except json.JSONDecodeError as exc:
+        raise ServiceError("AI 응답을 읽지 못했습니다.") from exc
+    return rows if isinstance(rows, list) else []
+
+
+def fill_codes_with_ai(actor: User, text: str) -> dict[str, int]:
+    """공개 OBD 설명만 codes와 지식베이스 초안에 넣는다. 키가 없으면 등록하지 않는다."""
+    from app.modules.canlab import ai
+
+    codes = _wanted_codes(text) or undescribed_codes()
+    if not codes:
+        raise ServiceError("채울 고장코드가 없습니다. 코드를 입력하거나 설명 없는 스캔을 먼저 저장하세요.")
+    prompt = (
+        "다음 고장코드마다 공개 표준 설명만 JSON 배열로 답하세요. "
+        "항목은 code, type(ev 또는 ice), unit_name, desc, known(true/false)입니다. "
+        "known이 false면 desc는 빈 문자열입니다.\n" + ", ".join(codes)
+    )
+    answer, _provider = ai.ask(_AI_SYSTEM, prompt)
+    saved = skipped = 0
+    for row in _parse_ai(answer):
+        code = str(row.get("code") or "").upper()
+        if code not in codes or row.get("known") is not True:
+            skipped += 1
+            continue
+        desc = str(row.get("desc") or "").strip()
+        if not desc:
+            skipped += 1
+            continue
+        kind = "ev" if row.get("type") == "ev" else "ice"
+        unit = str(row.get("unit_name") or "OBD").strip()[:255] or "OBD"
+        existing = db.session.scalar(select(Code).where(Code.code == code, Code.deleted_at.is_(None)))
+        if existing is None:
+            db.session.add(Code(type=kind, code=code, unit_name=unit, desc=desc[:2000],
+                                detail_desc="공개 OBD 표준을 AI로 채움"))
+        elif not existing.desc:
+            existing.desc = desc[:2000]
+            existing.unit_name = existing.unit_name or unit
+        else:
+            skipped += 1
+            continue
+        draft = db.session.scalar(select(KnowledgeDTC).where(
+            KnowledgeDTC.code == code, KnowledgeDTC.source == "ai_research"))
+        if draft is None:
+            db.session.add(KnowledgeDTC(
+                code=code, description=desc[:2000], source="ai_research",
+                source_detail="공개 OBD 표준", status="draft", confidence=0.5))
+        saved += 1
+    db.session.flush()
+    audit.record("진단코드 AI 등록", "Code", None, user_id=actor.id, changes={"saved": saved, "skipped": skipped})
+    db.session.commit()
+    return {"saved": saved, "skipped": skipped}

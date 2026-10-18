@@ -808,6 +808,9 @@ def activate_rule(actor: User, rule: DecodeRule, version: int) -> DecodeRule:
         audit.record("디코딩 규칙 적용", "DecodeRule", rule.id, user_id=actor.id,
                      changes={"signal": rule.signal_key, "revision": rule.revision, "scope": rule.scope_label,
                               "replaced": current.revision if current else None})
+        from app.modules.knowledge.service import remember_rule
+
+        remember_rule(rule, actor.id)
         db.session.commit()
     except StaleDataError as exc:
         db.session.rollback()
@@ -895,13 +898,22 @@ def rollback_change(actor: User, change: RuleChange) -> RuleChange:
         if current is not None and current.id != target:
             current.status, current.retired_at = LogicStatus.RETIRED, _now()
         db.session.flush()
+        from app.modules.knowledge.service import remember_command, remember_rule
+
         for rule_id in wanted.values():
             rule = db.session.get(DecodeRule, rule_id)
             if rule is not None and rule.status != RuleStatus.ACTIVE:
                 rule.status, rule.activated_at, rule.retired_at = RuleStatus.ACTIVE, _now(), None
+            if rule is not None and rule.status == RuleStatus.ACTIVE:
+                remember_rule(rule, actor.id)
         logic = db.session.get(ScanLogic, target) if target else None
         if logic is not None and logic.status != LogicStatus.ACTIVE:
             logic.status, logic.activated_at, logic.retired_at = LogicStatus.ACTIVE, _now(), None
+        if logic is not None and logic.status == LogicStatus.ACTIVE:
+            for command in logic.commands or []:
+                remember_command(maker=logic.maker, model=logic.model, header=command.get("header"),
+                                 command=command.get("command") or "", label=command.get("label"),
+                                 user_id=actor.id)
         db.session.flush()
         new = _record_change(actor, ChangeAction.ROLLBACK, maker, model, before_now, logic=logic,
                              note=f"변경 #{change.id}({change.action_label}) 이전으로")
@@ -1225,6 +1237,15 @@ def confirm_logic(actor: User, logic: ScanLogic, version: int, choices: dict[str
         action = logic.diff.get("action") or ChangeAction.APPLY
         _record_change(actor, action, maker, model, before_state, logic=logic, backtest=logic.diff.get("backtest"),
                        note=f"후보 v{logic.revision}")
+        from app.modules.knowledge.service import remember_command, remember_rule
+
+        for command in commands:
+            remember_command(maker=maker, model=model, header=command.get("header"),
+                             command=command.get("command") or "", label=command.get("label"), user_id=actor.id)
+        for ref in rules:
+            applied = db.session.get(DecodeRule, ref["rule_id"])
+            if applied is not None:
+                remember_rule(applied, actor.id)
         audit.record("디코딩 규칙 후보 적용", "ScanLogic", logic.id, user_id=actor.id,
                      changes={"revision": logic.revision, "scope": logic.scope_label, "commands": len(commands),
                               "rules": len(rules), "activated": activated,

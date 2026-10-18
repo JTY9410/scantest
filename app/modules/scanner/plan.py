@@ -220,6 +220,19 @@ def build_plan(car: dict | None = None, *, expand: bool = False) -> dict:
                 **common)
 
     planned = {(s["header"], s["command"]) for s in steps}
+    from flask import has_app_context
+
+    from app.modules.knowledge.service import scan_commands
+
+    maker_name = str((car or {}).get("diag_company") or "").strip() or None
+    knowledge = scan_commands(maker_name) if has_app_context() else []
+    for request in knowledge:
+        header = request["header"]
+        if _blocked(request["command"]) or (header, request["command"]) in planned:
+            continue
+        planned.add((header, request["command"]))
+        add("knowledge", f"검증된 명령 {request['label']}", request["command"],
+            header=header, timeout=UDS_TIMEOUT_MS, optional=True, bus="can" if header else None)
     for request in learned:
         header = request["header"]
         if _blocked(request["command"]) or (header, request["command"]) in planned:

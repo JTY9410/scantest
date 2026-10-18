@@ -95,7 +95,8 @@ def _rows(trace: Trace, kwp: dict | None, layout: Layout) -> tuple[list, str]:
     return rows, f"{layout.request_id:03X} 21 {layout.did & 0xFF:02X}"
 
 
-def battery_values(trace: Trace, rules: list, kwp: dict | None = None, model: dict | None = None) -> dict[str, dict]:
+def battery_values(trace: Trace, rules: list, kwp: dict | None = None, model: dict | None = None,
+                   knowledge: list | None = None) -> dict[str, dict]:
     """적용 규칙 → OBDb 차종 정의 → 공개 참고 해석 순서로 읽는다. 규칙이 아닌 값은 '미검증'으로 표시한다.
 
     kwp: 구형 KWP 21 01·21 05 응답 데이터((요청 ID, 01xx) → [(시각, 데이터)]). 22 01xx 응답이 없을 때만
@@ -104,6 +105,25 @@ def battery_values(trace: Trace, rules: list, kwp: dict | None = None, model: di
     values = decode_signals(trace.samples, rules)
     for value in values.values():
         value["series"] = [list(p) for p in value["series"][-50:]]
+    for item in knowledge or []:
+        key = item["signal_key"]
+        signal = signals.BY_KEY.get(key)
+        if key in values or signal is None:
+            continue
+        try:
+            layout = Layout.from_dict(item["layout"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        rows, source = _rows(trace, kwp, layout)
+        value = layout.value(rows[-1][1]) if rows else None
+        if value is None or not signal.minimum <= value <= signal.maximum:
+            continue
+        values[key] = {
+            "value": value, "series": [[round(rows[-1][0], 1), value]], "label": signal.label,
+            "unit": signal.unit, "rule_id": None, "rule_version": None, "confidence": REFERENCE_CONFIDENCE,
+            "formula": item.get("formula") or layout.formula(), "source": source, "origin": "지식베이스",
+            "reference": True,
+        }
     candidates = [(key, layout, f"OBDb {model['repo']}", normal)
                   for key, layout, normal in obdb.signal_layouts(model)] if model else []
     candidates += [(item["signal"], Layout.from_dict(item), "공개 참고 해석", None)
@@ -312,7 +332,13 @@ def interpret(steps: list[dict], rules: list, record: str, car: dict | None = No
 
     trace = load_trace(record)
     model = obdb.match(car)
-    battery = battery_values(trace, rules, kwp, model)
+    from flask import has_app_context
+
+    from app.modules.knowledge.service import verified_layouts
+
+    maker_name = str((car or {}).get("diag_company") or "").strip() or None
+    layouts = verified_layouts(maker_name) if has_app_context() else []
+    battery = battery_values(trace, rules, kwp, model, layouts)
     cells = cell_voltages(trace, model)
 
     unique_dtcs = _merge_dtcs(dtcs)
