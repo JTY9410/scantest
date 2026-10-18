@@ -36,7 +36,8 @@ from app.modules.scanner.plan import DOIP_NOTE
 from app.modules.scans import car_info
 from app.modules.scans.models import Code, Scan, ScanCode, ScanDocument, ScanType
 
-TRANSPORTS = {"ble": "블루투스(BLE)", "serial": "블루투스 클래식·USB(시리얼)", "wifi": "WiFi", "lte": "LTE 단말기"}
+TRANSPORTS = {"ble": "블루투스(BLE)", "serial": "블루투스 클래식·USB(시리얼)", "wifi": "WiFi", "lte": "LTE 단말기",
+              "doip": "이더넷(DoIP)", "j2534": "J2534 패스스루"}
 MAX_STEPS = 600  # 제어기 순회(최대 59개 주소 × 19 02·19 04)로 단계가 늘었다
 MAX_REPLY = 4000
 _COMMAND = re.compile(r"^(AT[A-Z0-9 ]{1,12}|([0-9A-F]{2}){1,8})$")
@@ -265,6 +266,8 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     scan.bms_data = dict(scan.bms_data or {}, wescan=result["wescan"])
     flag_modified(scan, "bms_data")
     remember(scan, result["steps"])
+    from app.modules.knowledge.service import remember_seen_commands
+    remember_seen_commands(scan.car_maker, scan.car_model, result["steps"])
     record_incidents(scan.id, logic, result["errors"])
     for code in {c.id: c for c in matched.values()}.values():
         db.session.add(ScanCode(type=scan.type, scan_id=scan.id, code_id=code.id))

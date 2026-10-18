@@ -3,6 +3,7 @@ import json
 import re
 from sqlalchemy import func, or_, select
 
+from app.core.errors import ServiceError
 from app.core.time import utcnow
 from app.extensions import db
 from app.modules.knowledge.models import (
@@ -47,13 +48,16 @@ def list_terms(*, status: str = "verified", limit: int = 500):
 
 
 def verify_command(command_id: int, user_id: int):
-    """명령을 검증됨으로 표시한다."""
+    """명령을 검증됨으로 표시한다. 세션·쓰기·지우기 명령은 검증하지 않는다."""
     cmd = db.session.get(KnowledgeCommand, command_id)
-    if cmd:
-        cmd.status = "verified"
-        cmd.verified_by = user_id
-        cmd.verified_at = utcnow()
-        db.session.commit()
+    if cmd is None:
+        return
+    if _blocked_command(cmd.command):
+        raise ServiceError("세션 변경·보안·쓰기·지우기 명령은 검증할 수 없습니다.")
+    cmd.status = "verified"
+    cmd.verified_by = user_id
+    cmd.verified_at = utcnow()
+    db.session.commit()
 
 
 def verify_formula(formula_id: int, user_id: int):
@@ -176,6 +180,28 @@ def lookup_dtcs(codes: set[str]) -> dict[str, KnowledgeDTC]:
 
 
 _UNKNOWN_DTC = "공개된 설명이 없습니다. 역분석 또는 관리자 확인 전입니다."
+_DTC = re.compile(r"^[PCBU][0-9A-F]{4}$")
+_STATUSES = {"draft", "verified", "deprecated"}
+_LAN_TERMS = (
+    {
+        "term": "DoIP",
+        "abbreviation": "ISO 13400",
+        "category": "연결",
+        "definition": (
+            "ISO 13400 차량 이더넷 진단입니다. OBD 단자의 이더넷 핀과 전용 장비가 필요합니다. "
+            "ELM327 계열 진단기는 이 프레임을 보내지 못하므로 이 프로그램은 스캔 단계로 넣지 않고 안내만 남깁니다."
+        ),
+    },
+    {
+        "term": "OBD 이더넷 핀",
+        "abbreviation": None,
+        "category": "연결",
+        "definition": (
+            "OBD 커넥터의 이더넷 핀은 DoIP 전용 장비로 연결합니다. "
+            "이 스캔은 그 핀으로 진단 프레임을 보내지 않습니다."
+        ),
+    },
+)
 
 
 def inventory() -> dict[str, list[dict] | int]:
@@ -190,6 +216,231 @@ def inventory() -> dict[str, list[dict] | int]:
         KnowledgeDTC.maker.is_not(None))) or 0
     return {"commands": grouped(KnowledgeCommand), "formulas": grouped(KnowledgeFormula),
             "dtcs": grouped(KnowledgeDTC), "terms": grouped(KnowledgeTerm), "maker_dtcs": maker_dtcs}
+
+
+def _blocked_command(command: str) -> bool:
+    compact = re.sub(r"\s+", "", command or "").upper()
+    return compact[:2] in _BLOCKED or compact in {"04", "14FFFFFF"}
+
+
+def _status(value: str | None) -> str:
+    status = (value or "draft").strip()
+    if status not in _STATUSES:
+        raise ServiceError("상태를 고르세요.")
+    return status
+
+
+def _text(value: str | None, limit: int) -> str | None:
+    text = (value or "").strip()
+    return text[:limit] or None
+
+
+def analyze_unknown_dtcs() -> dict[str, int]:
+    """설명 없는 초안만 AI로 본다. 공개 표준은 초안 설명에, 추정은 notes에만 남긴다."""
+    from app.modules.canlab import ai
+
+    rows = list(db.session.scalars(select(KnowledgeDTC).where(
+        KnowledgeDTC.status == "draft", KnowledgeDTC.description == _UNKNOWN_DTC).limit(20)))
+    if not rows:
+        raise ServiceError("분석할 설명 없는 고장코드가 없습니다.")
+    by_code = {row.code: row for row in rows}
+    prompt = (
+        "다음 고장코드마다 JSON 배열로 답하세요. 항목은 code, known, detail_name, desc, guess 입니다. "
+        "SAE J2012·ISO 15031-6에 공개된 코드만 known을 true로 두고 desc에 한글 설명을 적으세요. "
+        "공개 표준이 아니면 known은 false, desc는 빈 문자열, guess에만 추정 한 줄을 적으세요.\n"
+        + ", ".join(by_code)
+    )
+    answer, _provider = ai.ask(
+        "당신은 공개된 OBD 고장코드만 확정해서 적습니다. 제조사 코드는 추정으로만 적고 JSON 배열만 답합니다.",
+        prompt)
+    described = guessed = skipped = 0
+    match = re.search(r"\[.*\]", answer or "", re.S)
+    try:
+        parsed = json.loads(match.group(0)) if match else []
+    except json.JSONDecodeError as exc:
+        raise ServiceError("AI 응답을 읽지 못했습니다.") from exc
+    if not isinstance(parsed, list):
+        parsed = []
+    for item in parsed:
+        code = str(item.get("code") or "").upper()
+        row = by_code.get(code)
+        if row is None:
+            skipped += 1
+            continue
+        if item.get("known") is True:
+            desc = str(item.get("desc") or "").strip()
+            name = str(item.get("detail_name") or "").strip()
+            if not desc:
+                skipped += 1
+                continue
+            row.description = desc[:2000]
+            row.detail_name = name[:200] or row.detail_name
+            row.source_detail = "공개 표준을 AI로 확인"
+            row.confidence = 0.5
+            described += 1
+            continue
+        guess = str(item.get("guess") or "").strip()
+        if not guess:
+            skipped += 1
+            continue
+        row.notes = f"추정: {guess}"[:4000]
+        row.source_detail = "공개 표준이 아닌 추정"
+        row.confidence = 0.2
+        guessed += 1
+    db.session.commit()
+    return {"described": described, "guessed": guessed, "skipped": skipped}
+
+
+def ensure_lan_terms() -> int:
+    """DoIP를 보낼 수 없다는 공개된 사실을 용어 초안으로 남긴다."""
+    added = 0
+    for item in _LAN_TERMS:
+        existing = db.session.scalar(select(KnowledgeTerm.id).where(KnowledgeTerm.term == item["term"]))
+        if existing is not None:
+            continue
+        db.session.add(KnowledgeTerm(
+            term=item["term"], abbreviation=item["abbreviation"], definition=item["definition"],
+            category=item["category"], source="public_docs", source_detail="ISO 13400 공개 설명",
+            status="draft"))
+        added += 1
+    if added:
+        db.session.flush()
+    return added
+
+
+def save_command(form) -> KnowledgeCommand:
+    """관리자가 명령을 추가하거나 고친다."""
+    command = re.sub(r"\s+", "", form.get("command") or "").upper()
+    if not command:
+        raise ServiceError("명령을 입력하세요.")
+    status = _status(form.get("status"))
+    if status == "verified" and _blocked_command(command):
+        raise ServiceError("세션 변경·보안·쓰기·지우기 명령은 검증할 수 없습니다.")
+    row = db.session.get(KnowledgeCommand, int(form["id"])) if form.get("id") else None
+    if form.get("id") and row is None:
+        raise ServiceError("명령을 찾지 못했습니다.")
+    if row is None:
+        row = KnowledgeCommand(command=command, source=(form.get("source") or "manual")[:50] or "manual")
+        db.session.add(row)
+    row.command = command[:200]
+    row.header = _text(form.get("header"), 10)
+    row.maker = _text(form.get("maker"), 50)
+    row.model = _text(form.get("model"), 100)
+    row.ecu_name = _text(form.get("ecu_name"), 100)
+    row.detail_name = _text(form.get("detail_name"), 200)
+    row.label = row.detail_name or command[:200]
+    row.description = _text(form.get("description"), 5000)
+    row.status = status
+    db.session.commit()
+    return row
+
+
+def delete_command(command_id: int) -> None:
+    row = db.session.get(KnowledgeCommand, command_id)
+    if row is None:
+        raise ServiceError("명령을 찾지 못했습니다.")
+    db.session.delete(row)
+    db.session.commit()
+
+
+def save_dtc(form) -> KnowledgeDTC:
+    """관리자가 고장코드 뜻을 추가하거나 고친다."""
+    code = (form.get("code") or "").strip().upper()
+    if not _DTC.fullmatch(code):
+        raise ServiceError("고장코드 형식이 아닙니다.")
+    description = (form.get("description") or "").strip()
+    if not description:
+        raise ServiceError("설명을 입력하세요.")
+    row = db.session.get(KnowledgeDTC, int(form["id"])) if form.get("id") else None
+    if form.get("id") and row is None:
+        raise ServiceError("고장코드를 찾지 못했습니다.")
+    if row is None:
+        row = KnowledgeDTC(code=code, description=description[:2000], source="manual")
+        db.session.add(row)
+    row.code = code
+    row.maker = _text(form.get("maker"), 50)
+    row.detail_name = _text(form.get("detail_name"), 200)
+    row.description = description[:2000]
+    row.notes = _text(form.get("notes"), 4000)
+    row.status = _status(form.get("status"))
+    db.session.commit()
+    return row
+
+
+def delete_dtc(dtc_id: int) -> None:
+    row = db.session.get(KnowledgeDTC, dtc_id)
+    if row is None:
+        raise ServiceError("고장코드를 찾지 못했습니다.")
+    db.session.delete(row)
+    db.session.commit()
+
+
+def save_term(form) -> KnowledgeTerm:
+    """관리자가 용어를 추가하거나 고친다."""
+    term = (form.get("term") or "").strip()
+    definition = (form.get("definition") or "").strip()
+    if not term or not definition:
+        raise ServiceError("용어와 설명을 입력하세요.")
+    row = db.session.get(KnowledgeTerm, int(form["id"])) if form.get("id") else None
+    if form.get("id") and row is None:
+        raise ServiceError("용어를 찾지 못했습니다.")
+    taken = db.session.scalar(select(KnowledgeTerm).where(KnowledgeTerm.term == term[:100]))
+    if taken is not None and taken is not row:
+        raise ServiceError("같은 용어가 이미 있습니다.")
+    if row is None:
+        row = KnowledgeTerm(term=term[:100], definition=definition, source="manual")
+        db.session.add(row)
+    row.term = term[:100]
+    row.definition = definition
+    row.category = _text(form.get("category"), 50)
+    row.status = _status(form.get("status"))
+    db.session.commit()
+    return row
+
+
+def delete_term(term_id: int) -> None:
+    row = db.session.get(KnowledgeTerm, term_id)
+    if row is None:
+        raise ServiceError("용어를 찾지 못했습니다.")
+    db.session.delete(row)
+    db.session.commit()
+
+
+def remember_seen_commands(maker: str | None, model: str | None, steps: list[dict]) -> int:
+    """응답한 읽기 명령을 초안으로 남긴다. 있는 행과 막힌 명령은 건드리지 않는다."""
+    maker_name = (maker or "").strip() or None
+    model_name = (model or "").strip() or None
+    if model_name == "미확인":
+        model_name = None
+    added = 0
+    seen = set()
+    for step in steps or []:
+        if step.get("status") != "ok":
+            continue
+        command = re.sub(r"\s+", "", str(step.get("command") or "")).upper()
+        if (not _READ.fullmatch(command) or _blocked_command(command) or command.startswith("AT")):
+            continue
+        header = (str(step.get("header")).strip().upper() if step.get("header") else "") or None
+        key = (maker_name, header, command)
+        if key in seen:
+            continue
+        seen.add(key)
+        existing = db.session.scalar(select(KnowledgeCommand.id).where(
+            KnowledgeCommand.command == command,
+            KnowledgeCommand.maker == maker_name if maker_name else KnowledgeCommand.maker.is_(None),
+            KnowledgeCommand.header == header if header else KnowledgeCommand.header.is_(None),
+        ))
+        if existing is not None:
+            continue
+        label = str(step.get("label") or command).strip()[:200]
+        db.session.add(KnowledgeCommand(
+            maker=maker_name, model=model_name, header=header, command=command, label=label,
+            detail_name=label, description=label, source="scan_log", source_detail="스캔에서 응답한 읽기",
+            status="draft", confidence=0.5))
+        added += 1
+    if added:
+        db.session.flush()
+    return added
 
 
 def remember_unknown_dtcs(maker: str | None, codes: list[str]) -> int:

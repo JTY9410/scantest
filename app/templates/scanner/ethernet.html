@@ -1,0 +1,107 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, csrf %}
+{% block title %}이더넷 진단{% endblock %}
+
+{% block content %}
+{{ page_header("이더넷 진단", "DoIP 게이트웨이 또는 J2534 패스스루로 읽기만 진행합니다. CAN 스캔과 결과 해석은 같습니다. 세션 변경·쓰기·지우기는 보내지 않습니다.", back=(url_for('scanner.index'), "스캔하기")) }}
+
+<section class="card card-body grid gap-4" aria-labelledby="doip-title">
+  <div>
+    <h2 id="doip-title" class="text-lg font-bold">DoIP 게이트웨이</h2>
+    <p class="mt-1 text-sm text-muted">차량과 같은 망의 로컬 서버에서만 13400 포트로 연결합니다. 배포 서버는 차량 랜에 닿지 않습니다.</p>
+  </div>
+  <form id="doip-form" class="grid gap-3 sm:grid-cols-2">
+    {{ csrf() }}
+    <label class="field">차량번호<input name="carNo" class="input" required maxlength="20" placeholder="12가3456"></label>
+    <label class="field">게이트웨이<input name="host" class="input" required placeholder="192.168.0.20"></label>
+    <label class="field">포트<input name="port" class="input" inputmode="numeric" value="13400"></label>
+    <button class="btn btn-primary self-end" type="submit">이더넷 스캔</button>
+  </form>
+  <p class="font-semibold" role="status" aria-live="polite" id="doip-status">게이트웨이 주소를 입력한 뒤 스캔을 시작하세요.</p>
+  <p class="text-sm">성공 <span id="doip-ok">0</span> · 실패 <span id="doip-fail">0</span> · 전체 <span id="doip-total">0</span></p>
+  <ol id="doip-steps" class="grid gap-1 text-sm"></ol>
+</section>
+
+<section class="card card-body mt-6 grid gap-4" aria-labelledby="j2534-title">
+  <div>
+    <h2 id="j2534-title" class="text-lg font-bold">J2534 기록</h2>
+    <p class="mt-1 text-sm text-muted">한 줄에 주소, 명령, 응답 바이트를 적습니다. 예: <span class="mono">E400 0100 41 00 BE 1F B8 13</span></p>
+  </div>
+  <form id="j2534-form" class="grid gap-3">
+    {{ csrf() }}
+    <label class="field">차량번호<input name="carNo" class="input" required maxlength="20" placeholder="12가3456"></label>
+    <label class="field">단계 기록<textarea name="log" class="input" rows="6" required></textarea></label>
+    <button class="btn btn-primary" type="submit">기록 해석하고 저장</button>
+  </form>
+  <p class="font-semibold" role="status" aria-live="polite" id="j2534-status"></p>
+</section>
+
+<script type="module">
+const csrf = document.querySelector("#doip-form [name=csrf_token]").value
+
+document.getElementById("doip-form").addEventListener("submit", async (event) => {
+  event.preventDefault()
+  const form = event.currentTarget
+  const status = document.getElementById("doip-status")
+  const list = document.getElementById("doip-steps")
+  list.replaceChildren()
+  status.textContent = "게이트웨이에 연결하는 중입니다."
+  const body = {
+    carNo: form.carNo.value,
+    host: form.host.value,
+    port: form.port.value,
+  }
+  const response = await fetch("{{ url_for('scanner.ethernet_run') }}", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+    body: JSON.stringify(body),
+  })
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ""
+  while (true) {
+    const chunk = await reader.read()
+    if (chunk.done) break
+    buffer += decoder.decode(chunk.value, { stream: true })
+    const lines = buffer.split("\n")
+    buffer = lines.pop()
+    for (const line of lines) {
+      if (!line.trim()) continue
+      const event = JSON.parse(line)
+      if (event.type === "progress") {
+        document.getElementById("doip-ok").textContent = event.ok
+        document.getElementById("doip-fail").textContent = event.fail
+        document.getElementById("doip-total").textContent = event.total
+        const item = document.createElement("li")
+        item.textContent = `${event.header} ${event.command} ${event.label}`
+        list.append(item)
+        status.textContent = `${event.label} 진행 중`
+      } else if (event.type === "done") {
+        status.textContent = "분석을 저장했습니다."
+        location.href = event.url
+      } else if (event.type === "error") {
+        status.textContent = event.message
+      }
+    }
+  }
+})
+
+document.getElementById("j2534-form").addEventListener("submit", async (event) => {
+  event.preventDefault()
+  const form = event.currentTarget
+  const status = document.getElementById("j2534-status")
+  status.textContent = "기록을 해석하는 중입니다."
+  const response = await fetch("{{ url_for('scanner.ethernet_j2534') }}", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
+    body: JSON.stringify({ carNo: form.carNo.value, log: form.log.value }),
+  })
+  const payload = await response.json()
+  if (!response.ok) {
+    status.textContent = payload.message || "저장하지 못했습니다."
+    return
+  }
+  location.href = payload.url
+})
+</script>
+{% endblock %}

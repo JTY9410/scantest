@@ -3,7 +3,24 @@
 {% block title %}지식베이스 - 명령어{% endblock %}
 
 {% block content %}
-{{ page_header("지식베이스: 진단 명령어", "차량 진단에 사용되는 UDS/OBD-II 명령어 목록입니다.") }}
+{{ page_header("지식베이스: 진단 명령어", "차량 진단에 사용되는 UDS/OBD-II 명령어 목록입니다. 스캔에서 응답한 읽기는 초안으로 쌓입니다.") }}
+
+<section class="card card-body mb-6">
+  <h2 class="text-lg font-bold">명령 추가</h2>
+  <form method="post" action="{{ url_for('knowledge.save_command') }}" class="mt-3 grid gap-3 sm:grid-cols-2">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="field">명령<input name="command" class="input" required maxlength="200" placeholder="010C"></label>
+    <label class="field">주소<input name="header" class="input" maxlength="10" placeholder="7E0"></label>
+    <label class="field">제조사<input name="maker" class="input" maxlength="50"></label>
+    <label class="field">차종<input name="model" class="input" maxlength="100"></label>
+    <label class="field sm:col-span-2">무엇을 읽는지<input name="detail_name" class="input" maxlength="200"></label>
+    <label class="field sm:col-span-2">설명<textarea name="description" class="input" rows="2"></textarea></label>
+    <label class="field">상태
+      <select name="status" class="input"><option value="draft">초안</option><option value="verified">검증됨</option><option value="deprecated">폐기됨</option></select>
+    </label>
+    <button type="submit" class="btn btn-primary self-end">저장</button>
+  </form>
+</section>
 
 <section class="card mb-6">
   <form method="get" class="flex gap-4 items-end">
@@ -57,6 +74,26 @@
           {% else %}
             {{ badge("폐기됨", "") }}
           {% endif %}
+          <form method="post" action="{{ url_for('knowledge.save_command') }}" class="mt-2 grid gap-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="id" value="{{ item.id }}">
+            <input name="command" value="{{ item.command }}" class="input" required>
+            <input name="header" value="{{ item.header or '' }}" class="input" placeholder="주소">
+            <input name="maker" value="{{ item.maker or '' }}" class="input" placeholder="제조사">
+            <input name="model" value="{{ item.model or '' }}" class="input" placeholder="차종">
+            <input name="detail_name" value="{{ item.detail_name or item.label or '' }}" class="input" placeholder="무엇을 읽는지">
+            <textarea name="description" class="input" rows="2">{{ item.description or '' }}</textarea>
+            <select name="status" class="input">
+              <option value="draft" {% if item.status == "draft" %}selected{% endif %}>초안</option>
+              <option value="verified" {% if item.status == "verified" %}selected{% endif %}>검증됨</option>
+              <option value="deprecated" {% if item.status == "deprecated" %}selected{% endif %}>폐기됨</option>
+            </select>
+            <button type="submit" class="btn btn-secondary btn-sm">수정 저장</button>
+          </form>
+          <form method="post" action="{{ url_for('knowledge.delete_command', cmd_id=item.id) }}" class="mt-2" onsubmit="return confirm('이 명령을 삭제할까요?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-sm">삭제</button>
+          </form>
         </td>
       </tr>
       {% endfor %}

@@ -5,11 +5,33 @@
 {% block content %}
 {{ page_header("지식베이스: 고장코드(DTC)", "차량 고장코드 의미 목록입니다.") }}
 
-<form method="post" action="{{ url_for('knowledge.collect') }}" class="mb-4">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <button type="submit" class="btn btn-secondary">AI로 공개 표준 명칭 수집</button>
-  <p class="mt-2 text-sm text-muted">SAE·ISO에 공개된 명령, 수식, 고장코드만 저장합니다. 제조사 전용 코드는 만들지 않고, 지우기·세션 변경 명령은 스캔에 넣지 않습니다.</p>
-</form>
+<div class="mb-4 flex flex-wrap gap-3">
+  <form method="post" action="{{ url_for('knowledge.collect') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-secondary">AI로 공개 표준 명칭 수집</button>
+  </form>
+  <form method="post" action="{{ url_for('knowledge.analyze_dtcs') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button type="submit" class="btn btn-secondary">설명 없는 코드 AI 분석</button>
+  </form>
+</div>
+<p class="mb-4 text-sm text-muted">공개 표준만 초안 설명에 채웁니다. 제조사 코드 추정은 메모에만 남고, 검증 전에는 스캔 설명에 붙지 않습니다.</p>
+
+<section class="card card-body mb-6">
+  <h2 class="text-lg font-bold">고장코드 추가</h2>
+  <form method="post" action="{{ url_for('knowledge.save_dtc') }}" class="mt-3 grid gap-3 sm:grid-cols-2">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="field">코드<input name="code" class="input" required maxlength="5" placeholder="P0300"></label>
+    <label class="field">제조사<input name="maker" class="input" maxlength="50"></label>
+    <label class="field sm:col-span-2">세부 명칭<input name="detail_name" class="input" maxlength="200"></label>
+    <label class="field sm:col-span-2">설명<textarea name="description" class="input" required rows="2"></textarea></label>
+    <label class="field sm:col-span-2">메모<textarea name="notes" class="input" rows="2"></textarea></label>
+    <label class="field">상태
+      <select name="status" class="input"><option value="draft">초안</option><option value="verified">검증됨</option><option value="deprecated">폐기됨</option></select>
+    </label>
+    <button type="submit" class="btn btn-primary self-end">저장</button>
+  </form>
+</section>
 
 <section class="card mb-6">
   <form method="get" class="flex gap-4 items-end">
@@ -39,6 +61,7 @@
         <th scope="col">심각도</th>
         <th scope="col">제조사</th>
         <th scope="col">ECU</th>
+        <th scope="col">메모</th>
         <th scope="col">출처</th>
         <th scope="col">상태</th>
       </tr>
@@ -52,6 +75,7 @@
         <td>{{ item.severity or "-" }}</td>
         <td>{{ item.maker or "전체" }}</td>
         <td>{{ item.ecu_name or "-" }}</td>
+        <td data-label="메모">{{ item.notes or "-" }}</td>
         <td>{{ badge(item.source, "info") }}</td>
         <td>
           {% if item.status == "verified" %}
@@ -59,7 +83,28 @@
           {% elif item.status == "draft" %}
             {{ badge("초안", "warning") }}
             <button type="button" class="btn btn-sm btn-primary" onclick="verify({{ item.id }}, 'dtc')">검증</button>
+          {% else %}
+            {{ badge("폐기됨", "") }}
           {% endif %}
+          <form method="post" action="{{ url_for('knowledge.save_dtc') }}" class="mt-2 grid gap-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="id" value="{{ item.id }}">
+            <input name="code" value="{{ item.code }}" class="input" required maxlength="5">
+            <input name="maker" value="{{ item.maker or '' }}" class="input" placeholder="제조사" maxlength="50">
+            <input name="detail_name" value="{{ item.detail_name or '' }}" class="input" placeholder="세부 명칭" maxlength="200">
+            <textarea name="description" class="input" required rows="2">{{ item.description }}</textarea>
+            <textarea name="notes" class="input" rows="2" placeholder="메모">{{ item.notes or '' }}</textarea>
+            <select name="status" class="input">
+              <option value="draft" {% if item.status == "draft" %}selected{% endif %}>초안</option>
+              <option value="verified" {% if item.status == "verified" %}selected{% endif %}>검증됨</option>
+              <option value="deprecated" {% if item.status == "deprecated" %}selected{% endif %}>폐기됨</option>
+            </select>
+            <button type="submit" class="btn btn-secondary btn-sm">수정 저장</button>
+          </form>
+          <form method="post" action="{{ url_for('knowledge.delete_dtc', dtc_id=item.id) }}" class="mt-2" onsubmit="return confirm('이 고장코드를 삭제할까요?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-sm">삭제</button>
+          </form>
         </td>
       </tr>
       {% endfor %}

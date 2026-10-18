@@ -48,9 +48,16 @@ def test_clear_command_stays_out_of_scan_and_dtc_text_is_used(app, monkeypatch):
     with app.app_context():
         collect_public()
         commands = {item["command"] for item in scan_commands(None)}
+        map_pid = db.session.scalar(select(KnowledgeCommand).where(KnowledgeCommand.command == "010B"))
+        map_formula = db.session.scalar(select(KnowledgeFormula).where(KnowledgeFormula.pid == "0B"))
+        from app.modules.knowledge.models import KnowledgeTerm
+        doip = db.session.scalar(select(KnowledgeTerm).where(KnowledgeTerm.term == "DoIP"))
         steps = build_plan({"diag_company": "현대", "diag_model": "아반떼", "diag_fuel": "휘발유"})["steps"]
         rows = [{"code": "P0420"}]
         _describe(rows)
-    assert "010C" in commands and "14FFFFFF" not in commands and "1003" not in commands
+    assert map_pid is not None and map_pid.status == "verified" and map_formula.status == "verified"
+    assert doip is not None and doip.status == "draft" and "ELM327" in doip.definition
+    assert any(command.startswith("01") for command in commands)
+    assert "14FFFFFF" not in commands and "1003" not in commands
     assert not any(step["command"] in {"14FFFFFF", "1003", "04"} for step in steps)
     assert rows[0]["desc"] and rows[0]["detail_name"]

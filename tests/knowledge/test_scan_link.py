@@ -52,3 +52,53 @@ def test_unknown_maker_dtc_stays_draft_and_off_the_scan(app):
         _describe(described)
     assert row.maker == "기아" and row.status == "draft"
     assert described[0]["desc"] is None
+
+
+def test_ai_guess_stays_in_notes_until_verified(app, monkeypatch):
+    from app.modules.knowledge.service import _UNKNOWN_DTC, analyze_unknown_dtcs, remember_unknown_dtcs
+    from app.modules.scanner.service import _describe
+
+    def fake_ask(system, prompt, image=None):
+        return ('[{"code":"P0300","known":true,"detail_name":"실화","desc":"여러 실린더 실화","guess":""},'
+                '{"code":"P1A00","known":false,"detail_name":"","desc":"","guess":"제조사 추정"}]', "openai")
+
+    monkeypatch.setattr("app.modules.canlab.ai.ask", fake_ask)
+    with app.app_context():
+        remember_unknown_dtcs(None, ["P0300", "P1A00"])
+        stats = analyze_unknown_dtcs()
+        public = db.session.scalar(select(KnowledgeDTC).where(KnowledgeDTC.code == "P0300"))
+        maker = db.session.scalar(select(KnowledgeDTC).where(KnowledgeDTC.code == "P1A00"))
+        master = db.session.scalar(select(Code).where(Code.code == "P1A00"))
+        described = [{"code": "P1A00"}, {"code": "P0300"}]
+        _describe(described)
+    assert stats["described"] == 1 and stats["guessed"] == 1
+    assert public.status == "draft" and public.description == "여러 실린더 실화"
+    assert maker.description == _UNKNOWN_DTC and maker.notes == "추정: 제조사 추정"
+    assert master is None
+    assert described[0]["desc"] is None and described[1]["desc"] is None
+
+
+def test_seen_read_is_saved_once_and_writes_are_skipped(app):
+    from app.modules.knowledge.service import remember_seen_commands
+
+    steps = [
+        {"status": "ok", "header": "7E1", "command": "0105", "label": "덮어쓰면 안 됨"},
+        {"status": "ok", "header": "7E0", "command": "010C", "label": "엔진 회전수"},
+        {"status": "ok", "header": "7E0", "command": "010C", "label": "엔진 회전수"},
+        {"status": "no_data", "header": "7E4", "command": "220101", "label": "배터리"},
+        {"status": "ok", "header": "7E0", "command": "2EF190", "label": "쓰기"},
+        {"status": "negative", "header": "7E0", "command": "010D", "label": "차속"},
+    ]
+    with app.app_context():
+        db.session.add(KnowledgeCommand(
+            maker="현대", header="7E1", command="0105", label="이미 검증", source="manual", status="verified"))
+        db.session.commit()
+        assert remember_seen_commands("현대", "아반떼", steps) == 1
+        assert remember_seen_commands("현대", "아반떼", steps) == 0
+        saved = db.session.scalar(select(KnowledgeCommand).where(KnowledgeCommand.command == "010C"))
+        kept = db.session.scalar(select(KnowledgeCommand).where(KnowledgeCommand.command == "0105"))
+        blocked = db.session.scalar(select(KnowledgeCommand).where(KnowledgeCommand.command == "2EF190"))
+    assert saved.status == "draft" and saved.source == "scan_log" and saved.detail_name == "엔진 회전수"
+    assert saved.header == "7E0" and saved.maker == "현대"
+    assert kept.status == "verified" and kept.label == "이미 검증"
+    assert blocked is None

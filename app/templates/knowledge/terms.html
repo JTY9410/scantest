@@ -3,7 +3,35 @@
 {% block title %}지식베이스 - 용어{% endblock %}
 
 {% block content %}
-{{ page_header("지식베이스: 용어", "OBD와 CAN 통신에서 쓰는 용어입니다.", back=(url_for('knowledge.overview'), "지식 현황")) }}
+{{ page_header("지식베이스: 용어", "OBD, CAN, 차량 이더넷(DoIP)에서 쓰는 용어입니다. DoIP 프레임은 이 진단기로 보내지 않습니다.", back=(url_for('knowledge.overview'), "지식 현황")) }}
+
+<section class="card card-body mb-6">
+  <h2 class="text-lg font-bold">용어 추가</h2>
+  <form method="post" action="{{ url_for('knowledge.save_term') }}" class="mt-3 grid gap-3">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <label class="field">용어<input name="term" class="input" required maxlength="100"></label>
+    <label class="field">분류<input name="category" class="input" maxlength="50"></label>
+    <label class="field">설명<textarea name="definition" class="input" required rows="3"></textarea></label>
+    <label class="field">상태
+      <select name="status" class="input"><option value="draft">초안</option><option value="verified">검증됨</option><option value="deprecated">폐기됨</option></select>
+    </label>
+    <button type="submit" class="btn btn-primary">저장</button>
+  </form>
+</section>
+
+<section class="card mb-6">
+  <form method="get" class="flex gap-4 items-end">
+    <div class="field">
+      <label for="status" class="field-label">상태</label>
+      <select id="status" name="status" class="input">
+        <option value="draft" {% if status == "draft" %}selected{% endif %}>초안</option>
+        <option value="verified" {% if status == "verified" %}selected{% endif %}>검증됨</option>
+        <option value="deprecated" {% if status == "deprecated" %}selected{% endif %}>폐기됨</option>
+      </select>
+    </div>
+    <button type="submit" class="btn btn-primary">검색</button>
+  </form>
+</section>
 
 <section class="card overflow-hidden" aria-label="용어 목록">
   {% if items %}
@@ -16,7 +44,26 @@
         <td data-label="설명">{{ item.definition }}</td>
         <td data-label="분류">{{ item.category or "-" }}</td>
         <td data-label="출처">{{ badge(item.source, "info") }}</td>
-        <td data-label="상태">{{ badge("검증됨" if item.status == "verified" else item.status, "success" if item.status == "verified" else "warning") }}</td>
+        <td data-label="상태">
+          {{ badge("검증됨" if item.status == "verified" else ("초안" if item.status == "draft" else item.status), "success" if item.status == "verified" else "warning") }}
+          <form method="post" action="{{ url_for('knowledge.save_term') }}" class="mt-2 grid gap-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="id" value="{{ item.id }}">
+            <input name="term" value="{{ item.term }}" class="input" required maxlength="100">
+            <input name="category" value="{{ item.category or '' }}" class="input" placeholder="분류">
+            <textarea name="definition" class="input" required rows="3">{{ item.definition }}</textarea>
+            <select name="status" class="input">
+              <option value="draft" {% if item.status == "draft" %}selected{% endif %}>초안</option>
+              <option value="verified" {% if item.status == "verified" %}selected{% endif %}>검증됨</option>
+              <option value="deprecated" {% if item.status == "deprecated" %}selected{% endif %}>폐기됨</option>
+            </select>
+            <button type="submit" class="btn btn-secondary btn-sm">수정 저장</button>
+          </form>
+          <form method="post" action="{{ url_for('knowledge.delete_term', term_id=item.id) }}" class="mt-2" onsubmit="return confirm('이 용어를 삭제할까요?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-sm">삭제</button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>

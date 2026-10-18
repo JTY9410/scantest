@@ -51,17 +51,109 @@ def dtcs():
 @bp.get("/terms")
 @admin_required
 def terms():
-    """List glossary terms."""
-    status = request.args.get("status", "verified")
+    """용어 목록. DoIP 안내 초안이 없으면 그때 넣는다."""
+    status = request.args.get("status", "draft")
+    service.ensure_lan_terms()
+    from app.extensions import db
+    db.session.commit()
     items = service.list_terms(status=status)
     return render_template("knowledge/terms.html", items=items, status=status)
+
+
+def _save(action, redirect_to: str):
+    try:
+        action(request.form)
+    except ServiceError as exc:
+        flash(exc.message, "error")
+    except ValueError:
+        flash("항목을 찾지 못했습니다.", "error")
+    else:
+        flash("저장했습니다.", "success")
+    return redirect(url_for(redirect_to, status=request.form.get("status") or "draft"))
+
+
+@bp.post("/commands")
+@admin_required
+def save_command():
+    """명령을 추가하거나 고친다."""
+    return _save(service.save_command, "knowledge.commands")
+
+
+@bp.post("/commands/<int:cmd_id>/delete")
+@admin_required
+def delete_command(cmd_id: int):
+    """명령 한 건을 삭제한다."""
+    try:
+        service.delete_command(cmd_id)
+    except ServiceError as exc:
+        flash(exc.message, "error")
+    else:
+        flash("명령을 삭제했습니다.", "success")
+    return redirect(url_for("knowledge.commands", status=request.args.get("status") or "draft"))
+
+
+@bp.post("/dtcs")
+@admin_required
+def save_dtc():
+    """고장코드 뜻을 추가하거나 고친다."""
+    return _save(service.save_dtc, "knowledge.dtcs")
+
+
+@bp.post("/dtcs/<int:dtc_id>/delete")
+@admin_required
+def delete_dtc(dtc_id: int):
+    """고장코드 뜻 한 건을 삭제한다."""
+    try:
+        service.delete_dtc(dtc_id)
+    except ServiceError as exc:
+        flash(exc.message, "error")
+    else:
+        flash("고장코드를 삭제했습니다.", "success")
+    return redirect(url_for("knowledge.dtcs", status=request.args.get("status") or "draft"))
+
+
+@bp.post("/dtcs/analyze")
+@admin_required
+def analyze_dtcs():
+    """설명 없는 고장코드 초안을 AI로 분석한다."""
+    try:
+        stats = service.analyze_unknown_dtcs()
+    except ServiceError as exc:
+        flash(exc.message, "error")
+    else:
+        flash(f"공개 설명 {stats['described']}건, 추정 {stats['guessed']}건을 초안에 남겼습니다. "
+              f"건너뜀 {stats['skipped']}건. 검증 전에는 스캔 설명에 쓰지 않습니다.", "success")
+    return redirect(url_for("knowledge.dtcs", status="draft"))
+
+
+@bp.post("/terms")
+@admin_required
+def save_term():
+    """용어를 추가하거나 고친다."""
+    return _save(service.save_term, "knowledge.terms")
+
+
+@bp.post("/terms/<int:term_id>/delete")
+@admin_required
+def delete_term(term_id: int):
+    """용어 한 건을 삭제한다."""
+    try:
+        service.delete_term(term_id)
+    except ServiceError as exc:
+        flash(exc.message, "error")
+    else:
+        flash("용어를 삭제했습니다.", "success")
+    return redirect(url_for("knowledge.terms", status=request.args.get("status") or "draft"))
 
 
 @bp.post("/commands/<int:cmd_id>/verify")
 @admin_required
 def verify_command(cmd_id: int):
-    """Verify a command."""
-    service.verify_command(cmd_id, current_user.id)
+    """명령을 검증한다."""
+    try:
+        service.verify_command(cmd_id, current_user.id)
+    except ServiceError as exc:
+        return jsonify({"error": exc.message}), exc.status
     return jsonify({"status": "ok"})
 
 

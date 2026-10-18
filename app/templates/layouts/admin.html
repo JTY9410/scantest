@@ -38,7 +38,9 @@
       </ul>
       <p class="nav-group">진단 스캔</p>
       <ul class="grid gap-0.5">
-        {{ nav(url_for('scanner.index'), "스캔하기", endpoint.startswith("scanner."),
+        {{ nav(url_for('scanner.index'), "스캔하기", endpoint.startswith("scanner.") and not endpoint.startswith("scanner.ethernet"),
+               '<path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3"/><circle cx="12" cy="12" r="3"/>') }}
+        {{ nav(url_for('scanner.ethernet_page'), "이더넷 진단", endpoint.startswith("scanner.ethernet"),
                '<path d="M4 7V4h3M17 4h3v3M20 17v3h-3M7 20H4v-3"/><circle cx="12" cy="12" r="3"/>') }}
       </ul>
       <p class="nav-group">운영 데이터</p>

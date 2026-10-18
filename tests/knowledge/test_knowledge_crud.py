@@ -108,3 +108,38 @@ def test_dtc_lookup(app):
         p0300 = next((d for d in results if d.code == "P0300"), None)
         assert p0300 is not None
         assert "Misfire" in p0300.description
+
+
+def test_admin_can_edit_and_delete_knowledge(admin_client):
+    import re
+
+    from tests.conftest import csrf_token
+
+    token = csrf_token(admin_client, "/admin/knowledge/commands?status=draft")
+    created = admin_client.post("/admin/knowledge/commands", data={
+        "csrf_token": token, "command": "010C", "header": "7E0", "maker": "현대",
+        "detail_name": "엔진 회전수", "description": "회전수", "status": "draft",
+    }, follow_redirects=True)
+    body = created.get_data(as_text=True)
+    assert "저장했습니다" in body and "010C" in body
+    command_id = re.search(r'name="id" value="(\d+)"', body).group(1)
+    token = csrf_token(admin_client, "/admin/knowledge/commands?status=draft")
+    edited = admin_client.post("/admin/knowledge/commands", data={
+        "csrf_token": token, "id": command_id, "command": "010C", "header": "7E0", "maker": "기아",
+        "detail_name": "회전수 수정", "description": "수정", "status": "draft",
+    }, follow_redirects=True)
+    assert "회전수 수정" in edited.get_data(as_text=True)
+    token = csrf_token(admin_client, "/admin/knowledge/commands?status=draft")
+    deleted = admin_client.post(
+        f"/admin/knowledge/commands/{command_id}/delete", data={"csrf_token": token}, follow_redirects=True)
+    deleted_body = deleted.get_data(as_text=True)
+    assert "명령을 삭제했습니다" in deleted_body and "회전수 수정" not in deleted_body
+
+    terms = admin_client.get("/admin/knowledge/terms")
+    text = terms.get_data(as_text=True)
+    assert "DoIP" in text and "ELM327" in text
+    token = csrf_token(admin_client, "/admin/knowledge/terms")
+    saved = admin_client.post("/admin/knowledge/terms", data={
+        "csrf_token": token, "term": "테스트 용어", "definition": "설명", "category": "연결", "status": "draft",
+    }, follow_redirects=True)
+    assert "테스트 용어" in saved.get_data(as_text=True)

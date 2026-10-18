@@ -1,6 +1,7 @@
+import json
 from io import BytesIO
 
-from flask import Blueprint, current_app, render_template, request, send_file, url_for
+from flask import Blueprint, Response, current_app, render_template, request, send_file, url_for
 from flask_login import current_user
 
 from app.core import audit
@@ -10,6 +11,7 @@ from app.modules.auth.access import admin_required
 from app.modules.canlab.service import obd_config
 from app.modules.scanner import analysis, clear_service, service
 from app.modules.scanner.obd import SYSTEMS
+from app.modules.scanner import ethernet
 from app.modules.scanner.plan import build_plan
 from app.modules.scans import car_info
 from app.modules.scans.car_info import CarInfoError
@@ -35,6 +37,65 @@ def flow_config() -> dict:
 def index():
     return render_template("scanner/index.html", obd=obd_config(), config=flow_config(),
                            car_no=(request.args.get("car_no") or "")[:20])
+
+
+@bp.get("/ethernet")
+@admin_required
+def ethernet_page():
+    """DoIP·J2534 읽기. CAN 스캔과 따로다."""
+    return render_template("scanner/ethernet.html")
+
+
+@bp.get("/ethernet/plan")
+@admin_required
+def ethernet_plan():
+    return {"steps": ethernet.read_plan()}
+
+
+@bp.post("/ethernet/run")
+@admin_required
+def ethernet_run():
+    """로컬 망의 DoIP 게이트웨이로 읽기 단계를 진행하고 저장한다."""
+    data = _body()
+
+    def generate():
+        try:
+            host, port = ethernet.check_gateway(data.get("host"), data.get("port"))
+            steps = None
+            for event in ethernet.iter_doip(host, port):
+                if event["type"] == "steps":
+                    steps = event["steps"]
+                else:
+                    yield json.dumps(event, ensure_ascii=False) + "\n"
+            if not steps:
+                raise ServiceError("게이트웨이 응답이 없어 저장하지 않았습니다.")
+            scan = service.run_scan(
+                current_user, car_no=data.get("carNo"), car=data.get("car") if isinstance(data.get("car"), dict) else None,
+                steps=steps, transport="doip", device=host)
+        except ServiceError as exc:
+            yield json.dumps({"type": "error", "message": exc.message}, ensure_ascii=False) + "\n"
+            return
+        except (TypeError, ValueError):
+            yield json.dumps({"type": "error", "message": "게이트웨이 주소를 확인하세요."}, ensure_ascii=False) + "\n"
+            return
+        yield json.dumps({"type": "done", "url": url_for("scanner.result", scan_id=scan.id)}, ensure_ascii=False) + "\n"
+
+    return Response(generate(), mimetype="application/x-ndjson")
+
+
+@bp.post("/ethernet/j2534")
+@admin_required
+def ethernet_j2534():
+    """J2534 장비가 남긴 읽기 기록을 같은 해석으로 저장한다."""
+    data = _body()
+    try:
+        steps = ethernet.parse_j2534(data.get("log") or "")
+        scan = service.run_scan(
+            current_user, car_no=data.get("carNo"), car=data.get("car") if isinstance(data.get("car"), dict) else None,
+            steps=steps, transport="j2534", device="J2534")
+    except ServiceError as error:
+        return {"message": error.message}, error.status
+    return {"id": scan.id, "url": url_for("scanner.result", scan_id=scan.id)}, 201
 
 
 @bp.post("/lookup")
