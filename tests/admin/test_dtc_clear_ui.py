@@ -63,7 +63,7 @@ def test_scan_detail_shows_clear_logs(app, admin_client, make_user):
         db.session.add(log)
         db.session.commit()
     
-    response = admin_client.get(url_for("monitoring.scan_show", scan_id=scan_id))
+    response = admin_client.get(f"/monitoring/scans/{scan_id}")
     html = response.get_data(as_text=True)
     assert response.status_code == 200
     assert "고장코드 지우기 이력" in html
