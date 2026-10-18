@@ -14,6 +14,7 @@ def test_search_scans_with_filters(client, app, make_user):
         # Create test scans
         scan1 = Scan(
             car_no="12가3456",
+            car_vin="KMHE341CBLU123456",
             car_maker="현대",
             car_model="아반떼",
             type="ice",
@@ -23,6 +24,7 @@ def test_search_scans_with_filters(client, app, make_user):
         )
         scan2 = Scan(
             car_no="34나5678",
+            car_vin="KNAGM411CK5123456",
             car_maker="기아",
             car_model="쏘렌토",
             type="ev",

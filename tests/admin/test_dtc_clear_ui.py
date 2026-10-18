@@ -24,6 +24,7 @@ def test_clear_button_hidden_without_permission(client, app, make_user):
         from app.extensions import db
         scan = Scan(
             car_no="12가3456",
+            car_vin="KMHE341CBLU123456",
             car_maker="현대",
             car_model="아반떼",
             type="ice",
@@ -58,6 +59,7 @@ def test_clear_button_visible_with_permission(client, app, make_user):
         from app.extensions import db
         scan = Scan(
             car_no="12가3456",
+            car_vin="KMHE341CBLU123456",
             car_maker="현대",
             car_model="아반떼",
             type="ice",
@@ -90,6 +92,7 @@ def test_clear_dialog_shows_warnings(client, app, make_user):
         from app.extensions import db
         scan = Scan(
             car_no="12가3456",
+            car_vin="KMHE341CBLU123456",
             car_maker="현대",
             car_model="아반떼",
             type="ice",
@@ -116,6 +119,7 @@ def test_scan_detail_shows_clear_logs(client, app, make_user):
     with app.app_context():
         scan = Scan(
             car_no="12가3456",
+            car_vin="KMHE341CBLU123456",
             car_maker="현대",
             car_model="아반떼",
             type="ice",
@@ -156,6 +160,7 @@ def test_clear_requires_mfa(client, app, make_user):
         from app.extensions import db
         scan = Scan(
             car_no="12가3456",
+            car_vin="KMHE341CBLU123456",
             car_maker="현대",
             car_model="아반떼",
             type="ice",
