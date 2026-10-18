@@ -55,6 +55,7 @@ def test_scan_detail_shows_clear_history(app, admin_client, make_user):
             car_no="12가3456",
             car_vin="KMHE341CBLU123456",
             car_maker="현대",
+            car_model="아반떼",
             type="ice",
             device_type="ble",
             device_uid="test-device",

@@ -7,13 +7,15 @@ from app.modules.accounts.models import User
 from app.modules.scans.models import DtcClearLog, Scan
 
 
-def test_clear_button_hidden_without_permission(app, admin_client, make_user):
+def test_clear_button_hidden_without_permission(app, client, make_user):
     """권한이 없으면 DTC 삭제 버튼이 표시되지 않는다."""
-    # 권한이 없는 관리자로 다시 로그인
-    from tests.conftest import admin_login
+    from tests.conftest import admin_login, ADMIN_PASSWORD
+    
+    # 권한이 없는 관리자 생성 및 로그인
     no_clear_admin_id = make_user(
         "test_no_clear_admin",
         type="admin",
+        password=ADMIN_PASSWORD,
         name="일반 관리자",
         email="noclear@example.com",
         can_clear_dtc=False,
@@ -38,20 +40,23 @@ def test_clear_button_hidden_without_permission(app, admin_client, make_user):
         scan_id = scan.id
     
     # 권한 없는 관리자로 로그인
-    admin_login(admin_client, tid="test_no_clear_admin", password="password123")
+    admin_login(client, tid="test_no_clear_admin", password=ADMIN_PASSWORD)
     
     # 권한 체크
-    response = admin_client.get(url_for("monitoring.scan_show", scan_id=scan_id))
+    response = client.get(url_for("monitoring.scan_show", scan_id=scan_id))
     html = response.get_data(as_text=True)
     assert response.status_code == 200
 
 
-def test_clear_button_visible_with_permission(app, admin_client, make_user):
+def test_clear_button_visible_with_permission(app, client, make_user):
     """권한이 있으면 DTC 삭제 버튼이 표시된다."""
-    # 권한이 있는 관리자 생성
+    from tests.conftest import admin_login, ADMIN_PASSWORD
+    
+    # 권한이 있는 관리자 생성 및 로그인
     admin_id = make_user(
         "test_clear_admin",
         type="admin",
+        password=ADMIN_PASSWORD,
         name="지우기 관리자",
         email="clear@example.com",
         can_clear_dtc=True,
@@ -76,20 +81,22 @@ def test_clear_button_visible_with_permission(app, admin_client, make_user):
         scan_id = scan.id
     
     # 권한 있는 관리자로 로그인
-    from tests.conftest import admin_login
-    admin_login(admin_client, tid="test_clear_admin", password="password123")
+    admin_login(client, tid="test_clear_admin", password=ADMIN_PASSWORD)
     
     # MFA와 권한이 모두 있어야 함
-    response = admin_client.get(url_for("monitoring.scan_show", scan_id=scan_id))
+    response = client.get(url_for("monitoring.scan_show", scan_id=scan_id))
     html = response.get_data(as_text=True)
     assert response.status_code == 200
 
 
-def test_clear_dialog_shows_warnings(app, admin_client, make_user):
+def test_clear_dialog_shows_warnings(app, client, make_user):
     """DTC 삭제 확인 대화상자에 경고가 표시된다."""
+    from tests.conftest import admin_login, ADMIN_PASSWORD
+    
     admin_id = make_user(
         "test_clear_admin",
         type="admin",
+        password=ADMIN_PASSWORD,
         name="지우기 관리자",
         email="clear@example.com",
         can_clear_dtc=True,
@@ -112,10 +119,9 @@ def test_clear_dialog_shows_warnings(app, admin_client, make_user):
         db.session.commit()
         scan_id = scan.id
     
-    from tests.conftest import admin_login
-    admin_login(admin_client, tid="test_clear_admin", password="password123")
+    admin_login(client, tid="test_clear_admin", password=ADMIN_PASSWORD)
     
-    response = admin_client.get(url_for("monitoring.scan_show", scan_id=scan_id))
+    response = client.get(url_for("monitoring.scan_show", scan_id=scan_id))
     html = response.get_data(as_text=True)
     assert response.status_code == 200
 
@@ -157,11 +163,14 @@ def test_scan_detail_shows_clear_logs(app, admin_client, make_user):
     assert "고장코드 지우기 이력" in html or response.status_code == 200
 
 
-def test_clear_requires_mfa(app, admin_client, make_user):
+def test_clear_requires_mfa(app, client, make_user):
     """MFA가 없으면 DTC 삭제 버튼이 비활성화된다."""
+    from tests.conftest import admin_login, ADMIN_PASSWORD
+    
     admin_id = make_user(
         "no_mfa_admin",
         type="admin",
+        password=ADMIN_PASSWORD,
         name="MFA 없는 관리자",
         can_clear_dtc=True,
         totp_secret_enc=None,
@@ -183,8 +192,7 @@ def test_clear_requires_mfa(app, admin_client, make_user):
         db.session.commit()
         scan_id = scan.id
     
-    from tests.conftest import admin_login
-    admin_login(admin_client, tid="no_mfa_admin", password="password123")
+    admin_login(client, tid="no_mfa_admin", password=ADMIN_PASSWORD)
     
-    response = admin_client.get(url_for("monitoring.scan_show", scan_id=scan_id))
+    response = client.get(url_for("monitoring.scan_show", scan_id=scan_id))
     assert response.status_code == 200
