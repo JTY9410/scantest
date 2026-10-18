@@ -60,6 +60,17 @@ def register_cli(app: Flask) -> None:
             f"새로 넣은 고장코드 {stats['dtcs']}건, 용어 {stats['terms']}건"
         )
 
+    @app.cli.command("import-wecar-app")
+    def import_wecar_app() -> None:
+        """위카 앱의 전기차 읽기 명령을 지식베이스에 넣는다."""
+        from app.modules.knowledge.wecar_app import import_wecar_app as load
+
+        stats = load()
+        click.echo(
+            f"명령 {stats['commands']}건, 수집 데이터 {stats['formulas']}건, "
+            f"전기차 고장코드 {stats['dtcs']}건"
+        )
+
     @app.cli.command("collect-knowledge")
     def collect_knowledge() -> None:
         """공개 OBD 명령·수식·고장코드 명칭을 지식베이스에 넣는다."""
