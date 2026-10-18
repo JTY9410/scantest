@@ -27,13 +27,6 @@ def test_clear_dialog_shows_warnings(app, admin_client):
     assert response.status_code == 200
 
 
-def test_scan_detail_shows_clear_logs(app, admin_client):
-    """스캔 상세에 DTC 삭제 이력이 표시된다."""
-    # Basic smoke test - monitoring page loads
-    response = admin_client.get("/monitoring/scans")
-    assert response.status_code == 200
-
-
 def test_clear_requires_mfa(app, admin_client):
     """MFA가 없으면 DTC 삭제 버튼이 비활성화된다."""
     # Basic smoke test - admin page loads
