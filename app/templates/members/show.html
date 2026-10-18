@@ -25,6 +25,7 @@
         <dt>이메일</dt><dd>{{ member.email or "-" }}</dd>
         <dt>사업자등록번호</dt><dd class="tabular-nums">{{ member.formatted_biz_no or "-" }}</dd>
         <dt>2단계 인증</dt><dd>{{ badge("사용", "success") if member.mfa_enabled else "-" }}</dd>
+        <dt>고장코드 지우기 권한</dt><dd>{{ badge("있음", "success") if member.can_clear_dtc else "-" }}</dd>
         <dt>가입일</dt><dd class="tabular-nums">{{ member.created_at|kst }}</dd>
         <dt>최근 로그인</dt><dd class="tabular-nums">{{ member.last_login_at|kst }}</dd>
         {% if member.deleted_at %}<dt>탈퇴일</dt><dd class="tabular-nums">{{ member.deleted_at|kst }}</dd>{% endif %}

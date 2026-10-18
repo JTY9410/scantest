@@ -103,4 +103,47 @@
   {{ empty("검출된 고장코드가 없습니다.") }}
   {% endif %}
 </section>
+
+{% if clear_logs %}
+<section class="card mt-6 overflow-hidden" aria-labelledby="clear-title">
+  <div class="card-body pb-2"><h2 id="clear-title" class="text-lg font-bold">고장코드 지우기 이력 <span class="text-muted">{{ clear_logs|length }}</span></h2></div>
+  <table class="rtable">
+    <thead>
+      <tr>
+        <th scope="col">실행 시각</th>
+        <th scope="col">실행자</th>
+        <th scope="col">출처</th>
+        <th scope="col">상태</th>
+        <th scope="col">대상 제어기</th>
+        <th scope="col">결과</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for log in clear_logs %}
+      <tr>
+        <td data-primary class="tabular-nums">{{ log.created_at|kst }}</td>
+        <td data-label="실행자">{{ log.user.name if log.user else "-" }}</td>
+        <td data-label="출처">{{ {"web": "웹", "app": "앱"}.get(log.source, log.source) }}</td>
+        <td data-label="상태">
+          {% if log.status == "ok" %}{{ badge("성공", "success") }}
+          {% elif log.status == "partial" %}{{ badge("일부 성공", "warning") }}
+          {% elif log.status == "failed" %}{{ badge("실패", "danger") }}
+          {% elif log.status == "aborted" %}{{ badge("중단", "danger") }}
+          {% elif log.status == "expired" %}{{ badge("만료", "") }}
+          {% else %}{{ badge("발급", "info") }}{% endif %}
+        </td>
+        <td data-label="대상 제어기" class="mono">{{ log.targets|length }}곳</td>
+        <td data-label="결과" class="text-sm">
+          {% if log.result %}
+            지움 {{ log.result.cleared|length if log.result.cleared else 0 }}개 · 
+            남음 {{ log.result.remaining|length if log.result.remaining else 0 }}개
+            {% if log.result.new %} · 새로 생김 {{ log.result.new|length }}개{% endif %}
+          {% else %}-{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
 {% endblock %}

@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import EmailField, HiddenField, SelectField, StringField
+from wtforms import BooleanField, EmailField, HiddenField, SelectField, StringField
 from wtforms.validators import DataRequired, Email, Length, Optional, Regexp
 
 from app.modules.accounts.models import UserType
@@ -27,4 +27,5 @@ class MemberEditForm(FlaskForm):
             Regexp(r"^[0-9]{3}-?[0-9]{2}-?[0-9]{5}$", message="123-45-67890 형식으로 입력하세요."),
         ],
     )
+    can_clear_dtc = BooleanField("고장코드 지우기 권한")
     version = HiddenField()

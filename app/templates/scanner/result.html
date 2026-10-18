@@ -24,6 +24,11 @@
   {% if canlab_report_exists(result.report_id) %}<a class="btn btn-secondary print:hidden" href="{{ url_for('canlab.report', report_id=result.report_id) }}">결과지</a>
   {% elif result.report_id %}<span class="btn btn-secondary print:hidden" aria-disabled="true">결과지 삭제됨</span>{% endif %}
   <a class="btn btn-secondary print:hidden" href="{{ url_for('monitoring.scan_show', scan_id=scan.id) }}">스캔 기록</a>
+  {% if current_user.can_clear_dtc and current_user.totp_secret_enc and summary.dtc_total and result.status in ('ok', 'partial') %}
+    <button type="button" class="btn btn-danger print:hidden" data-clear-dtc="{{ scan.id }}">고장코드 지우기</button>
+  {% elif summary.dtc_total %}
+    <span class="btn btn-secondary print:hidden" aria-disabled="true" title="{% if not current_user.can_clear_dtc %}권한 없음{% elif not current_user.totp_secret_enc %}MFA 필요{% else %}스캔 실패{% endif %}">고장코드 지우기</span>
+  {% endif %}
   <a class="btn btn-primary print:hidden" href="{{ url_for('scanner.index', car_no=scan.car_no) }}">다시 스캔</a>
 {% endcall %}
 
@@ -368,4 +373,64 @@
   {% for note in result.notes %}<li>{{ note }}</li>{% endfor %}
 </ul>
 {% endif %}
+
+<dialog class="dialog print:hidden" data-clear-dialog aria-labelledby="clear-title">
+  <div class="card-body" style="max-width: 48rem;">
+    <h2 id="clear-title" class="text-lg font-bold">고장코드 지우기 확인</h2>
+    
+    <div class="mt-4 grid gap-4">
+      <div class="flash flash-error">
+        <span aria-hidden="true" class="font-bold">⚠</span>
+        <div>
+          <p class="font-semibold">되돌릴 수 없습니다</p>
+          <ul class="mt-1 list-disc pl-5 text-sm">
+            <li>고장코드, 고장 당시 데이터, 레디니스 모니터 상태가 초기화됩니다</li>
+            <li>실제 고장 원인을 해결하지 않으면 코드가 다시 발생합니다</li>
+            <li>검사 직전에 삭제하면 부정 검사로 간주될 수 있습니다</li>
+          </ul>
+        </div>
+      </div>
+
+      <dl class="dl">
+        <dt>차량번호</dt><dd class="mono font-semibold">{{ scan.car_no }}</dd>
+        <dt>차대번호</dt><dd class="mono">{{ result.vin or "읽지 못함" }}</dd>
+        <dt>차종</dt><dd>{{ scan.car_maker or "-" }} {{ scan.car_model }} {{ scan.car_submodel or "" }}</dd>
+        <dt>고장코드</dt><dd class="font-semibold text-danger">{{ summary.dtc_total }}건 ({% for kind, n in summary.dtc_kinds.items() %}{{ kind }} {{ n }}{% if not loop.last %}, {% endif %}{% endfor %})</dd>
+        <dt>대상 제어기</dt><dd data-target-count></dd>
+        <dt>예상 소요 시간</dt><dd data-estimate-time></dd>
+      </dl>
+
+      <form data-clear-form class="grid gap-4">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div>
+          <label class="form-label">차량번호를 입력하여 확인</label>
+          <input type="text" name="carNo" class="form-input mono" placeholder="{{ scan.car_no }}" 
+                 required pattern="{{ scan.car_no|regex_escape }}" autocomplete="off">
+        </div>
+        <label class="flex items-center gap-2">
+          <input type="checkbox" name="conditions" required>
+          <span>차량이 정차 상태이고, 시동이 OFF 상태이며, 계기판이 IG ON 상태임을 확인했습니다</span>
+        </label>
+        <div data-clear-status class="hidden"></div>
+      </form>
+    </div>
+
+    <div class="mt-6 flex justify-end gap-2">
+      <button type="button" class="btn btn-secondary" data-dialog-close>취소</button>
+      <button type="submit" class="btn btn-danger" form="clear-form-target" data-clear-submit>지우기 실행</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="dialog print:hidden" data-clear-result aria-labelledby="clear-result-title">
+  <div class="card-body" style="max-width: 56rem;">
+    <h2 id="clear-result-title" class="text-lg font-bold">고장코드 지우기 결과</h2>
+    <div data-result-content class="mt-4"></div>
+    <div class="mt-6 flex justify-end">
+      <button type="button" class="btn btn-primary" data-dialog-close>확인</button>
+    </div>
+  </div>
+</dialog>
+
+<script src="{{ url_for('static', filename='js/components/obd-clear.js', v=asset_version) }}" defer></script>
 {% endblock %}

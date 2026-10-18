@@ -24,6 +24,8 @@
 | CAN 수집 올리기 (신규) | `POST /api/canCaptures` | `canlab.store_app_capture` | 데이터셋, 결과지 | 201과 해석 값·DTC (`docs/flows/canlab.md`) |
 | 앱 스캔 계획 (신규) | `GET /api/scanPlan?carNo=` | `scanner.lookup_car`, `build_plan(expand=True)` | 조회 캐시 | `{carNo, car, lookupError, steps, notes}`. 조회에 실패해도 공통 계획과 `lookupError` (`docs/flows/scanner.md`) |
 | 앱 스캔 결과 올리기 (신규) | `POST /api/scanRuns` | `scanner.run_scan` | 통신 기록, 결과지, 스캔, 결과 PDF | 201 `{id, status, errors, pdfUrl}` |
+| 고장코드 지우기 계획 발급 (신규) | `POST /api/scans/<id>/clearPlan` | `clear_service.issue` | dtc_clear_logs(issued), 감사기록 | 200 `{logId, token, expiresAt, targets, steps}`. 권한 없음 403, 차량번호 불일치·조건 미확인 400, 스캔 30분 지남 409 |
+| 고장코드 지우기 실행 (신규) | `POST /api/scans/<id>/clear` | `clear_service.save` | dtc_clear_logs(결과), 감사기록 | 201 `{id, status, result}`. 토큰 없음/만료 401, 권한 없음 403, 허용되지 않은 명령 400 |
 | LTE 단말기 스캔 계획 (신규) | `GET /api/telematics/plan` | `obd.telematics.plan_for` | 마지막 접속 시각 | 단말기 토큰(`Device`) 인증 (`docs/flows/telematics.md`) |
 | LTE 단말기 결과 올리기 (신규) | `POST /api/telematics/captures` | `obd.telematics.receive` | 통신 기록, 결과지, 스캔 | 201 `{id, status, errors}` |
 

@@ -64,7 +64,9 @@ def scan_commands():
 def scan_show(scan_id: int):
     scan = service.get_scan(scan_id)
     data = scan.bms_data if isinstance(scan.bms_data, dict) else {}
-    return render_template("monitoring/scan_show.html", scan=scan, answered=answered_commands(data.get("steps")))
+    clear_logs = service.get_scan_clear_logs(scan_id)
+    return render_template("monitoring/scan_show.html", scan=scan, answered=answered_commands(data.get("steps")),
+                          clear_logs=clear_logs)
 
 
 @bp.get("/activities")

@@ -13,7 +13,7 @@ from app.core.pagination import Page, paginate
 from app.extensions import db
 from app.modules.accounts.models import User
 from app.modules.reports.models import Applog, CarMismatchReport
-from app.modules.scans.models import Scan, ScanCode
+from app.modules.scans.models import DtcClearLog, Scan, ScanCode
 
 SEOUL = ZoneInfo("Asia/Seoul")
 
@@ -70,6 +70,18 @@ def get_scan(scan_id: int) -> Scan:
     if scan is None:
         raise ServiceError("스캔 기록을 찾을 수 없습니다.", 404)
     return scan
+
+
+def get_scan_clear_logs(scan_id: int) -> list[DtcClearLog]:
+    """스캔의 고장코드 지우기 이력을 최신순으로 반환한다."""
+    return list(
+        db.session.scalars(
+            select(DtcClearLog)
+            .options(joinedload(DtcClearLog.user))
+            .where(DtcClearLog.scan_id == scan_id)
+            .order_by(DtcClearLog.created_at.desc(), DtcClearLog.id.desc())
+        ).all()
+    )
 
 
 def search_activities(*, q: str, relation: str, start: date | None, end: date | None,

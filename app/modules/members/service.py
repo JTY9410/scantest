@@ -145,6 +145,11 @@ def update_member(actor: User, user_id: int, data: dict[str, Any], version: int)
         raise ServiceError(CONFLICT, 409)
     if user.id == actor.id and data.get("type") != UserType.ADMIN:
         raise ServiceError("본인의 관리자 유형은 바꿀 수 없습니다.")
+    
+    # 소유자에게는 고장코드 지우기 권한을 줄 수 없음 (2026-10-18 대표 결정)
+    can_clear = bool(data.get("can_clear_dtc", False))
+    if can_clear and data.get("type") == UserType.OWNER:
+        raise ServiceError("소유자에게는 고장코드 지우기 권한을 줄 수 없습니다.")
 
     values = {
         "name": data["name"].strip(),
@@ -153,6 +158,7 @@ def update_member(actor: User, user_id: int, data: dict[str, Any], version: int)
         "mobile": digits_only(data.get("mobile")) or None,
         "email": (data.get("email") or "").strip() or None,
         "biz_no": digits_only(data.get("biz_no")) or None,
+        "can_clear_dtc": can_clear,
     }
     if values["email"]:
         taken = db.session.scalar(
