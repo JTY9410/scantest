@@ -163,6 +163,9 @@ class DtcClearLog(db.Model):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
+    scan: Mapped[Scan] = relationship()
+    user: Mapped["User"] = relationship()
+
 
 class ScanCode(TimestampMixin, SoftDeleteMixin, db.Model):
     __tablename__ = "scan_codes"

@@ -3,7 +3,7 @@ import pytest
 from app.modules.monitoring import service
 
 
-def test_search_scans_with_filters(client, app, make_user):
+def test_search_scans_with_filters(app, admin_client, make_user):
     """Test scan history search with maker/model filters."""
     from app.extensions import db
     from app.modules.scans.models import Scan
@@ -43,7 +43,7 @@ def test_search_scans_with_filters(client, app, make_user):
         assert results.total > 0
 
 
-def test_scan_detail_shows_clear_history(client, app, make_user):
+def test_scan_detail_shows_clear_history(app, admin_client, make_user):
     """Test that scan detail page includes DTC clear history."""
     from app.extensions import db
     from app.modules.scans.models import DtcClearLog, Scan
