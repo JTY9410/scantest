@@ -306,7 +306,19 @@ def scan_document(scan: Scan) -> ScanDocument:
 
 def scan_result(scan: Scan) -> dict:
     """결과 화면용. 스캔하기로 만든 스캔만 위스캔 형식 결과가 있다."""
-    data = scan.bms_data if isinstance(scan.bms_data, dict) else {}
+    data = dict(scan.bms_data) if isinstance(scan.bms_data, dict) else {}
     if data.get("source") != "scanner":
         raise ServiceError("스캔하기로 만든 결과가 아닙니다.", 404)
+    wescan = data.get("wescan") if isinstance(data.get("wescan"), dict) else None
+    if wescan is None or "judgments" not in wescan:
+        from app.modules.scanner.report import basic_report
+
+        wescan = basic_report(
+            scan_id=scan.id, diagnosed_at=scan.created_at or _now(), car_no=scan.car_no,
+            car=data.get("car") or {}, result=data, report_id=data.get("report_id"),
+            pdf_url=f"/admin/scan/{scan.id}/pdf", app_type=data.get("transport"))
+        data["wescan"] = wescan
+        scan.bms_data = dict(scan.bms_data or {}, wescan=wescan)
+        flag_modified(scan, "bms_data")
+        db.session.commit()
     return data

@@ -107,6 +107,43 @@ def _sensor_ev(result: dict, mileage: float | int | None, car: dict) -> dict | N
     return sensor or None
 
 
+def _battery_value(result: dict, key: str) -> float | int | None:
+    item = (result.get("battery") or {}).get(key) or {}
+    if item.get("outlier"):
+        return None
+    return _num(item.get("value"))
+
+
+def _judgment(item: str, standard: str, value: float | int, unit: str, ok: bool) -> dict:
+    return {"item": item, "standard": standard, "value": value, "unit": unit,
+            "result": "양호" if ok else "주의"}
+
+
+def judgments(result: dict) -> list[dict]:
+    """위스캔 기본 보고서의 판정. 읽은 값이 있는 항목만 만든다."""
+    rows = []
+    if (soh := _battery_value(result, "soh")) is not None:
+        rows.append(_judgment("배터리 수명 (SOH)", "SOH 80% 이상 시 양호", soh, "%", soh >= 80))
+    if (iso := _battery_value(result, "isolation_kohm")) is not None:
+        rows.append(_judgment("절연 저항", "절연저항 500 kΩ 이상 시 양호", iso, "kΩ", iso >= 500))
+    cells = result.get("cells") or {}
+    high, low = _num(cells.get("max")), _num(cells.get("min"))
+    if high is None or low is None:
+        high, low = _battery_value(result, "max_cell_v"), _battery_value(result, "min_cell_v")
+    if high is not None and low is not None:
+        spread = round(high - low, 3)
+        rows.append(_judgment("셀 전압 편차", "셀 전압 최대-최소 차이 1.0V 이하 시 양호", spread, "V", spread <= 1))
+    t_high, t_low = _battery_value(result, "max_temp"), _battery_value(result, "min_temp")
+    modules = [value for n in range(1, 19)
+               if (value := _battery_value(result, f"module_temp_{n}")) is not None]
+    if len(modules) >= 2:
+        t_high, t_low = max(modules), min(modules)
+    if t_high is not None and t_low is not None:
+        spread = round(t_high - t_low, 1)
+        rows.append(_judgment("모듈 온도 편차", "모듈 온도 최대-최소 차이 20°C 이하 시 양호", spread, "°C", spread <= 20))
+    return rows
+
+
 def basic_report(*, scan_id: int, diagnosed_at: datetime, car_no: str, car: dict, result: dict,
                  report_id: int | None, pdf_url: str | None, app_version: str | None = None,
                  app_type: str | None = None) -> dict:
@@ -145,4 +182,5 @@ def basic_report(*, scan_id: int, diagnosed_at: datetime, car_no: str, car: dict
         }),
         "dtc": {"enhanced": {"ecus": _ecus(result)}},
         "sensor": sensor,
+        "judgments": judgments(result),
     }

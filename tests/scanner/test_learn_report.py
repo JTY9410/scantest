@@ -101,6 +101,21 @@ def test_basic_report_shape(app):
     assert names["엔진"] == {"ecu_name": "엔진", "comm_status": "fail", "code_count": None}
     assert names["배터리"]["comm_status"] == "success"
     assert names["배터리"]["codes"][0]["code"] == "P0A80"
+    assert report["judgments"][0]["item"] == "셀 전압 편차" and report["judgments"][0]["result"] == "양호"
+
+    judged = basic_report(
+        scan_id=8, diagnosed_at=when, car_no="12가3456", car=KONA,
+        result={
+            "battery": {"soh": {"value": 70}, "isolation_kohm": {"value": 3000},
+                        "max_temp": {"value": 24}, "min_temp": {"value": 23}},
+            "cells": {"max": 3.94, "min": 3.92},
+            "dtcs": [], "steps": [], "values": [],
+        },
+        report_id=1, pdf_url=None,
+    )
+    by_item = {row["item"]: row["result"] for row in judged["judgments"]}
+    assert by_item == {
+        "배터리 수명 (SOH)": "주의", "절연 저항": "양호", "셀 전압 편차": "양호", "모듈 온도 편차": "양호"}
 
     ice = basic_report(
         scan_id=1, diagnosed_at=when, car_no="34나5678", car=AVANTE,

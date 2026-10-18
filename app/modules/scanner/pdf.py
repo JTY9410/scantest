@@ -98,9 +98,13 @@ def _analysis(result: dict) -> list:
     if failures:
         story += [Spacer(1, 4), _table([["불합격 점검 항목", "값", "기준"]] + failures, [90, 40, 40])]
     story += [_p(f"· {w}", _DANGER) for w in summary["warnings"]]
-    if summary["ev"]:
-        story.append(_p("전기차 배터리 값은 판정 기준 없이 값과 OBDb 정상 범위만 보여 줍니다. 제조사 판정을 대신하지 않습니다.",
-                        _SMALL))
+    judgments = (result.get("wescan") or {}).get("judgments") or []
+    if judgments:
+        story += [Spacer(1, 4), _p("기본 보고서 판정", _H2),
+                  _table([["항목", "진단 기준", "진단 결과", "판정"]] + [
+                      [row["item"], row["standard"], f"{row['value']} {row['unit']}", row["result"]]
+                      for row in judgments], [32, 78, 28, 18])]
+        story.append(_p("판정은 위스캔 기본 보고서 기준입니다. 읽지 못한 항목은 빠집니다.", _SMALL))
     return story
 
 
