@@ -22,9 +22,9 @@ def overview():
 @admin_required
 def commands():
     """List knowledge commands."""
-    status = request.args.get("status", "verified")
+    status = request.args.get("status", "all")
     maker = request.args.get("maker", "").strip()[:50] or None
-    items = service.list_commands(status=status, maker=maker)
+    items = service.command_views(status=None if status == "all" else status, maker=maker)
     return render_template("knowledge/commands.html", items=items, status=status, maker=maker or "")
 
 

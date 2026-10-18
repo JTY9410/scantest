@@ -14,13 +14,38 @@ from app.modules.knowledge.models import (
 )
 
 
-def list_commands(*, status: str = "verified", maker: str | None = None, limit: int = 100):
-    """스캔 계획에 쓸 명령. 기본은 검증된 항목만."""
-    stmt = select(KnowledgeCommand).where(KnowledgeCommand.status == status).order_by(KnowledgeCommand.command)
+def list_commands(*, status: str | None = "verified", maker: str | None = None, limit: int = 100):
+    """명령 목록. 상태를 비우면 검증과 초안을 함께 보여 준다."""
+    stmt = select(KnowledgeCommand).order_by(KnowledgeCommand.command)
+    if status:
+        stmt = stmt.where(KnowledgeCommand.status == status)
     if maker:
         stmt = stmt.where(or_(KnowledgeCommand.maker == maker, KnowledgeCommand.maker.is_(None)))
     stmt = stmt.limit(limit)
     return db.session.scalars(stmt).all()
+
+
+def command_views(*, status: str | None = None, maker: str | None = None, limit: int = 500):
+    """명령과, 그 명령이 읽는 데이터(수식)를 명령 다음에 붙인다."""
+    formulas = db.session.scalars(select(KnowledgeFormula)).all()
+    views = []
+    for row in list_commands(status=status, maker=maker, limit=limit):
+        command = (row.command or "").upper()
+        pid = command[2:] if command.startswith("01") and len(command) == 4 else ""
+        data = [item for item in formulas if _formula_for(item, row, command, pid)]
+        views.append({"row": row, "data": data})
+    return views
+
+
+def _formula_for(item: KnowledgeFormula, row: KnowledgeCommand, command: str, pid: str) -> bool:
+    same_command = (item.command or "").upper() == command or (pid and (item.pid or "").upper() == pid)
+    if not same_command:
+        return False
+    if item.maker and row.maker and item.maker != row.maker:
+        return False
+    if item.model and row.model and item.model != row.model:
+        return False
+    return True
 
 
 def list_formulas(*, status: str = "verified", maker: str | None = None, limit: int = 100):
@@ -338,8 +363,32 @@ def save_command(form) -> KnowledgeCommand:
     row.label = row.detail_name or command[:200]
     row.description = _text(form.get("description"), 5000)
     row.status = status
+    _save_collected(row, form.get("formula"), form.get("unit"))
     db.session.commit()
     return row
+
+
+def _save_collected(row: KnowledgeCommand, formula: str | None, unit: str | None) -> None:
+    """명령이 읽는 데이터의 수식과 단위를 같은 범위에 저장한다."""
+    text = (formula or "").strip()
+    if not text:
+        return
+    command = (row.command or "").upper()
+    pid = command[2:] if command.startswith("01") and len(command) == 4 else None
+    existing = db.session.scalar(select(KnowledgeFormula).where(
+        KnowledgeFormula.command == command,
+        KnowledgeFormula.maker == row.maker if row.maker else KnowledgeFormula.maker.is_(None),
+        KnowledgeFormula.model == row.model if row.model else KnowledgeFormula.model.is_(None),
+    ))
+    if existing is None:
+        existing = KnowledgeFormula(
+            command=command, pid=pid, maker=row.maker, model=row.model, label=(row.detail_name or command)[:200],
+            formula=text[:5000], source=row.source or "manual", status=row.status)
+        db.session.add(existing)
+    existing.formula = text[:5000]
+    existing.unit = _text(unit, 20) or existing.unit
+    existing.label = (row.detail_name or existing.label or command)[:200]
+    existing.detail_name = row.detail_name or existing.detail_name
 
 
 def delete_command(command_id: int) -> None:
@@ -487,6 +536,39 @@ def _command_row(maker, model, header, command) -> KnowledgeCommand | None:
         KnowledgeCommand.command == command,
         KnowledgeCommand.source == "reverse_analysis",
     ))
+
+
+def remember_observed_commands(maker: str | None, model: str | None, commands: list[dict]) -> int:
+    """역분석 기록의 읽기 명령을 제조사·차종 초안으로 남긴다. 다시 저장하면 응답 예시만 고친다."""
+    maker_name = (maker or "").strip() or None
+    model_name = (model or "").strip() or None
+    added = 0
+    seen = set()
+    for item in commands or []:
+        if not item.get("sendable"):
+            continue
+        command = re.sub(r"\s+", "", str(item.get("command") or "")).upper()
+        if not _READ.fullmatch(command) or _blocked_command(command) or len(command) > 16:
+            continue
+        header = (str(item.get("header")).strip().upper() if item.get("header") else "") or None
+        key = (maker_name, model_name, header, command)
+        if key in seen:
+            continue
+        seen.add(key)
+        example = str(item.get("example") or "").strip()
+        detail = f"역분석 응답 예시: {example}"[:500] if example else "역분석에서 읽은 명령"
+        existing = _command_row(maker_name, model_name, header, command)
+        if existing is None:
+            db.session.add(KnowledgeCommand(
+                maker=maker_name, model=model_name, header=header, command=command,
+                label=command, detail_name=command, description=detail, source="reverse_analysis",
+                source_detail=detail, status="draft", confidence=0.4))
+            added += 1
+            continue
+        existing.source_detail = detail
+    if added:
+        db.session.flush()
+    return added
 
 
 def remember_command(*, maker: str | None, model: str | None, header: str | None, command: str,

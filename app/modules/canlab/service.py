@@ -201,7 +201,8 @@ def _pdf_summary(content: bytes) -> dict:
 
 
 def upload_dataset(actor: User, *, filename: str, content: bytes, kind: str, vehicle: str,
-                   note: str | None = None, source: str = DatasetSource.UPLOAD) -> CanDataset:
+                   note: str | None = None, source: str = DatasetSource.UPLOAD,
+                   maker: str | None = None, model: str | None = None) -> CanDataset:
     if kind not in {k.value for k in DatasetKind}:
         raise ServiceError("데이터 종류를 확인하세요.")
     if not content:
@@ -226,9 +227,12 @@ def upload_dataset(actor: User, *, filename: str, content: bytes, kind: str, veh
 
     dataset = CanDataset(kind=kind, source=source, vehicle=vehicle.strip()[:100], filename=filename[:255],
                          sha256=digest, size=len(content), content=content, summary=summary,
-                         note=(note or "").strip()[:500] or None, uploaded_by=actor.id)
+                         note=(note or "").strip()[:500] or None, uploaded_by=actor.id,
+                         maker=(maker or "").strip()[:50] or None, model=(model or "").strip()[:100] or None)
     db.session.add(dataset)
     db.session.flush()
+    knowledge_service.remember_observed_commands(
+        dataset.maker, dataset.model, (summary or {}).get("commands") or [])
     audit.record("CAN 데이터 등록", "CanDataset", dataset.id, user_id=actor.id,
                  changes={"kind": kind, "filename": dataset.filename, "size": dataset.size, "source": source})
     db.session.commit()
@@ -389,7 +393,8 @@ def pdf_values(filename: str, content: bytes) -> list[tuple[str, str, str, int, 
 
 
 def upload_wescan(actor: User, *, filename: str, content: bytes, vehicle: str, values_text: str,
-                  values_pdf: tuple[str, bytes] | None = None, note: str | None = None) -> CanDataset:
+                  values_pdf: tuple[str, bytes] | None = None, note: str | None = None,
+                  maker: str | None = None, model: str | None = None) -> CanDataset:
     """위스캔 스캔 데이터: 통신 기록(명령·응답)과 위스캔이 화면에 보여 준 최종값을 함께 등록한다.
     붙여 넣은 값은 확인된 값, 결과지 PDF에서 읽은 값은 데이터 화면에서 확인할 미확인 값이 된다."""
     typed = [row for row in parse_truth_lines(values_text) if _numeric(row[1])]
@@ -398,7 +403,7 @@ def upload_wescan(actor: User, *, filename: str, content: bytes, vehicle: str, v
         raise ServiceError("위스캔 최종값을 '항목명 | 값 | 단위' 형식으로 올리거나 붙여 넣으세요(숫자 값 1개 이상).")
     try:
         dataset = upload_dataset(actor, filename=filename, content=content, kind=DatasetKind.WECAN_TRC,
-                                 vehicle=vehicle, note=note)
+                                 vehicle=vehicle, note=note, maker=maker, model=model)
     except ServiceError as error:
         if error.status != 409:
             raise
@@ -452,12 +457,13 @@ def ingest(actor: User, *, car_no: str | None, wescan: tuple[str, bytes], values
         _responded_trace(content)
     name = " ".join(v for v in (vehicle["maker"], vehicle["model"], vehicle["submodel"]) if v)
     wescan_dataset = upload_wescan(actor, filename=wescan[0], content=wescan[1], vehicle=name,
-                                   values_text=values_text, values_pdf=values_pdf)
+                                   values_text=values_text, values_pdf=values_pdf,
+                                   maker=vehicle["maker"], model=vehicle["model"])
     reverse_datasets = []
     for filename, content in reverse:
         try:
             dataset = upload_dataset(actor, filename=filename, content=content, kind=DatasetKind.GSCAN_TRC,
-                                     vehicle=name)
+                                     vehicle=name, maker=vehicle["maker"], model=vehicle["model"])
         except ServiceError as error:
             if error.status != 409:
                 raise
@@ -469,6 +475,8 @@ def ingest(actor: User, *, car_no: str | None, wescan: tuple[str, bytes], values
     for dataset in (wescan_dataset, *reverse_datasets):
         dataset.maker, dataset.model = vehicle["maker"], vehicle["model"]
         dataset.summary = dict(dataset.summary or {}, car=vehicle)
+        knowledge_service.remember_observed_commands(
+            dataset.maker, dataset.model, (dataset.summary or {}).get("commands") or [])
     audit.record("데이터입력분석 등록", "CanDataset", wescan_dataset.id, user_id=actor.id,
                  changes={"vehicle": scope_label(vehicle["maker"], vehicle["model"]),
                           "reverse": [d.id for d in reverse_datasets]})

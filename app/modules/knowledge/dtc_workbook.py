@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ServiceError
@@ -38,19 +38,25 @@ def workbook_path() -> Path:
 def import_workbook(path: Path | None = None) -> dict[str, int]:
     """문서를 고장코드와 용어로 넣는다. 같은 출처의 행은 다시 실행해도 한 건이다."""
     sheets = _sheets(path or workbook_path())
-    counts = {"dtcs": 0, "terms": 0}
+    counts = {"sheet": 0, "saved": 0, "dtcs": 0, "terms": 0}
     for row in sheets.get("공통_DTC", [])[1:]:
-        if _upsert_dtc(row, maker=None, generic=True):
-            counts["dtcs"] += 1
+        outcome = _upsert_dtc(row, maker=None, generic=True)
+        if outcome:
+            counts["sheet"] += 1
+            counts["dtcs"] += outcome == "created"
     for row in sheets.get("제조사별_DTC", [])[1:]:
-        if _upsert_dtc(row, maker=row[0] if row else None, generic=False):
-            counts["dtcs"] += 1
+        outcome = _upsert_dtc(row, maker=row[0] if row else None, generic=False)
+        if outcome:
+            counts["sheet"] += 1
+            counts["dtcs"] += outcome == "created"
     counts["terms"] += _terms(sheets)
     try:
         db.session.commit()
     except IntegrityError as exc:
         db.session.rollback()
         raise ServiceError("같은 고장코드가 이미 다른 형식으로 저장되어 있습니다.") from exc
+    counts["saved"] = db.session.scalar(select(func.count()).select_from(KnowledgeDTC).where(
+        KnowledgeDTC.source == _SOURCE)) or 0
     return counts
 
 
@@ -82,14 +88,14 @@ def _maker_names(maker: str | None) -> set[str]:
     return names
 
 
-def _upsert_dtc(row: list[str], *, maker: str | None, generic: bool) -> bool:
+def _upsert_dtc(row: list[str], *, maker: str | None, generic: bool) -> str:
     if generic:
         code, korean, english, major, minor, kind, ecu, parts, caution = _pad(row, 9)
     else:
         _maker, code, korean, english, major, minor, kind, ecu, parts, caution = _pad(row, 10)
     code = code.upper()
     if not re.fullmatch(r"[PCBU][0-9A-F]{4}", code) or not korean:
-        return False
+        return ""
     maker_name = (maker or "").strip()[:50] or None
     existing = db.session.scalar(select(KnowledgeDTC).where(
         KnowledgeDTC.code == code,
@@ -112,7 +118,7 @@ def _upsert_dtc(row: list[str], *, maker: str | None, generic: bool) -> bool:
     existing.status = "verified" if generic else "draft"
     existing.confidence = 1.0 if generic else 0.4
     _upsert_code(code, korean, english, major, ecu, parts, caution, generic)
-    return created
+    return "created" if created else "kept"
 
 
 def _upsert_code(code, korean, english, major, ecu, parts, caution, generic) -> None:

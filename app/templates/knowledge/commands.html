@@ -15,6 +15,8 @@
     <label class="field">차종<input name="model" class="input" maxlength="100"></label>
     <label class="field sm:col-span-2">무엇을 읽는지<input name="detail_name" class="input" maxlength="200"></label>
     <label class="field sm:col-span-2">설명<textarea name="description" class="input" rows="2"></textarea></label>
+    <label class="field">수집 수식<input name="formula" class="input" placeholder="((A * 256) + B) / 4"></label>
+    <label class="field">단위<input name="unit" class="input" maxlength="20" placeholder="rpm"></label>
     <label class="field">상태
       <select name="status" class="input"><option value="draft">초안</option><option value="verified">검증됨</option><option value="deprecated">폐기됨</option></select>
     </label>
@@ -31,6 +33,7 @@
     <div class="field">
       <label for="status" class="field-label">상태</label>
       <select id="status" name="status" class="input">
+        <option value="all" {% if status == "all" %}selected{% endif %}>전체</option>
         <option value="verified" {% if status == "verified" %}selected{% endif %}>검증됨</option>
         <option value="draft" {% if status == "draft" %}selected{% endif %}>초안</option>
         <option value="deprecated" {% if status == "deprecated" %}selected{% endif %}>폐기됨</option>
@@ -56,14 +59,20 @@
       </tr>
     </thead>
     <tbody>
-      {% for item in items %}
+      {% for view in items %}
+      {% set item = view.row %}
       <tr>
         <td data-primary class="mono text-sm">{{ item.command }}</td>
         <td class="mono text-sm">{{ item.header or "-" }}</td>
         <td>{{ item.maker or "전체" }}</td>
         <td>{{ item.model or "-" }}</td>
         <td>{{ item.ecu_name or "-" }}</td>
-        <td>{{ item.detail_name or item.label or "-" }}</td>
+        <td>
+          {{ item.detail_name or item.label or "-" }}
+          {% for data in view.data %}
+          <p class="mt-1 text-sm text-muted">수집: {{ data.detail_name or data.label }} · {{ data.formula }}{% if data.unit %} {{ data.unit }}{% endif %}</p>
+          {% endfor %}
+        </td>
         <td>{{ badge(item.source, "info") }}</td>
         <td>
           {% if item.status == "verified" %}
@@ -83,6 +92,8 @@
             <input name="model" value="{{ item.model or '' }}" class="input" placeholder="차종">
             <input name="detail_name" value="{{ item.detail_name or item.label or '' }}" class="input" placeholder="무엇을 읽는지">
             <textarea name="description" class="input" rows="2">{{ item.description or '' }}</textarea>
+            <input name="formula" value="{{ view.data[0].formula if view.data else '' }}" class="input" placeholder="수집 수식. 예: ((A * 256) + B) / 4">
+            <input name="unit" value="{{ view.data[0].unit or '' if view.data else '' }}" class="input" placeholder="단위">
             <select name="status" class="input">
               <option value="draft" {% if item.status == "draft" %}selected{% endif %}>초안</option>
               <option value="verified" {% if item.status == "verified" %}selected{% endif %}>검증됨</option>

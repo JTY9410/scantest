@@ -55,7 +55,10 @@ def register_cli(app: Flask) -> None:
         from app.modules.knowledge.dtc_workbook import import_workbook
 
         stats = import_workbook()
-        click.echo(f"고장코드 {stats['dtcs']}건, 용어 {stats['terms']}건")
+        click.echo(
+            f"문서 {stats['sheet']}건 중 저장 {stats['saved']}건, "
+            f"새로 넣은 고장코드 {stats['dtcs']}건, 용어 {stats['terms']}건"
+        )
 
     @app.cli.command("collect-knowledge")
     def collect_knowledge() -> None:

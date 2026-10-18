@@ -27,11 +27,11 @@ def test_workbook_import_is_idempotent_and_splits_generic_from_maker(app):
         catalog_desc = catalog.desc if catalog else None
         described = [{"code": "P0010"}, {"code": "P1106"}]
         _describe(described, "현대")
-    assert first["dtcs"] >= 30 and first["terms"] >= 1
+    assert first["sheet"] == 31 and first["saved"] == 31 and first["dtcs"] == 31 and first["terms"] >= 1
     assert saved[0] == "verified" and saved[1] and saved[2]
     assert saved[4] == "Hyundai" and saved[5] == "draft"
     assert makers >= 1
-    assert again == {"dtcs": 0, "terms": 0} and copies == 1
+    assert again["dtcs"] == 0 and again["terms"] == 0 and again["saved"] == 31 and copies == 1
     assert described[0]["desc"] == saved[1]
     assert described[1]["desc"] == saved[6]
     assert described[1]["workbook_ref"] == saved[6]
