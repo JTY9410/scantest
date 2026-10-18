@@ -49,7 +49,14 @@ def test_scan_detail_shows_clear_history(client, app, make_user):
     admin_id = make_user("clear_admin", type="admin", name="Clear Admin")
     
     with app.app_context():
-        scan = Scan(car_no="12가3456", car_maker="현대", type="ice")
+        scan = Scan(
+            car_no="12가3456",
+            car_maker="현대",
+            type="ice",
+            device_type="ble",
+            device_uid="test-device",
+            tester_id=admin_id,
+        )
         db.session.add(scan)
         db.session.commit()
         scan_id = scan.id

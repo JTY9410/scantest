@@ -61,7 +61,8 @@ def test_clear_button_visible_with_permission(client, app, make_user):
             car_maker="현대",
             car_model="아반떼",
             type="ice",
-            status="ok",
+            device_type="ble",
+            device_uid="test-device",
             tester_id=admin_id,
         )
         db.session.add(scan)
@@ -92,7 +93,8 @@ def test_clear_dialog_shows_warnings(client, app, make_user):
             car_maker="현대",
             car_model="아반떼",
             type="ice",
-            status="ok",
+            device_type="ble",
+            device_uid="test-device",
             tester_id=admin_id,
         )
         db.session.add(scan)
@@ -117,7 +119,8 @@ def test_scan_detail_shows_clear_logs(client, app, make_user):
             car_maker="현대",
             car_model="아반떼",
             type="ice",
-            status="ok",
+            device_type="ble",
+            device_uid="test-device",
             tester_id=admin_id,
         )
         db.session.add(scan)
@@ -156,7 +159,8 @@ def test_clear_requires_mfa(client, app, make_user):
             car_maker="현대",
             car_model="아반떼",
             type="ice",
-            status="ok",
+            device_type="ble",
+            device_uid="test-device",
             tester_id=admin_id,
         )
         db.session.add(scan)
