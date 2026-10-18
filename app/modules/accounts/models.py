@@ -85,6 +85,8 @@ class User(UserMixin, TimestampMixin, SoftDeleteMixin, db.Model):
     api_host: Mapped[str | None] = mapped_column(Text)
     api_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     totp_secret_enc: Mapped[str | None] = mapped_column(Text)
+    # 고장코드 지우기 권한(2026-10-18 대표 결정). 기본은 없음. 웹은 관리자 + MFA, 앱은 관리자·테스터만.
+    can_clear_dtc: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     version: Mapped[int] = mapped_column(Integer, default=1, server_default="1")
 

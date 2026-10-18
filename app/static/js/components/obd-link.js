@@ -681,11 +681,12 @@
       return result;
     }
 
-    // 계획 단계 하나({header, command, timeoutMs})를 드라이버로 보낸다. 응답은 ELM 프레임 줄 형식.
+    // 계획 단계 하나({header, command, timeoutMs, st, pendingRetries})를 드라이버로 보낸다. 응답은 ELM 프레임 줄 형식.
+    // 지우기 단계의 10 03 → 14 → 10 01은 한 번에 큐에 넣어 다른 명령이 끼어들지 않게 한다.
     request(step) {
       return this._enqueue(() => {
         if (!this.driver || !this.ready) throw new Error("진단기가 연결되어 있지 않습니다.");
-        return this.driver.request(step);
+        return D.withSessionFallback((s) => this.driver.request(s), step, this.driver.bus);
       });
     }
 

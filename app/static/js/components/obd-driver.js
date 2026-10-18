@@ -5,6 +5,8 @@
 // - STN(OBDLink 등): ELM327 호환 + STPX로 주소·데이터를 한 번에 보낸다
 // - slcan(Lawicel 방식 원시 CAN 어댑터: CANable, ESP32·nRF BLE-CAN 등): ISO-TP를 직접 처리한다
 // 기본 세션에서 읽기만 한다. 진단 세션(10)·보안 접근(27)·쓰기(2E)·루틴(31)은 계획에 없고 여기서도 만들지 않는다.
+// 예외(2026-10-18 대표 결정): 고장코드 지우기 계획(scanner/clear.py)의 session_fallback 단계에서 14 FF FF FF가
+// NRC 7F(현재 세션에서 지원 안 함)로 거부되면 그 제어기에만 10 03 → 14 FF FF FF → 10 01을 보낸다(withSessionFallback).
 ((root, factory) => {
   const node = typeof module === "object" && module.exports;
   const api = factory(node ? require("./obd-plan.js") : root.WecarObdPlan);
@@ -75,7 +77,7 @@
   }
 
   // 단말기 오류·응답 대기(NRC 78)·사용 중(NRC 21)이면 한 번씩 복구해 다시 보낸다(obd-plan.js의 recovery 판정).
-  async function withRecovery(driver, send, command, timeoutMs) {
+  async function withRecovery(driver, send, command, timeoutMs, retries = PENDING_RETRIES) {
     let reply = await send(command, timeoutMs);
     const action = P.recovery(reply, driver.bus, command);
     if (action === "stopped") {
@@ -90,11 +92,12 @@
     } else if (action === "pending") {
       await driver.send("ATSTFF");
       try {
-        for (let i = 0; i < PENDING_RETRIES && P.recovery(reply, driver.bus, command) === "pending"; i += 1) {
+        for (let i = 0; i < retries && P.recovery(reply, driver.bus, command) === "pending"; i += 1) {
           reply = await send(command, Math.max(timeoutMs || 0, PENDING_TIMEOUT_MS));
         }
       } finally {
         await driver.send("ATST32");
+        driver.st = null;
       }
     } else if (action === "busy") {
       await sleep(BUSY_DELAY_MS);
@@ -152,6 +155,7 @@
       }
       if (!answered) throw new Error("진단기가 초기화 명령에 답하지 않습니다.");
       this.header = null;
+      this.st = null;
     }
 
     async info() {
@@ -169,6 +173,7 @@
 
     reset() {
       this.header = null;
+      this.st = null;
     }
 
     async target(header) {
@@ -177,8 +182,16 @@
       this.header = header;
     }
 
+    // 단계별 ECU 대기 시간(ATST, 4ms 단위 16진). 제어기 순회는 짧게(19=100ms), 끝나면 기본(32=200ms).
+    async waitTime(st) {
+      const want = st || null;
+      if (want === (this.st || null)) return;
+      await this.send(`ATST${want || "32"}`);
+      this.st = want;
+    }
+
     // 계획 단계 하나. header가 없으면 기능(브로드캐스트) 주소로 보낸다.
-    async request({ header = null, command, timeoutMs }) {
+    async request({ header = null, command, timeoutMs, st = null, pendingRetries }) {
       if (/^(AT|ST)/.test(command)) {
         const reply = await this.send(command, timeoutMs);
         if (command === "ATDPN") this.bus = P.busOf(reply) || this.bus;
@@ -186,7 +199,8 @@
       }
       const want = header || (this.header ? P.BROADCAST[this.bus] || "7DF" : null);
       if (want) await this.target(want);
-      return withRecovery(this, (c, t) => this.send(c, t), command, timeoutMs);
+      await this.waitTime(st);
+      return withRecovery(this, (c, t) => this.send(c, t), command, timeoutMs, pendingRetries ?? PENDING_RETRIES);
     }
 
     async close() {}
@@ -216,15 +230,18 @@
     }
 
     async request(step) {
-      const { header = null, command, timeoutMs } = step;
+      const { header = null, command, timeoutMs, st = null } = step;
+      const retries = step.pendingRetries ?? PENDING_RETRIES;
       if (!this.stpx || /^(AT|ST)/.test(command)) return super.request(step);
       if (!header) {
         await this._filter(null);
-        return withRecovery(this, (c, t) => this.send(c, t), command, timeoutMs);
+        return withRecovery(this, (c, t) => this.send(c, t), command, timeoutMs, retries);
       }
       await this._filter(header);
-      const send = (c, t) => this.send(`STPX h:${header}, d:${c}, t:${t || 2000}`, (t || 2000) + 500);
-      const reply = await withRecovery(this, send, command, timeoutMs);
+      // STPX t:는 이 요청의 응답 대기(ms). 제어기 순회(st)는 짧게 기다린다.
+      const wait = (t) => (st && t === timeoutMs ? parseInt(st, 16) * 4 : t || 2000);
+      const send = (c, t) => this.send(`STPX h:${header}, d:${c}, t:${wait(t)}`, wait(t) + 500);
+      const reply = await withRecovery(this, send, command, timeoutMs, retries);
       if (clean(reply) !== "?") return reply;
       this.stpx = false;
       this.filter = null;
@@ -450,16 +467,22 @@
       return lines.length ? lines.join("\r") : "NO DATA";
     }
 
-    async request({ header = null, command, timeoutMs }) {
+    async request({ header = null, command, timeoutMs, st = null, pendingRetries }) {
       if (command === "ATDPN") return this.bus ? `A${PROTOCOL_CODE[`${this.bitrate}:${this.bus}`]}` : "";
       if (!this.supports(command)) return "?";
       if (!this.bus && !(await this._findBus())) return "NO DATA";
       const target = header || P.BROADCAST[this.bus];
-      const send = async () => this.collect(target, bytesOf(command), timeoutMs || 2000);
+      // 제어기 순회(st)는 첫 응답을 짧게 기다린다(ISO-TP 연속 프레임은 collect가 이어서 받는다).
+      const first = st ? Math.max(150, parseInt(st, 16) * 4 * 2) : timeoutMs || 2000;
+      const send = async (t = first) => this.collect(target, bytesOf(command), t);
       let reply = await send();
       if (P.recovery(reply, this.bus, command) === "busy") {
         await sleep(BUSY_DELAY_MS);
         reply = await send();
+      }
+      for (let i = 0; i < (pendingRetries ?? PENDING_RETRIES) && P.recovery(reply, this.bus, command) === "pending";
+        i += 1) {
+        reply = await send(Math.max(timeoutMs || 0, PENDING_TIMEOUT_MS));
       }
       return reply;
     }
@@ -471,6 +494,26 @@
   }
 
   const DRIVERS = { elm327: ElmDriver, stn: StnDriver, slcan: SlcanDriver };
+
+  // 고장코드 지우기 단계(session_fallback): 14 FF FF FF가 NRC 7F(현재 세션에서 지원 안 함)면
+  // 그 제어기에만 10 03 → 14 FF FF FF → 10 01. 10 01은 실패해도 반드시 보낸다. 모든 응답을 이어 붙여 돌려준다.
+  async function withSessionFallback(request, step, bus) {
+    const reply = await request(step);
+    const service = parseInt(String(step.command).slice(0, 2), 16);
+    const rejected = P.messages(reply, bus);
+    const notInSession = [...rejected.values()].flat()
+      .some((p) => p[0] === 0x7f && p[1] === service && p[2] === 0x7f);
+    if (!step.session_fallback || step.group !== "clear" || !step.header || !notInSession) return reply;
+    const plain = { ...step, session_fallback: false };
+    const replies = [reply];
+    try {
+      replies.push(await request({ ...plain, command: "1003", pendingRetries: 2 }));
+      replies.push(await request(plain));
+    } finally {
+      replies.push(await request({ ...plain, command: "1001", pendingRetries: 2 }));
+    }
+    return replies.filter(Boolean).join("\r");
+  }
 
   function create(dialect, write) {
     return new (DRIVERS[dialect] || ElmDriver)(write);
@@ -501,7 +544,7 @@
   }
 
   return {
-    DIALECTS, FORMAT_COMMANDS, PENDING_TIMEOUT_MS, clean, Port, ElmDriver, StnDriver, SlcanDriver, create, identify,
+    DIALECTS, FORMAT_COMMANDS, PENDING_TIMEOUT_MS, clean, withSessionFallback, Port, ElmDriver, StnDriver, SlcanDriver, create, identify,
     parseSlcan, slcanFrame, segment, answers, requestIdFor,
   };
 });

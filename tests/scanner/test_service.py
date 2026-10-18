@@ -379,12 +379,11 @@ def test_bad_steps_are_rejected(bad):
         service.clean_steps(bad)
 
 
-def test_clear_commands_only_when_confirmed(app):
+def test_read_plan_never_clears(app):
+    """2026-10-18: 지우기는 scanner/clear.py의 별도 흐름으로만. 읽기 계획에는 04·14·10이 없다."""
     with app.app_context():
-        plain = {s["command"] for s in build_plan(AVANTE)["steps"]}
-        confirmed = {s["command"] for s in build_plan(AVANTE, clear=True)["steps"]}
-    assert "04" not in plain and "14FFFFFF" not in plain
-    assert {"04", "14FFFFFF"} <= confirmed
+        commands = {s["command"] for s in build_plan(AVANTE)["steps"]}
+    assert not commands & {"04", "14FFFFFF", "1003", "1001"}
 
 
 def test_wescan_report_and_learned_command(app, admin):

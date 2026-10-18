@@ -536,6 +536,51 @@ def iumpr(info: str, payloads: list[bytes]) -> dict | None:
 
 
 # UDS 22 제어기 식별 DID(ISO 14229 부록 C)
+# ---- 실주행거리(누적) 제조사 DID ---------------------------------------------
+# 위카 앱 dev(obd_parser.dart parseOdometer·parseRange, e118ae4)와 같은 후보 순서로 읽는다.
+# 2026-10-18 대표 결정: 22 1050·22 B00x 값은 실주행거리(누적, km)로 본다. 바이트 배치는 실차 검증 전이다.
+ODOMETER_DIDS = ("1050", "B002", "B004", "B001", "B003")
+ODOMETER_MAX_KM = 2_000_000
+
+
+def _in_range(candidates: list[int]) -> int | None:
+    return next((v for v in candidates if 0 < v <= ODOMETER_MAX_KM), None)
+
+
+def _tail(d: bytes) -> int | None:
+    """parseRange 클러스터 방식: 끝 3·2바이트(빅·리틀 엔디안)."""
+    if len(d) < 2:
+        return None
+    candidates = []
+    if len(d) >= 3:
+        candidates += [int.from_bytes(d[-3:], "big"), int.from_bytes(d[-3:], "little")]
+    candidates += [int.from_bytes(d[-2:], "big"), int.from_bytes(d[-2:], "little")]
+    return _in_range(candidates)
+
+
+def maker_odometer(did: str, data: bytes) -> int | None:
+    """'62 DID' 다음 데이터 → km. 범위(0~2,000,000 km)에 드는 첫 후보."""
+    did = did.upper()
+    if did == "1050" and data:
+        return _in_range([int.from_bytes(data[:3], "big"), int.from_bytes(data[:2], "big")])
+    if did == "B002":
+        if len(data) >= 9:
+            raw = [int.from_bytes(data[6:9], "big"), int.from_bytes(data[6:9], "little"),
+                   int.from_bytes(data[7:9], "big"), int.from_bytes(data[7:9], "little")]
+            for divisor in (1, 10, 100):
+                if (found := next((v / divisor for v in raw if 0 < v / divisor <= ODOMETER_MAX_KM), None)):
+                    return round(found)
+        return _tail(data)
+    if did in ("B004", "B001") and data:
+        b = (data + bytes(4))[:4]
+        return _in_range([int.from_bytes(b[:2], "little"), int.from_bytes(b[:2], "big"),
+                          int.from_bytes(b[:3], "big"), int.from_bytes(b[:3], "little"),
+                          int.from_bytes(b, "big"), int.from_bytes(b, "little")])
+    if did == "B003":
+        return _tail(data)
+    return None
+
+
 ECU_IDENT_DIDS = {"F187": ("part_no", "부품번호"), "F195": ("sw_version", "소프트웨어 버전")}
 
 

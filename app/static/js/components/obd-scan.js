@@ -173,6 +173,8 @@
       const started = performance.now();
       const ctx = P.newContext();
       const tally = { ok: 0, failed: 0, skipped: 0 };
+      // 제어기 순회 진행(주소 수 기준). 응답한 제어기 수를 함께 보여 준다.
+      const sweep = { total: steps.filter((s) => s.sweep && s.probe).length, done: 0, answered: 0 };
       const finish = (record) => {
         results.push(record);
         if (record.error === "skipped") tally.skipped += 1;
@@ -183,7 +185,12 @@
       };
       for (const [index, step] of steps.entries()) {
         bar.value = Math.round((index / steps.length) * 100);
-        scanStatus.textContent = `${index + 1}/${steps.length} ${step.label} 읽는 중…`;
+        if (step.sweep) {
+          if (step.probe) sweep.done += 1;
+          scanStatus.textContent = `제어기 순회 ${sweep.done}/${sweep.total} (응답 ${sweep.answered}) · ${step.label}`;
+        } else {
+          scanStatus.textContent = `${index + 1}/${steps.length} ${step.label} 읽는 중…`;
+        }
         const base = { ...step, reply: null, error: null, reason: null, tMs: Math.round(performance.now() - started) };
         delete base.expand;
         delete base.pids;
@@ -211,7 +218,11 @@
           }
           if (!record.error) {
             try {
-              const reply = await link.request({ header: target, command: item.command, timeoutMs: step.timeout });
+              if (step.delay_ms) await new Promise((r) => setTimeout(r, step.delay_ms));
+              const reply = await link.request({
+                header: target, command: item.command, timeoutMs: step.timeout, st: step.st || null,
+                pendingRetries: step.pending_retries, session_fallback: step.session_fallback, group: step.group,
+              });
               record.tMs = Math.round(performance.now() - started);
               if (reply.trim()) record.reply = reply;
               else record.error = link.ready ? "timeout" : "disconnected";
@@ -220,6 +231,7 @@
             }
           }
           P.observe(step, item.command, record.reply, ctx);
+          if (step.sweep && step.probe && record.reply && !/NO DATA|CAN ERROR|UNABLE/i.test(record.reply)) sweep.answered += 1;
           if (step.probe && target && !record.reply) ctx.dead.add(target);
           if (item.command === "ATDPN" && ctx.bus) link.rememberProtocol(record.reply);
           finish(record);
@@ -248,8 +260,6 @@
 
     async function scan() {
       if (state.running) return;
-      const clearBox = root.querySelector("[data-scan-clear]");
-      if (clearBox?.checked && !window.confirm("고장코드를 지웁니다. 확인한 경우에만 지우기 명령을 보냅니다.")) return;
       if (!link.ready) {
         stage("connect", true);
         notice.textContent = "진단기 연결이 끊겼습니다. 다시 연결한 뒤 '조회 없이 스캔 계속' 또는 '스캔하기'를 누르세요.";
@@ -274,8 +284,8 @@
       let clientError = null;
       try {
         scanStatus.textContent = "스캔 계획을 받는 중…";
-        const clear = Boolean(root.querySelector("[data-scan-clear]")?.checked);
-        const plan = await post(config.planUrl, { car: state.car, clear });
+        // 고장코드 지우기는 저장한 스캔의 결과 화면에서 따로 한다(읽기 스캔은 지우지 않음).
+        const plan = await post(config.planUrl, { car: state.car });
         await runPlan(plan.steps, results);
       } catch (error) {
         clientError = `${results.length ? `${results.length}번째 단계 뒤 ` : ""}스캔이 중단되었습니다: ${error.message}`;

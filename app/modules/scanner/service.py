@@ -37,7 +37,7 @@ from app.modules.scans import car_info
 from app.modules.scans.models import Code, Scan, ScanCode, ScanDocument, ScanType
 
 TRANSPORTS = {"ble": "블루투스(BLE)", "serial": "블루투스 클래식·USB(시리얼)", "wifi": "WiFi", "lte": "LTE 단말기"}
-MAX_STEPS = 400
+MAX_STEPS = 600  # 제어기 순회(최대 59개 주소 × 19 02·19 04)로 단계가 늘었다
 MAX_REPLY = 4000
 _COMMAND = re.compile(r"^(AT[A-Z0-9 ]{1,12}|([0-9A-F]{2}){1,8})$")
 _HEADER = re.compile(r"^[0-9A-F]{3}([0-9A-F]{5})?$")

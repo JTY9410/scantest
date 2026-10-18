@@ -130,6 +130,40 @@ class MakerScanCommand(db.Model):
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))
 
 
+class DtcClearLog(db.Model):
+    """고장코드 지우기 기록(감사). 계획을 발급할 때 'issued'로 만들고, 결과를 받으면 상태를 바꾼다.
+
+    token_hash: 1회용 계획 토큰의 SHA-256. 결과 저장은 같은 사용자·같은 스캔·유효시간 안에 한 번만.
+    status: issued → ok | partial | failed | aborted, 또는 시간이 지나면 expired.
+    """
+
+    __tablename__ = "dtc_clear_logs"
+    __table_args__ = (
+        CheckConstraint("status IN ('issued', 'ok', 'partial', 'failed', 'aborted', 'expired')",
+                        name="status_valid"),
+        Index("ix_dtc_clear_logs_scan_id", "scan_id"),
+        Index("ix_dtc_clear_logs_user_id", "user_id"),
+        Index("ix_dtc_clear_logs_created_at", "created_at"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    scan_id: Mapped[int] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    ip: Mapped[str] = mapped_column(String(45), default="")
+    source: Mapped[str] = mapped_column(String(10))  # web | app
+    car_no: Mapped[str | None] = mapped_column(String(20))
+    vin: Mapped[str | None] = mapped_column(String(32))
+    status: Mapped[str] = mapped_column(String(10), default="issued")
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    targets: Mapped[list] = mapped_column(JSON, default=list)
+    dtcs_before: Mapped[list] = mapped_column(JSON, default=list)
+    result: Mapped[dict | None] = mapped_column(JSON)
+    steps: Mapped[list | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class ScanCode(TimestampMixin, SoftDeleteMixin, db.Model):
     __tablename__ = "scan_codes"
     __table_args__ = (CheckConstraint("type IN ('ev', 'ice')", name="type_valid"),)

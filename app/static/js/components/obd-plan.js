@@ -141,8 +141,13 @@
     return nrc(0x21) && !positive ? "busy" : null;
   }
 
+  // 14 FF FF FF 응답에 긍정(54)이 있는지. 없으면(거부·무응답) 04 대체 지우기를 보낸다.
+  function clearAnswered(reply, bus) {
+    return payloads(reply, bus).some((p) => p[0] === 0x54);
+  }
+
   function newContext() {
-    return { bus: null, dead: new Set(), support: {}, dtcCount: null, dtcs: {} };
+    return { bus: null, dead: new Set(), support: {}, dtcCount: null, dtcs: {}, speed: null, clearFailed: false };
   }
 
   // 이 차량에서 쓸 요청 주소. 29비트 CAN은 header29, 없으면 null(보내지 않음).
@@ -160,6 +165,10 @@
     const header = headerFor(step, ctx);
     if (header && ctx.dead.has(header)) return `${header} 제어기가 응답하지 않아 건너뛰었습니다.`;
     const when = step.when || {};
+    if (step.group === "clear" && ctx.speed) return `차가 움직이고 있어(차속 ${ctx.speed} km/h) 지우지 않았습니다.`;
+    if (when.clear_fallback && !when.obd_dtcs && !ctx.clearFailed) {
+      return "모든 제어기가 14 FF FF FF로 지워졌고 OBD 고장코드가 없어 04는 보내지 않았습니다.";
+    }
     if (when.dtc && ctx.dtcCount === 0) return "저장된 고장코드가 없어 건너뛰었습니다.";
     for (const [key, service] of Object.entries(WHEN_SERVICE)) {
       if (when[key] === undefined) continue;
@@ -198,6 +207,7 @@
 
   // 응답을 받은 뒤 다음 단계 판단에 쓸 값을 모은다.
   function observe(step, command, reply, ctx) {
+    if (command === "14FFFFFF" && step.group === "clear" && !reply) ctx.clearFailed = true;
     if (!reply) return;
     if (command === "ATDPN") ctx.bus = busOf(reply);
     const range = SUPPORT_RANGE.exec(command);
@@ -211,10 +221,18 @@
       if (found.size) ctx.support["02"] = found;
     }
     if (command === "0101") ctx.dtcCount = dtcCount(reply, ctx.bus);
+    if (command === "010D" && step.group === "clear_check") {
+      const p = payloads(reply, ctx.bus).find((x) => x[0] === 0x41 && x[1] === 0x0d && x.length > 2);
+      ctx.speed = p ? p[2] : null;
+    }
     const header = headerFor(step, ctx);
+    if (command === "14FFFFFF" && step.group === "clear" && !clearAnswered(reply, ctx.bus)) ctx.clearFailed = true;
     if (command === "1902FF" && header) ctx.dtcs[header] = confirmedDtcs(reply, ctx.bus);
     if (step.probe && header && /NO DATA|CAN ERROR|UNABLE/i.test(reply)) ctx.dead.add(header);
   }
+
+  // 응답 주소가 요청+8이 아닌 제어기(위카 앱 dev 순회 목록). 앱 obd_plan.dart에도 같은 표를 둔다.
+  const REPLY_OVERRIDE = { "717": "71D" };
 
   // 요청 주소 설정 명령. 29비트는 우선순위(ATCP)와 나머지 3바이트(ATSH), 수신 필터는 응답 주소(ATCRA).
   function headerCommands(header, bus) {
@@ -224,10 +242,10 @@
       const reply = header.startsWith("18DA") ? `18DA${header.slice(6)}${header.slice(4, 6)}` : null;
       return [`ATCP${header.slice(0, 2)}`, `ATSH${header.slice(2)}`, broadcast || !reply ? "ATCRA" : `ATCRA${reply}`];
     }
-    const reply = hex(parseInt(header, 16) + 8, 3);
+    const reply = REPLY_OVERRIDE[header] || hex(parseInt(header, 16) + 8, 3);
     return [`ATSH${header}`, broadcast || bus === "serial" ? "ATCRA" : `ATCRA${reply}`];
   }
 
-  return { BROADCAST, BATCH, spaced, frames, messages, bitmap, dtcCount, confirmedDtcs, busOf, recovery, newContext,
+  return { BROADCAST, BATCH, REPLY_OVERRIDE, clearAnswered, spaced, frames, messages, bitmap, dtcCount, confirmedDtcs, busOf, recovery, newContext,
     headerFor, skipReason, requests, observe, headerCommands };
 });

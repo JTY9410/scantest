@@ -16,7 +16,10 @@ INFO_STATUSES = {"ok", "unsupported", "skipped", "pending"}
 BROADCAST = {"can11": "7DF", "can29": "18DB33F1"}
 REFERENCE_CONFIDENCE = 0.5
 CELL_RANGE = (1.5, 4.6)
-_ECU_LABEL = re.compile(r" (?:차대번호|고장코드|고장 당시|부품번호|소프트웨어 버전|BMS 배터리)")
+_ECU_LABEL = re.compile(r" (?:차대번호|고장코드|고장 당시|부품번호|소프트웨어 버전|BMS 배터리|실주행거리)")
+# 실주행거리 제조사 DID 우선순위(위카 앱 dev getClusterRange 순서). 표준 01 A6이 있으면 그것을 쓴다.
+ODOMETER_SOURCES = (("7E5", "1050"), ("7C6", "B002"), ("7C6", "B004"), ("7C6", "B001"), ("7C6", "B003"))
+ODOMETER_MISMATCH = 0.05
 # 같은 고장코드를 여러 서비스로 읽었을 때 대표로 보여 줄 종류 순서
 KIND_ORDER = ("현재", "확정", "영구", "대기", "기록")
 PRIMARY_ECU = "7E8"
@@ -194,6 +197,7 @@ def interpret(steps: list[dict], rules: list, record: str, car: dict | None = No
     ecu_names: list[str] = []
     ecus: dict[str, dict] = {}
     freeze: dict[str, Any] = {"dtc": None, "values": []}
+    odometers: dict[tuple[str, str], int] = {}
 
     for step in steps:
         command = (step.get("command") or "").upper()
@@ -287,6 +291,10 @@ def interpret(steps: list[dict], rules: list, record: str, car: dict | None = No
         elif command == "22F190":
             if vin := obd.vin_from(command, first):
                 vins.setdefault(vin, f"{step.get('header')} 22 F190")
+        elif service == 0x22 and command[2:] in obd.ODOMETER_DIDS and step.get("header"):
+            for payloads in outcome.positive.values():
+                if (km := obd.maker_odometer(command[2:], payloads[0][3:])) is not None:
+                    odometers.setdefault((str(step["header"]).upper(), command[2:]), km)
         elif service == 0x22 and command[2:] in obd.ECU_IDENT_DIDS:
             field_name = obd.ECU_IDENT_DIDS[command[2:]][0]
             for ecu, payloads in outcome.positive.items():
@@ -316,6 +324,21 @@ def interpret(steps: list[dict], rules: list, record: str, car: dict | None = No
     values = list(ecu_values.get(primary, {}).values())
     other_values = [{"ecu": a, "label": (ecus.get(a) or {}).get("label"), "values": list(v.values())}
                     for a, v in ecu_values.items() if a != primary and v]
+    notes_extra: list[str] = []
+    if odometers and not any(v["key"] == "odometer" for v in values):
+        source = next((k for k in ODOMETER_SOURCES if k in odometers), None)
+        cluster = next((k for k in ODOMETER_SOURCES[1:] if k in odometers), None)
+        if source and source[1] == "1050" and cluster:
+            bms, clu = odometers[source], odometers[cluster]
+            if abs(bms - clu) > max(100, clu * ODOMETER_MISMATCH):
+                notes_extra.append(f"실주행거리: 7E5 22 1050({bms:,} km)과 계기판 22 {cluster[1]}({clu:,} km)이 달라 "
+                                   "계기판 값을 썼습니다. 실차 확인이 필요합니다.")
+                source = cluster
+        if source:
+            values.append({"key": "odometer", "label": "누적 주행거리(실주행거리)", "unit": "km",
+                           "value": odometers[source], "source": f"{source[0]} 22 {source[1]}",
+                           "reference": True})
+            notes_extra.append(f"누적 주행거리는 제조사 DID {source[0]} 22 {source[1]}의 미검증 해석입니다(표준 01 A6 없음).")
     monitor = None
     if readiness:
         main = readiness.get(primary) or next(iter(readiness.values()))
@@ -329,7 +352,7 @@ def interpret(steps: list[dict], rules: list, record: str, car: dict | None = No
     errors = [r for r in rows if r["status"] not in INFO_STATUSES]
     answered = any(r["status"] == "ok" for r in obd_rows)
     status = "failed" if not answered else ("partial" if errors else "ok")
-    notes = [DOIP_NOTE]
+    notes = [DOIP_NOTE, *notes_extra]
     if bus == "serial":
         notes.append("K-Line·J1850 차량이라 UDS(CAN) 조회는 하지 않았습니다.")
     if any(v.get("reference") for v in battery.values()):

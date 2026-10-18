@@ -16,15 +16,15 @@ KONA = {"diag_company": "현대", "diag_model": "코나 일렉트릭", "diag_yea
 AVANTE = {"diag_company": "현대", "diag_model": "아반떼", "diag_year": "2019", "diag_fuel": "휘발유"}
 
 
-def test_plan_includes_wecar_commands_and_gates_clear(app):
+def test_plan_has_wecar_reads_sweep_and_no_clear(app):
     with app.app_context():
-        plain = {(s["header"], s["command"]) for s in build_plan(KONA)["steps"]}
-        cleared = {(s["header"], s["command"]) for s in build_plan(KONA, clear=True)["steps"]}
-    assert (None, "ATSH7E0") in plain and (None, "ATSH7E4") in plain and (None, "1902FFFFFF") in plain
+        steps = build_plan(KONA)["steps"]
+    plain = {(s["header"], s["command"]) for s in steps}
     assert (None, "03") in plain and (None, "0902") in plain and ("7E4", "220101") in plain
-    assert (None, "04") not in plain and (None, "14FFFFFF") not in plain
-    assert {(None, "04"), (None, "14FFFFFF")} <= cleared
-    assert not any(cmd[:2] in {"10", "27", "2E", "31"} for _, cmd in cleared if not cmd.startswith("AT"))
+    assert ("7C6", "22B002") in plain and ("7E5", "221050") in plain
+    assert ("7A0", "1902FF") in plain and ("797", "1902FF") in plain
+    assert not any(cmd.startswith("ATSH") or cmd == "1902FFFFFF" for _, cmd in plain)
+    assert not any(cmd[:2] in {"04", "14", "10", "27", "2E", "31"} for _, cmd in plain if not cmd.startswith("AT"))
 
 
 def test_remember_only_successful_reads_and_prefers_model(app, admin):

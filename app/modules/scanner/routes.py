@@ -8,7 +8,7 @@ from app.core.errors import ServiceError
 from app.extensions import db
 from app.modules.auth.access import admin_required
 from app.modules.canlab.service import obd_config
-from app.modules.scanner import analysis, service
+from app.modules.scanner import analysis, clear_service, service
 from app.modules.scanner.obd import SYSTEMS
 from app.modules.scanner.plan import build_plan
 from app.modules.scans import car_info
@@ -57,9 +57,9 @@ def lookup():
 @bp.post("/plan")
 @admin_required
 def plan():
-    body = _body()
-    car = body.get("car")
-    return build_plan(car if isinstance(car, dict) else None, expand=True, clear=bool(body.get("clear")))
+    # 고장코드 지우기는 읽기 계획에 넣지 않는다(POST /admin/scan/<id>/clear-plan, scanner/clear.py).
+    car = _body().get("car")
+    return build_plan(car if isinstance(car, dict) else None, expand=True)
 
 
 @bp.post("/run")
@@ -95,3 +95,31 @@ def pdf(scan_id: int):
     document = service.scan_document(get_visible_scan(current_user, scan_id))
     return send_file(BytesIO(document.content), mimetype="application/pdf", as_attachment=True,
                      download_name=document.filename, max_age=0)
+
+
+@bp.post("/<int:scan_id>/clear-plan")
+@admin_required
+def clear_plan(scan_id: int):
+    """고장코드 지우기 계획(1회용). 확인 창의 차량번호·상태 확인이 필요하다."""
+    data = _body()
+    try:
+        scan = get_visible_scan(current_user, scan_id)
+        return clear_service.issue(current_user, scan, car_no=data.get("carNo"), conditions=data.get("conditions"),
+                                   source="web")
+    except ServiceError as error:
+        db.session.rollback()
+        return {"message": error.message}, error.status
+
+
+@bp.post("/<int:scan_id>/clear")
+@admin_required
+def clear_save(scan_id: int):
+    data = _body()
+    try:
+        scan = get_visible_scan(current_user, scan_id)
+        log = clear_service.save(current_user, scan, token=data.get("token"), steps=data.get("steps"))
+    except ServiceError as error:
+        db.session.rollback()
+        return {"message": error.message}, error.status
+    return {"id": log.id, "status": log.status, "result": log.result}, 201
+

@@ -4,6 +4,11 @@
 - UDS(ISO 14229): 기능 주소로 19 02 09·19 02 04·19 15(위카 앱과 같음), ECU 주소마다 VIN(22 F190),
   고장코드(19 02 FF), 고장 당시 데이터(19 04), 부품번호(22 F187), 소프트웨어 버전(22 F195).
   진단 세션 변경(10)·보안 접근(27)·쓰기(2E)·루틴(31)은 보내지 않는다(기본 세션에서 읽기만).
+- 제어기 순회(기본 스캔, 2026-10-18 대표 결정): 위카 앱 dev의 ECU 목록(공통 35쌍, 전동차·연료 미상은 32쌍 추가) 중
+  위에서 보내지 않은 주소마다 19 02 FF 한 번(응답 없으면 바로 다음 주소). 짧은 대기(ATST19≈100ms)와 1초 시간 제한.
+- 실주행거리(누적, 2026-10-18 대표 결정): 표준 01 A6이 기본, 현대·기아는 계기판 7C6 22 B002·B004·B001·B003,
+  전동차는 7E5 22 1050도 읽는다(위카 앱 dev getClusterRange와 같은 명령, 해석은 obd.maker_odometer).
+- 고장코드 지우기는 읽기 계획에 넣지 않는다. scanner/clear.py의 별도 계획(권한·확인·감사기록)으로만 보낸다.
 - 제조사별: 현대·기아·제네시스 전기·하이브리드 BMS(7E4) 22 0101/0105와 구형 KWP 21 01/05,
   OBDb 정의가 있는 차종은 셀 전압 DID도 읽는다.
 - CAN 분석에서 적용한 스캔 로직의 명령과 규칙의 요청도 함께 보낸다.
@@ -42,20 +47,31 @@ SNAPSHOT_LIMIT = 3
 DOIP_NOTE = "이더넷 진단(DoIP, ISO 13400)은 전용 장비가 필요해 이 스캔에서는 조회하지 않습니다."
 INFO09 = (("02", "차대번호(VIN)"), ("04", "소프트웨어 보정 ID"), ("06", "보정 검증 번호(CVN)"),
           ("0A", "ECU 이름"), ("08", "주행 중 진단 실행 비율(가솔린)"), ("0B", "주행 중 진단 실행 비율(디젤)"))
-# 위스캔 앱(obd_commands.dart, 793889c)의 활성 명령 중 계획에 아직 없는 것.
-# 지우기(04, 14FFFFFF)는 clear=True일 때만 넣는다. 세션(10)·보안(27)·쓰기(2E)·루틴(31)은 넣지 않는다.
-WECAR_STEPS = (
-    ("송신 헤더 브로드캐스트", "ATSH7DF", None, None),
-    ("송신 헤더 엔진", "ATSH7E0", None, None),
-    ("송신 헤더 변속기", "ATSH7E1", None, None),
-    ("송신 헤더 ABS", "ATSH7E2", None, None),
-    ("송신 헤더 배터리", "ATSH7E4", None, None),
-    ("송신 헤더 모터", "ATSH7E5", None, None),
-    ("송신 헤더 통합전력", "ATSH7E6", None, None),
-    ("송신 헤더 차량충전", "ATSH7E7", None, None),
-    ("송신 헤더 엔진 응답", "ATSH7E8", None, None),
-    ("확인된 모든 고장코드(19 02 FF FF FF)", "1902FFFFFF", None, "can"),
+# 위카 앱 main(793889c) 콘솔 프리셋(ATSH7DF~7E8, 1902FFFFFF)은 넣지 않는다.
+# - ATSH 단독 단계: 드라이버가 단계마다 주소를 정하므로 응답이 없고, 드라이버가 기억한 주소와 실제 주소가 어긋난다.
+#   ATSH7E8은 엔진의 '응답' 주소라 요청 주소로 쓰면 안 된다.
+# - 1902FFFFFF: 19 02의 인자는 상태 마스크 1바이트라 길이 오류(NRC 13)다. 같은 내용은 190209·1902FF로 이미 읽는다.
+
+# 제어기 순회 목록: 위카 앱 dev(ble_connect_service.dart, e118ae4) commonPairs·evExtraPairs 그대로.
+# 응답 주소는 요청+8, 717만 71D(obd-plan.js REPLY_OVERRIDE). 벤츠 목록은 앱에서도 꺼져 있어 넣지 않는다.
+SWEEP_COMMON = (
+    "7A0", "7A1", "7A2", "7A3", "7A4", "7A5", "7A6", "7A7",
+    "7B0", "7B1", "7B2", "7B3", "7B4", "7B5", "7B6", "7B7",
+    "7C0", "7C1", "7C2", "7C3", "7C4", "7C5", "7C6",
+    "7D0", "7D1", "7D2", "7D3", "7D4", "7D5", "7D6", "7D7",
+    "7E0", "7E1", "7E2", "7E4",
 )
+SWEEP_EV = (
+    "7E3", "7E5", "7E6", "7E7", "5E0", "5E2", "5A6",
+    "700", "701", "703", "705", "706", "707", "717", "725",
+    "730", "731", "733", "735", "736", "741", "743", "744",
+    "760", "761", "762", "766", "770", "777", "781", "795", "797",
+)
+SWEEP_TIMEOUT_MS = 1000
+SWEEP_ST = "19"  # ELM327 ATST 단위 4ms → 0x19 = 100ms. 응답 없는 제어기를 빨리 넘긴다.
+# 실주행거리(누적) DID. 위카 앱 dev getClusterRange 순서.
+CLUSTER_ODO_DIDS = ("B002", "B004", "B001", "B003")
+BMS_ODO_DID = "1050"
 _BLOCKED = {"10", "27", "2E", "31"}
 _FOREIGN_OBDB = {"TESLA", "AUDI", "BMW", "LEXUS"}
 
@@ -78,7 +94,24 @@ def _is_hkmc_electrified(car: dict | None) -> bool:
     return _is_hkmc(car) and any(f.upper() in fuel for f in ELECTRIFIED)
 
 
-def build_plan(car: dict | None = None, *, expand: bool = False, clear: bool = False) -> dict:
+def _is_electrified(car: dict | None) -> bool:
+    """전기·하이브리드·수소. 연료를 모르면(조회 실패 등) 전동차일 수 있다고 본다."""
+    fuel = str((car or {}).get("diag_fuel") or "").upper()
+    return not fuel or any(f.upper() in fuel for f in ELECTRIFIED)
+
+
+def sweep_headers(car: dict | None, skip: set[str] | None = None, learned: list[dict] | None = None) -> list[str]:
+    """제어기 순회 주소. 이전 스캔에서 응답한 주소(learned)를 앞에 두고, 이미 계획한 주소(skip)는 뺀다."""
+    headers = list(SWEEP_COMMON) + (list(SWEEP_EV) if _is_electrified(car) else [])
+    headers = [h for h in dict.fromkeys(headers) if h not in (skip or set())]
+    hits: dict[str, int] = {}
+    for item in learned or []:
+        if item.get("header") in headers:
+            hits[item["header"]] = max(hits.get(item["header"], 0), int(item.get("hits") or 0))
+    return sorted(headers, key=lambda h: (-hits.get(h, 0), headers.index(h)))
+
+
+def build_plan(car: dict | None = None, *, expand: bool = False) -> dict:
     """steps: {id, group, label, header, header29, command, timeout, optional, probe, bus, when, expand…}
 
     header가 없으면 OBD 기본 주소(브로드캐스트)로 보낸다. probe는 그 ECU의 첫 명령이고,
@@ -137,6 +170,15 @@ def build_plan(car: dict | None = None, *, expand: bool = False, clear: bool = F
     add("uds", "전체 제어기 대기 고장코드(19 02 04)", "190204", timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
     add("uds", "전체 제어기 영구 고장코드(19 15)", "1915", timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
 
+    if _is_hkmc(car):
+        # 실주행거리. 7C6의 22F190(응답 확인) 단계보다 먼저 보내 F190에 답하지 않는 계기판도 읽는다.
+        for did in CLUSTER_ODO_DIDS:
+            add("maker", f"계기판(CLU) 실주행거리(22 {did})", f"22{did}", header="7C6",
+                timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
+        if _is_electrified(car):
+            add("maker", f"모터·BMS 실주행거리(22 {BMS_ODO_DID})", f"22{BMS_ODO_DID}", header="7E5",
+                timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
+
     ecus = dict(UDS_ECUS)
     if _is_hkmc(car):
         ecus.update(HKMC_ECUS)
@@ -166,19 +208,19 @@ def build_plan(car: dict | None = None, *, expand: bool = False, clear: bool = F
             add("maker", f"OBDb {repo} (22 {did})", f"22{did}", header=header,
                 timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
 
-    for label, command, header, bus in WECAR_STEPS:
-        add("wecar", label, command, header=header, optional=True, bus=bus,
-            timeout=UDS_TIMEOUT_MS if bus else DEFAULT_TIMEOUT_MS)
-
-    if clear:
-        # 위스캔 앱의 지우기 명령. 사용자가 확인했을 때만 계획에 넣는다.
-        add("clear", "고장코드 지우기(04)", "04", optional=True)
-        add("clear", "UDS 고장코드 지우기(14 FF FF FF)", "14FFFFFF", timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
-
-    planned = {(s["header"], s["command"]) for s in steps}
     from app.modules.scanner.learn import learned_requests
 
-    for request in learned_requests(car):
+    learned = learned_requests(car)
+    for header in sweep_headers(car, {s["header"] for s in steps if s["header"]}, learned):
+        common = {"header": header, "timeout": SWEEP_TIMEOUT_MS, "optional": True, "bus": "can",
+                  "sweep": True, "st": SWEEP_ST}
+        add("uds", f"제어기 {header} 고장코드(19 02)", "1902FF", probe=True, **common)
+        if expand:
+            add("uds", f"제어기 {header} 고장 당시 데이터(19 04)", "1904", expand="dtcs", limit=SNAPSHOT_LIMIT,
+                **common)
+
+    planned = {(s["header"], s["command"]) for s in steps}
+    for request in learned:
         header = request["header"]
         if _blocked(request["command"]) or (header, request["command"]) in planned:
             continue
