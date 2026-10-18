@@ -1,7 +1,7 @@
 """지식베이스 조회·검증·스캔 연결."""
 import json
 import re
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 
 from app.core.time import utcnow
 from app.extensions import db
@@ -167,12 +167,58 @@ def formula_names() -> dict[str, str]:
 
 
 def lookup_dtcs(codes: set[str]) -> dict[str, KnowledgeDTC]:
-    """검증된 고장코드 명칭. 스캔 설명은 진단코드 마스터가 비어 있을 때 이걸 쓴다."""
+    """검증된 고장코드 명칭. 초안은 스캔 설명에 쓰지 않는다."""
     if not codes:
         return {}
     rows = db.session.scalars(select(KnowledgeDTC).where(
         KnowledgeDTC.code.in_(codes), KnowledgeDTC.status == "verified"))
     return {row.code: row for row in rows}
+
+
+_UNKNOWN_DTC = "공개된 설명이 없습니다. 역분석 또는 관리자 확인 전입니다."
+
+
+def inventory() -> dict[str, list[dict] | int]:
+    """명령·수식·고장코드·용어를 출처와 상태별 건수로 모은다."""
+    def grouped(model) -> list[dict]:
+        rows = db.session.execute(
+            select(model.source, model.status, func.count()).group_by(model.source, model.status)
+            .order_by(model.source, model.status))
+        return [{"source": source, "status": status, "count": count} for source, status, count in rows]
+
+    maker_dtcs = db.session.scalar(select(func.count()).select_from(KnowledgeDTC).where(
+        KnowledgeDTC.maker.is_not(None))) or 0
+    return {"commands": grouped(KnowledgeCommand), "formulas": grouped(KnowledgeFormula),
+            "dtcs": grouped(KnowledgeDTC), "terms": grouped(KnowledgeTerm), "maker_dtcs": maker_dtcs}
+
+
+def remember_unknown_dtcs(maker: str | None, codes: list[str]) -> int:
+    """설명 없는 고장코드를 제조사 초안으로만 남긴다. 뜻을 만들지 않는다."""
+    maker_name = (maker or "").strip() or None
+    added = 0
+    seen = set()
+    for raw in codes:
+        code = str(raw or "").upper()[:5]
+        if len(code) != 5 or code in seen:
+            continue
+        seen.add(code)
+        verified = db.session.scalar(select(KnowledgeDTC.id).where(
+            KnowledgeDTC.code == code, KnowledgeDTC.status == "verified"))
+        if verified is not None:
+            continue
+        existing = db.session.scalar(select(KnowledgeDTC.id).where(
+            KnowledgeDTC.code == code,
+            KnowledgeDTC.maker == maker_name if maker_name else KnowledgeDTC.maker.is_(None),
+            KnowledgeDTC.status == "draft"))
+        if existing is not None:
+            continue
+        db.session.add(KnowledgeDTC(
+            code=code, maker=maker_name, description=_UNKNOWN_DTC, source="manual",
+            source_detail="스캔에서 설명 없이 발견", status="draft", confidence=0))
+        added += 1
+    if added:
+        db.session.flush()
+    return added
 
 
 def _command_row(maker, model, header, command) -> KnowledgeCommand | None:

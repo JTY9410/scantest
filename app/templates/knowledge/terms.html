@@ -1,0 +1,28 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge, empty %}
+{% block title %}지식베이스 - 용어{% endblock %}
+
+{% block content %}
+{{ page_header("지식베이스: 용어", "OBD와 CAN 통신에서 쓰는 용어입니다.", back=(url_for('knowledge.overview'), "지식 현황")) }}
+
+<section class="card overflow-hidden" aria-label="용어 목록">
+  {% if items %}
+  <table class="rtable">
+    <thead><tr><th scope="col">용어</th><th scope="col">설명</th><th scope="col">분류</th><th scope="col">출처</th><th scope="col">상태</th></tr></thead>
+    <tbody>
+      {% for item in items %}
+      <tr>
+        <td data-primary class="font-semibold">{{ item.term }}</td>
+        <td data-label="설명">{{ item.definition }}</td>
+        <td data-label="분류">{{ item.category or "-" }}</td>
+        <td data-label="출처">{{ badge(item.source, "info") }}</td>
+        <td data-label="상태">{{ badge("검증됨" if item.status == "verified" else item.status, "success" if item.status == "verified" else "warning") }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("용어가 없습니다.") }}
+  {% endif %}
+</section>
+{% endblock %}

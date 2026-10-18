@@ -1,0 +1,45 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, empty %}
+{% block title %}지식 현황{% endblock %}
+
+{% macro counts(title, rows, href) %}
+<section class="card overflow-hidden" aria-labelledby="{{ title }}">
+  <div class="card-body pb-0 flex items-center justify-between gap-3">
+    <h2 id="{{ title }}" class="text-lg font-bold">{{ title }}</h2>
+    <a class="text-sm underline" href="{{ href }}">목록</a>
+  </div>
+  {% if rows %}
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">출처</th><th scope="col">상태</th><th scope="col" class="num">건수</th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td data-primary>{{ row.source }}</td>
+        <td data-label="상태">{{ status_label.get(row.status, row.status) }}</td>
+        <td data-label="건수" class="num tabular-nums">{{ row.count }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  {{ empty("아직 없습니다.") }}
+  {% endif %}
+</section>
+{% endmacro %}
+
+{% block content %}
+{{ page_header("지식 현황", "검증된 공개 표준과 역분석 결과만 다음 스캔에 씁니다. 초안은 스캔 설명에 붙지 않습니다.") }}
+
+<section class="card card-body mb-6">
+  <h2 class="text-lg font-bold">제조사 고장코드</h2>
+  <p class="mt-2 text-sm">제조사가 적힌 고장코드 {{ inventory.maker_dtcs }}건.
+    {% if inventory.maker_dtcs %}검증되기 전에는 스캔 화면에 뜻을 보이지 않습니다.{% else %}역분석 또는 관리자 입력 대기입니다. 공개 문서에 없는 코드는 뜻을 만들지 않습니다.{% endif %}</p>
+</section>
+
+<div class="grid gap-6 lg:grid-cols-2">
+  {{ counts("명령", inventory.commands, url_for('knowledge.commands')) }}
+  {{ counts("수식", inventory.formulas, url_for('knowledge.formulas')) }}
+  {{ counts("고장코드", inventory.dtcs, url_for('knowledge.dtcs')) }}
+  {{ counts("용어", inventory.terms, url_for('knowledge.terms')) }}
+</div>
+{% endblock %}

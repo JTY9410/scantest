@@ -206,6 +206,8 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     logic = active_logic(car or None)
     _check_logic(result, logic, car or None)
     matched = _describe(result["dtcs"])
+    from app.modules.knowledge.service import remember_unknown_dtcs
+    remember_unknown_dtcs(car.get("diag_company"), [d["code"] for d in result["dtcs"] if not d.get("desc")])
     if result["vin"] and car.get("diag_car_id"):
         result["vin_match"] = result["vin"] == str(car["diag_car_id"]).upper()
 

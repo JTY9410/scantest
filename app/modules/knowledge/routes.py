@@ -8,6 +8,15 @@ from app.modules.knowledge import importer, service
 
 bp = Blueprint("knowledge", __name__, url_prefix="/admin/knowledge")
 
+_STATUS = {"verified": "검증됨", "draft": "초안", "deprecated": "폐기됨"}
+
+
+@bp.get("/")
+@admin_required
+def overview():
+    """출처·상태별 지식 건수."""
+    return render_template("knowledge/overview.html", inventory=service.inventory(), status_label=_STATUS)
+
 
 @bp.get("/commands")
 @admin_required

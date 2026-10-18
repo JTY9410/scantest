@@ -12,6 +12,7 @@
     ("적용 중 규칙", stats.active_rules ~ " / " ~ stats.signals ~ "개 신호", url_for('canlab.rules')),
     ("역산 실행", stats.runs, url_for('canlab.analysis')),
     ("운영 결과지", stats.reports, url_for('canlab.reports')),
+    ("지식 현황", stats.kb_commands, url_for('knowledge.overview')),
     ("지식베이스 명령어", stats.kb_commands, url_for('knowledge.commands')),
     ("지식베이스 공식", stats.kb_formulas, url_for('knowledge.formulas')),
   ] %}

@@ -366,22 +366,30 @@
   {% endif %}
 </section>
 
-<details class="card mt-6 overflow-hidden">
-  <summary class="card-body cursor-pointer font-bold">전체 단계 {{ result.steps|length }}개</summary>
-  <table class="rtable">
-    <thead><tr><th scope="col">단계</th><th scope="col">명령</th><th scope="col">상태</th><th scope="col">내용</th></tr></thead>
-    <tbody>
-      {% for s in result.steps %}
-      <tr>
-        <td data-primary>{{ s.label }}</td>
-        <td data-label="명령" class="mono">{{ s.header or "" }} {{ s.command or "-" }}</td>
-        <td data-label="상태">{{ status_badge(s.status, s.status_label) }}</td>
-        <td data-label="내용" class="text-sm">{{ s.message }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</details>
+<section class="mt-6 grid gap-3" aria-label="전체 단계">
+  <h2 class="text-lg font-bold">전체 단계 {{ result.steps|length }}개</h2>
+  {% for group in step_groups %}
+  <details class="card overflow-hidden" {% if group.fails %}open{% endif %}>
+    <summary class="card-body cursor-pointer font-bold">{{ group.header }} · {{ group.steps|length }}단계
+      {% if group.fails %}{{ badge("실패 " ~ group.fails, "danger") }}{% else %}{{ badge("실패 없음", "success") }}{% endif %}</summary>
+    <table class="rtable">
+      <thead><tr><th scope="col">시각</th><th scope="col">명령</th><th scope="col">상태</th><th scope="col">응답 요약</th></tr></thead>
+      <tbody>
+        {% for s in group.steps %}
+        <tr>
+          <td data-primary class="tabular-nums">{% if s.t_ms is number %}{{ s.t_ms }} ms{% else %}-{% endif %}</td>
+          <td data-label="명령"><span class="font-semibold">{{ s.label }}</span> <span class="mono text-sm">{{ s.command or "-" }}</span></td>
+          <td data-label="상태">{{ status_badge(s.status, s.status_label) }}</td>
+          <td data-label="응답 요약" class="text-sm">{{ s.message }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% else %}
+  {{ empty("저장된 단계가 없습니다.") }}
+  {% endfor %}
+</section>
 
 {% if result.notes %}
 <ul class="mt-6 grid list-disc gap-1 pl-5 text-sm text-muted">

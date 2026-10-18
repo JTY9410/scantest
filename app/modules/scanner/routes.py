@@ -86,7 +86,8 @@ def result(scan_id: int):
     scan = get_visible_scan(current_user, scan_id)
     result = service.scan_result(scan)
     return render_template("scanner/result.html", scan=scan, result=result, summary=analysis.summarize(result),
-                           systems=SYSTEMS, transports=service.TRANSPORTS)
+                           systems=SYSTEMS, transports=service.TRANSPORTS,
+                           step_groups=analysis.group_steps(result.get("steps")))
 
 
 @bp.get("/<int:scan_id>/pdf")

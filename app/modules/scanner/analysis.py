@@ -87,6 +87,22 @@ def _checks(result: dict) -> list[str]:
     return warnings
 
 
+_QUIET = {"ok", "unsupported", "skipped", "pending"}
+
+
+def group_steps(steps: list[dict] | None) -> list[dict]:
+    """같은 주소의 단계를 묶고, 실패가 많은 제어기를 앞에 둔다."""
+    groups: dict[str, list[dict]] = {}
+    for step in steps or []:
+        groups.setdefault(str(step.get("header") or "기본"), []).append(step)
+
+    def fails(rows: list[dict]) -> int:
+        return sum(1 for step in rows if step.get("status") not in _QUIET)
+
+    ordered = sorted(groups.items(), key=lambda item: (-fails(item[1]), item[0]))
+    return [{"header": header, "steps": rows, "fails": fails(rows)} for header, rows in ordered]
+
+
 def summarize(result: dict) -> dict:
     monitor = result.get("monitor") or {}
     tests = monitor.get("tests") or []

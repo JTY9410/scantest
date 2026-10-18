@@ -7,6 +7,7 @@ from app.extensions import db
 from app.modules.accounts.models import User
 from app.modules.scanner.learn import learned_requests, remember
 from app.modules.scanner.plan import build_plan
+from app.modules.scanner.analysis import group_steps
 from app.modules.scanner.report import basic_report
 from app.modules.scans.models import MakerScanCommand, Scan
 
@@ -70,6 +71,17 @@ def test_remember_caps_at_forty(app, admin):
     count = db.session.scalar(select(func.count()).select_from(MakerScanCommand).where(
         MakerScanCommand.model == "코나 일렉트릭"))
     assert count == 40
+
+
+def test_group_steps_puts_failures_first():
+    groups = group_steps([
+        {"header": "7E0", "status": "ok", "command": "010C"},
+        {"header": "7E4", "status": "no_data", "command": "220101"},
+        {"header": "7E4", "status": "ok", "command": "22F190"},
+        {"header": None, "status": "timeout", "command": "03"},
+    ])
+    assert [g["header"] for g in groups] == ["7E4", "기본", "7E0"]
+    assert groups[0]["fails"] == 1 and groups[1]["fails"] == 1 and len(groups[0]["steps"]) == 2
 
 
 def test_basic_report_shape(app):

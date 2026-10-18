@@ -38,3 +38,17 @@ def test_ai_fill_saves_public_dtc_only(app, make_user, monkeypatch):
     assert result["saved"] == 1 and result["skipped"] == 1
     assert row.desc == "임의 실화" and hidden is None
     assert draft is not None and draft.status == "draft"
+
+
+def test_unknown_maker_dtc_stays_draft_and_off_the_scan(app):
+    from app.modules.knowledge.service import remember_unknown_dtcs
+    from app.modules.scanner.service import _describe
+
+    with app.app_context():
+        assert remember_unknown_dtcs("기아", ["P1A00"]) == 1
+        assert remember_unknown_dtcs("기아", ["P1A00"]) == 0
+        row = db.session.scalar(select(KnowledgeDTC).where(KnowledgeDTC.code == "P1A00"))
+        described = [{"code": "P1A00"}]
+        _describe(described)
+    assert row.maker == "기아" and row.status == "draft"
+    assert described[0]["desc"] is None
