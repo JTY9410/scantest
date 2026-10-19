@@ -60,6 +60,17 @@ def register_cli(app: Flask) -> None:
             f"새로 넣은 고장코드 {stats['dtcs']}건, 용어 {stats['terms']}건"
         )
 
+    @app.cli.command("import-dtc-catalog")
+    def import_dtc_catalog() -> None:
+        """제조사별 DTC 설명 엑셀을 지식베이스에 초안으로 넣는다."""
+        from app.modules.knowledge.dtc_catalog import import_dtc_catalog as load
+
+        stats = load()
+        click.echo(
+            f"문서 {stats['sheet']}건 중 새로 넣은 고장코드 {stats['dtcs']}건, "
+            f"유지 {stats['kept']}건, 저장 {stats['saved']}건"
+        )
+
     @app.cli.command("import-wecar-app")
     def import_wecar_app() -> None:
         """위카 앱의 전기차 읽기 명령을 지식베이스에 넣는다."""
