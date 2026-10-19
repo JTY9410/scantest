@@ -71,6 +71,17 @@ def register_cli(app: Flask) -> None:
             f"유지 {stats['kept']}건, 저장 {stats['saved']}건"
         )
 
+    @app.cli.command("import-dtc-global")
+    def import_dtc_global() -> None:
+        """EV·ICE 표준 고장코드 엑셀에서 없는 코드만 보강한다."""
+        from app.modules.knowledge.dtc_global import import_dtc_global as load
+
+        stats = load()
+        click.echo(
+            f"문서 {stats['sheet']}건 중 지식 {stats['dtcs']}건·마스터 {stats['codes']}건 추가, "
+            f"기존 유지 {stats['skipped']}건, 빈 설명 채움 {stats['filled']}건"
+        )
+
     @app.cli.command("import-wecar-app")
     def import_wecar_app() -> None:
         """위카 앱의 전기차 읽기 명령을 지식베이스에 넣는다."""
