@@ -32,7 +32,18 @@
   <button type="submit" class="btn btn-primary">검색</button>
 </form>
 
-<section class="card overflow-hidden" aria-label="진단코드 목록">
+<section class="card card-body mb-4">
+  <h2 class="text-lg font-bold">전체 현황</h2>
+  <p class="mt-1 text-sm text-muted">등록된 진단코드 {{ totals.all }}건 · 전기차 {{ totals.ev }} · 내연기관 {{ totals.ice }}</p>
+  <div class="mt-3 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="차종">
+    <a class="btn {{ 'btn-primary' if not code_type else 'btn-secondary' }} shrink-0" href="{{ url_for('catalog.codes', q=q) }}">전체 {{ totals.all }}</a>
+    <a class="btn {{ 'btn-primary' if code_type == 'ev' else 'btn-secondary' }} shrink-0" href="{{ url_for('catalog.codes', type='ev', q=q) }}">전기차 {{ totals.ev }}</a>
+    <a class="btn {{ 'btn-primary' if code_type == 'ice' else 'btn-secondary' }} shrink-0" href="{{ url_for('catalog.codes', type='ice', q=q) }}">내연기관 {{ totals.ice }}</a>
+  </div>
+</section>
+
+<section class="card" aria-label="진단코드 목록">
+  <div class="table-scroll">
   {% if page.items %}
   <table class="rtable">
     <thead><tr><th scope="col">고장코드</th><th scope="col">차종</th><th scope="col">유니트</th><th scope="col">설명</th><th scope="col"><span class="sr-only">관리</span></th></tr></thead>
@@ -55,5 +66,6 @@
   {% else %}
   {{ empty("조건에 맞는 진단코드가 없습니다.") }}
   {% endif %}
+  </div>
 </section>
 {% endblock %}

@@ -35,26 +35,26 @@
   </form>
 </section>
 
-<section class="card mb-6">
-  <form method="get" class="flex gap-4 items-end">
+<section class="card card-body mb-6">
+  <h2 class="text-lg font-bold">전체 현황</h2>
+  <p class="mt-1 text-sm text-muted">등록된 진단 명령 {{ totals.all }}건 · 검증됨 {{ totals.verified }} · 초안 {{ totals.draft }} · 폐기됨 {{ totals.deprecated }}</p>
+  <div class="mt-3 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="상태">
+    {% for value, label, count in [("all", "전체", totals.all), ("verified", "검증됨", totals.verified), ("draft", "초안", totals.draft), ("deprecated", "폐기됨", totals.deprecated)] %}
+    <a class="btn {{ 'btn-primary' if status == value else 'btn-secondary' }} shrink-0" href="{{ url_for('knowledge.commands', status=value, maker=maker) }}">{{ label }} {{ count }}</a>
+    {% endfor %}
+  </div>
+  <form method="get" class="mt-4 flex gap-4 items-end">
+    <input type="hidden" name="status" value="{{ status }}">
     <div class="field flex-1">
       <label for="maker" class="field-label">제조사</label>
       <input id="maker" name="maker" type="search" value="{{ maker }}" class="input" placeholder="예: 현대">
-    </div>
-    <div class="field">
-      <label for="status" class="field-label">상태</label>
-      <select id="status" name="status" class="input">
-        <option value="all" {% if status == "all" %}selected{% endif %}>전체</option>
-        <option value="verified" {% if status == "verified" %}selected{% endif %}>검증됨</option>
-        <option value="draft" {% if status == "draft" %}selected{% endif %}>초안</option>
-        <option value="deprecated" {% if status == "deprecated" %}selected{% endif %}>폐기됨</option>
-      </select>
     </div>
     <button type="submit" class="btn btn-primary">검색</button>
   </form>
 </section>
 
-<section class="card overflow-hidden" aria-label="명령어 목록">
+<section class="card" aria-label="명령어 목록">
+  <div class="table-scroll">
   {% if items %}
   <table class="rtable">
     <thead>
@@ -94,7 +94,7 @@
           {% else %}
             {{ badge("폐기됨", "") }}
           {% endif %}
-          <form method="post" action="{{ url_for('knowledge.save_command') }}" class="mt-2 grid gap-2">
+          <form method="post" action="{{ url_for('knowledge.save_command') }}" class="mt-2 flex w-max gap-2">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="id" value="{{ item.id }}">
             <input name="command" value="{{ item.command }}" class="input" required>
@@ -124,6 +124,7 @@
   {% else %}
   {{ empty("명령어가 없습니다.") }}
   {% endif %}
+  </div>
 </section>
 
 <script type="module">

@@ -5,7 +5,7 @@ import re
 from typing import Any
 
 from flask import current_app
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 
 from app.core import audit
 from app.core.errors import ServiceError
@@ -73,6 +73,14 @@ def save_company(actor: User, data: dict[str, Any], company: Company | None = No
         return company
     _apply(actor, company, COMPANY_FIELDS, data, "Company", "회사 수정")
     return company
+
+
+def code_totals() -> dict[str, int]:
+    """삭제되지 않은 진단코드를 차종별로 센다."""
+    rows = db.session.execute(select(Code.type, func.count()).where(
+        Code.deleted_at.is_(None)).group_by(Code.type))
+    counts = {kind: count for kind, count in rows}
+    return {"all": sum(counts.values()), "ev": counts.get("ev", 0), "ice": counts.get("ice", 0)}
 
 
 def search_codes(q: str, code_type: str, page: int) -> Page:

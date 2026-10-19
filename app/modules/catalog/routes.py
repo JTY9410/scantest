@@ -43,7 +43,7 @@ def codes():
     code_type = request.args.get("type", "")
     page = service.search_codes(q, code_type, clamp_page(request.args.get("page")))
     return render_template("catalog/codes.html", page=page, q=q, code_type=code_type,
-                           types=list(ScanType))
+                           types=list(ScanType), totals=service.code_totals())
 
 
 @bp.post("/codes/fill")

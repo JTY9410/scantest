@@ -250,6 +250,21 @@ def inventory() -> dict[str, list[dict] | int]:
             "dtcs": grouped(KnowledgeDTC), "terms": grouped(KnowledgeTerm), "maker_dtcs": maker_dtcs}
 
 
+def status_totals(kind: str, maker: str | None = None) -> dict[str, int]:
+    """화면 필터와 상관없이 상태별 전체 건수를 센다."""
+    model = KnowledgeCommand if kind == "command" else KnowledgeDTC
+    stmt = select(model.status, func.count()).group_by(model.status)
+    if maker:
+        stmt = stmt.where(model.maker == maker)
+    counts = {status: count for status, count in db.session.execute(stmt)}
+    return {
+        "all": sum(counts.values()),
+        "verified": counts.get("verified", 0),
+        "draft": counts.get("draft", 0),
+        "deprecated": counts.get("deprecated", 0),
+    }
+
+
 def _blocked_command(command: str) -> bool:
     compact = re.sub(r"\s+", "", command or "").upper()
     return compact[:2] in _BLOCKED or compact in {"04", "14FFFFFF"}

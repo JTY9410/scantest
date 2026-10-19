@@ -271,6 +271,13 @@
     text-align: right;
     font-variant-numeric: tabular-nums;
   }
+  .table-scroll {
+    max-height: 70vh;
+    overflow: auto;
+  }
+  .table-scroll .rtable {
+    min-width: 72rem;
+  }
   @media (max-width: 767.98px) {
     .rtable thead {
       position: absolute;
@@ -320,6 +327,27 @@
     .rtable .num {
       text-align: right;
     }
+    .table-scroll .rtable thead {
+      position: static;
+      width: auto;
+      height: auto;
+      overflow: visible;
+      clip: auto;
+    }
+    .table-scroll .rtable,
+    .table-scroll .rtable tbody,
+    .table-scroll .rtable tr,
+    .table-scroll .rtable td,
+    .table-scroll .rtable th {
+      display: revert;
+    }
+    .table-scroll .rtable { display: table; }
+    .table-scroll .rtable thead { display: table-header-group; }
+    .table-scroll .rtable tbody { display: table-row-group; }
+    .table-scroll .rtable tr { display: table-row; padding: 0; border-top: 0; }
+    .table-scroll .rtable td,
+    .table-scroll .rtable th { display: table-cell; text-align: left; }
+    .table-scroll .rtable td::before { content: none; }
   }
 
   /* 툴팁: hover(포인터)·focus·클릭/터치로 열리고 Escape로 닫힌다. 동작은 js/app.js */

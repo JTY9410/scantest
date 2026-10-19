@@ -25,7 +25,9 @@ def commands():
     status = request.args.get("status", "all")
     maker = request.args.get("maker", "").strip()[:50] or None
     items = service.command_views(status=None if status == "all" else status, maker=maker)
-    return render_template("knowledge/commands.html", items=items, status=status, maker=maker or "")
+    return render_template(
+        "knowledge/commands.html", items=items, status=status, maker=maker or "",
+        totals=service.status_totals("command", maker))
 
 
 @bp.get("/formulas")
@@ -45,7 +47,9 @@ def dtcs():
     status = request.args.get("status", "all")
     maker = request.args.get("maker", "").strip()[:50] or None
     items = service.list_dtcs(status=None if status == "all" else status, maker=maker)
-    return render_template("knowledge/dtcs.html", items=items, status=status, maker=maker or "")
+    return render_template(
+        "knowledge/dtcs.html", items=items, status=status, maker=maker or "",
+        totals=service.status_totals("dtc", maker))
 
 
 @bp.get("/terms")
