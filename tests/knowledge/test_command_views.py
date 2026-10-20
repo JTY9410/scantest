@@ -4,7 +4,21 @@ from sqlalchemy import func, select
 
 from app.extensions import db
 from app.modules.knowledge.models import KnowledgeCommand, KnowledgeFormula
-from app.modules.knowledge.service import command_views, remember_observed_commands, save_command
+import pytest
+
+from app.core.errors import ServiceError
+from app.modules.knowledge.service import (
+    command_views, fit_linear, linear_formula, remember_observed_commands, save_command,
+)
+
+
+def test_linear_formula_from_two_points():
+    scale, offset = fit_linear(0, -48, 255, 143.2)
+    assert scale == pytest.approx(0.749804, abs=1e-4)
+    assert offset == pytest.approx(-48)
+    assert linear_formula(0, -48, 255, 143.2) == "A * 0.749804 - 48"
+    with pytest.raises(ServiceError):
+        fit_linear(1, 0, 1, 10)
 
 
 def test_command_view_lists_formula_after_the_command(app):
@@ -37,6 +51,7 @@ def test_commands_page_shows_collected_data(admin_client, app):
     assert "010C" in page and "수집:" in page and "((A * 256) + B) / 4" in page
     assert "진단 명령" in page and "지식 고장코드" in page
     assert "전체 현황" in page and "table-scroll" in page
+    assert "수식 만들기" in page and 'name="raw_a"' in page
 
 
 def test_save_command_updates_collected_formula(app):

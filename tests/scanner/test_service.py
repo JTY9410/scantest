@@ -153,7 +153,8 @@ def test_plan_has_freeze_cvn_and_app_uds_steps(app):
         steps = build_plan(AVANTE)["steps"]
     commands = [(s["header"], s["command"]) for s in steps]
     assert {(None, "0906"), (None, "020200"), (None, "020C00"), (None, "190209"), (None, "190204"),
-            (None, "1915"), ("7E0", "22F187"), ("7E0", "22F195")} <= set(commands)
+            (None, "1915"), ("7E0", "22F187"), ("7E0", "22F188"), ("7E0", "22F189"),
+            ("7E0", "22F18A"), ("7E0", "22F18C"), ("7E0", "22F195")} <= set(commands)
     assert all(s["group"] == "freeze" and s["optional"] for s in steps if s["command"].startswith("02"))
 
 

@@ -14,6 +14,23 @@ from app.modules.knowledge.models import (
 )
 
 
+def fit_linear(raw_a: float, value_a: float, raw_b: float, value_b: float) -> tuple[float, float]:
+    """두 점 (원시값, 표시값)으로 y = scale * x + offset을 구한다."""
+    if raw_a == raw_b:
+        raise ServiceError("원시값이 같으면 배율을 구할 수 없습니다.")
+    scale = (value_b - value_a) / (raw_b - raw_a)
+    return scale, value_a - scale * raw_a
+
+
+def linear_formula(raw_a: float, value_a: float, raw_b: float, value_b: float) -> str:
+    """진단 명령 수식 칸에 넣는 `A * 배율 ± 오프셋` 문장."""
+    scale, offset = fit_linear(raw_a, value_a, raw_b, value_b)
+    text = f"A * {scale:.6g}"
+    if offset:
+        text += f" + {offset:.6g}" if offset > 0 else f" - {abs(offset):.6g}"
+    return text
+
+
 def list_commands(*, status: str | None = "verified", maker: str | None = None, limit: int = 100):
     """명령 목록. 상태를 비우면 검증과 초안을 함께 보여 준다."""
     stmt = select(KnowledgeCommand).order_by(KnowledgeCommand.command)

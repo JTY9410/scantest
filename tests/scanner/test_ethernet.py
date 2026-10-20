@@ -53,7 +53,7 @@ def test_read_plan_is_public_reads_on_the_functional_address():
     steps = read_plan()
     commands = [step["command"] for step in steps]
     assert commands[:6] == ["0100", "0101", "03", "07", "0A", "0902"]
-    assert {"22F190", "1902FF", "22F187", "22F195"} <= set(commands)
+    assert {"22F190", "1902FF", "22F187", "22F188", "22F189", "22F18A", "22F18C", "22F195"} <= set(commands)
     assert all(step["header"] == f"{FUNCTIONAL:08X}" for step in steps)
     assert not any(command[:2] in {"10", "27", "2E", "31", "04", "14"} for command in commands)
 

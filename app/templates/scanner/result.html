@@ -215,7 +215,7 @@
       <tr>
         <td data-primary class="mono font-semibold">{{ d.code }}</td>
         <td data-label="시스템">{{ systems.get(d.system, d.system) }}</td>
-        <td data-label="상태">{% for kind in d.kinds or [d.kind] %}{{ badge(kind, "danger" if kind in ("현재", "확정") else "warning") }} {% endfor %}</td>
+        <td data-label="상태">{% for kind in d.kinds or [d.kind] %}{{ badge(kind, "danger" if kind in ("현재", "확정") else "warning") }} {% endfor %}{% if d.status_bits %}<span class="text-sm text-muted">{{ d.status_bits|join(", ") }}</span>{% endif %}</td>
         <td data-label="제어기" class="mono">{{ d.ecu }} <span class="text-sm text-muted">{{ (d.sources or [d.source])|join(", ") }}</span></td>
         <td data-label="설명" class="text-sm">
           <p class="font-semibold">{{ d.desc or "고장코드 마스터에 설명이 없습니다." }}</p>
@@ -327,7 +327,7 @@
       <tbody>
         {% for e in result.ecus %}
         <tr><td data-primary class="mono font-semibold">{{ e.address }}</td><td data-label="제어기">{{ e.label or "-" }}</td>
-          <td data-label="부품번호" class="mono text-sm">{{ e.part_no or "-" }}{% if e.sw_version %} · {{ e.sw_version }}{% endif %}</td>
+          <td data-label="부품번호" class="mono text-sm">{{ e.part_no or "-" }}{% if e.sw_number %} · {{ e.sw_number }}{% endif %}{% if e.sw_version_no %} · {{ e.sw_version_no }}{% endif %}{% if e.sw_version %} · {{ e.sw_version }}{% endif %}{% if e.supplier %} · {{ e.supplier }}{% endif %}{% if e.serial_no %} · {{ e.serial_no }}{% endif %}</td>
           <td data-label="서비스" class="mono">{{ e.services|join(", ") }}</td></tr>
         {% endfor %}
       </tbody>

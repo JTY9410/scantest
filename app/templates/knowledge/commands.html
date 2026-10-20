@@ -104,6 +104,11 @@
             <input name="detail_name" value="{{ item.detail_name or item.label or '' }}" class="input" placeholder="무엇을 읽는지">
             <textarea name="description" class="input" rows="2">{{ item.description or '' }}</textarea>
             <input name="formula" value="{{ view.data[0].formula if view.data else '' }}" class="input" placeholder="수집 수식. 예: ((A * 256) + B) / 4">
+            <input name="raw_a" inputmode="decimal" class="input w-24" placeholder="원시1" aria-label="원시값 1">
+            <input name="value_a" inputmode="decimal" class="input w-24" placeholder="표시1" aria-label="표시값 1">
+            <input name="raw_b" inputmode="decimal" class="input w-24" placeholder="원시2" aria-label="원시값 2">
+            <input name="value_b" inputmode="decimal" class="input w-24" placeholder="표시2" aria-label="표시값 2">
+            <button type="button" class="btn btn-sm btn-secondary shrink-0" data-fit>수식 만들기</button>
             <input name="unit" value="{{ view.data[0].unit or '' if view.data else '' }}" class="input" placeholder="단위">
             <select name="status" class="input">
               <option value="draft" {% if item.status == "draft" %}selected{% endif %}>초안</option>
@@ -142,5 +147,28 @@ async function verify(id, type) {
   }
 }
 window.verify = verify;
+</script>
+<script>
+document.querySelectorAll("[data-fit]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const form = button.closest("form");
+    const num = (name) => Number(form.elements[name].value);
+    const rawA = num("raw_a");
+    const valueA = num("value_a");
+    const rawB = num("raw_b");
+    const valueB = num("value_b");
+    const formula = form.elements.formula;
+    if (![rawA, valueA, rawB, valueB].every(Number.isFinite) || rawA === rawB) {
+      formula.setCustomValidity("원시값이 서로 달라야 합니다.");
+      formula.reportValidity();
+      return;
+    }
+    formula.setCustomValidity("");
+    const scale = (valueB - valueA) / (rawB - rawA);
+    const offset = valueA - scale * rawA;
+    const text = (value) => Number(value.toPrecision(6)).toString();
+    formula.value = offset ? `A * ${text(scale)} ${offset > 0 ? "+" : "-"} ${text(Math.abs(offset))}` : `A * ${text(scale)}`;
+  });
+});
 </script>
 {% endblock %}

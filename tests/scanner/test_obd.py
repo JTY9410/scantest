@@ -113,6 +113,9 @@ def test_uds_dtcs_and_systems():
     dtcs = obd.uds_dtcs(payload)
     assert [d["code"] for d in dtcs] == ["P0A7F00", "U012300"]
     assert dtcs[0]["active"] and dtcs[0]["confirmed"]
+    assert dtcs[0]["status_bits"] == ["현재", "확정"]
+    assert obd.dtc_status_labels(0xFF) == [
+        "현재", "이번 운행 실패", "대기", "확정", "삭제 후 미완료", "삭제 후 실패", "이번 운행 미완료", "경고등"]
     assert [obd.dtc_system(c) for c in ("P0301", "P0741", "C1234", "U0100", "B1000")] == [
         "engine", "transmission", "chassis", "network", "body"]
 

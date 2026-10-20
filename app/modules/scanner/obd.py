@@ -441,6 +441,23 @@ def obd_dtcs(payloads: list[bytes], bus: str | None) -> list[str]:
     return codes
 
 
+DTC_STATUS_BITS = (
+    (0x01, "현재"),
+    (0x02, "이번 운행 실패"),
+    (0x04, "대기"),
+    (0x08, "확정"),
+    (0x10, "삭제 후 미완료"),
+    (0x20, "삭제 후 실패"),
+    (0x40, "이번 운행 미완료"),
+    (0x80, "경고등"),
+)
+
+
+def dtc_status_labels(status: int) -> list[str]:
+    """ISO 14229 고장코드 상태 바이트에서 켜진 비트의 한글 이름."""
+    return [label for mask, label in DTC_STATUS_BITS if status & mask]
+
+
 def uds_dtcs(payload: bytes) -> list[dict]:
     """19 02(상태 마스크)·19 15(영구) 응답: 3바이트 DTC + 상태 바이트. 상태 bit0=현재, bit3=확정."""
     if len(payload) < 3 or payload[1] not in (0x02, 0x15):
@@ -450,7 +467,8 @@ def uds_dtcs(payload: bytes) -> list[dict]:
     for i in range(0, len(records) - 3, 4):
         b1, b2, b3, status = records[i : i + 4]
         result.append({"code": format_dtc(b1, b2, b3), "status": status,
-                       "confirmed": bool(status & 0x08), "active": bool(status & 0x01)})
+                       "confirmed": bool(status & 0x08), "active": bool(status & 0x01),
+                       "status_bits": dtc_status_labels(status)})
     return result
 
 
@@ -581,7 +599,14 @@ def maker_odometer(did: str, data: bytes) -> int | None:
     return None
 
 
-ECU_IDENT_DIDS = {"F187": ("part_no", "부품번호"), "F195": ("sw_version", "소프트웨어 버전")}
+ECU_IDENT_DIDS = {
+    "F187": ("part_no", "부품번호"),
+    "F188": ("sw_number", "소프트웨어 번호"),
+    "F189": ("sw_version_no", "소프트웨어 버전 번호"),
+    "F18A": ("supplier", "공급자"),
+    "F18C": ("serial_no", "일련번호"),
+    "F195": ("sw_version", "소프트웨어 버전"),
+}
 
 
 def ecu_ident(payload: bytes) -> str | None:

@@ -540,8 +540,10 @@ def merged_samples(dataset_ids: list[int]) -> Samples:
 
 
 def _layout(rule: DecodeRule) -> Layout:
+    evidence = rule.evidence or {}
     return Layout(int(rule.request_id, 16), int(rule.did, 16), rule.start, rule.width, rule.endian,
-                  rule.signed, rule.scale, rule.offset)
+                  rule.signed, rule.scale, rule.offset, int(evidence.get("bit_offset") or 0),
+                  int(evidence.get("bit_length") or 0), evidence.get("encoding") or "int")
 
 
 def _rule_fields(layout: Layout) -> dict:
@@ -569,11 +571,25 @@ def _next_revision(signal_key: str, maker: str | None, model: str | None) -> int
     return (current or 0) + 1
 
 
+def _layout_meta(layout: Layout) -> dict:
+    """비트 위치와 부동소수는 열을 늘리지 않고 근거 JSON에 남긴다."""
+    meta = {}
+    if layout.bit_offset:
+        meta["bit_offset"] = layout.bit_offset
+    if layout.bit_length:
+        meta["bit_length"] = layout.bit_length
+    if layout.encoding != "int":
+        meta["encoding"] = layout.encoding
+    return meta
+
+
 def _activate_layout(signal_key: str, layout: Layout, evidence: dict, confidence: float,
                      run_id: int | None, actor: User, maker: str | None = None,
                      model: str | None = None) -> tuple[DecodeRule, bool]:
     """그 범위에 수식을 적용한다. 같은 수식의 규칙이 있으면 그 버전을, 없으면 새 버전을 쓴다.
     기존 적용 규칙은 '이전 버전'이 된다. (규칙, 새로 적용했는지)를 돌려준다."""
+    evidence = dict(evidence)
+    evidence.update(_layout_meta(layout))
     rules = db.session.scalars(_exact(select(DecodeRule).where(DecodeRule.signal_key == signal_key),
                                       DecodeRule, maker, model)).all()
     same = next((r for r in rules if _layout(r) == layout), None)
@@ -635,11 +651,35 @@ def compare_commands(wescan: CanDataset, reverse: list[CanDataset]) -> dict[str,
 
 def decoder_code(signal_key: str, layout: Layout) -> str:
     """수식을 그대로 옮긴 Python 디코더. 화면에서 보여 주기만 하고 서버에서 실행하지 않는다."""
-    end = layout.start + layout.width
-    return (
+    name = re.sub(r"[^0-9a-zA-Z_]", "_", signal_key)
+    header = (
         f"# 요청: ATSH{layout.request_id:03X} → 22 {layout.did:04X}, 응답 62 {layout.did:04X} 뒤의 데이터(payload)\n"
-        f"def decode_{re.sub(r'[^0-9a-zA-Z_]', '_', signal_key)}(payload: bytes) -> float | None:\n"
+        f"def decode_{name}(payload: bytes) -> float | None:\n"
         f'    """{layout.formula()}"""\n'
+    )
+    if layout.encoding == "float32":
+        fmt = ">f" if layout.endian == "big" else "<f"
+        return header + (
+            "    import math\n    import struct\n"
+            f"    if len(payload) < {layout.start + 4}:\n"
+            f"        return None\n"
+            f"    raw = struct.unpack(\"{fmt}\", payload[{layout.start}:{layout.start + 4}])[0]\n"
+            f"    return None if not math.isfinite(raw) else round(raw, 6)\n"
+        )
+    if layout.bit_length:
+        span = (layout.bit_offset + layout.bit_length + 7) // 8
+        return header + (
+            f"    if len(payload) < {layout.start + span}:\n"
+            f"        return None\n"
+            f"    chunk = int.from_bytes(payload[{layout.start}:{layout.start + span}], \"big\")\n"
+            f"    shift = {span * 8 - layout.bit_offset - layout.bit_length}\n"
+            f"    raw = (chunk >> shift) & {(1 << layout.bit_length) - 1}\n"
+            f"    if {layout.signed} and raw >= {1 << (layout.bit_length - 1)}:\n"
+            f"        raw -= {1 << layout.bit_length}\n"
+            f"    return round(raw * {layout.scale!r} + {layout.offset!r}, 6)\n"
+        )
+    end = layout.start + layout.width
+    return header + (
         f"    if len(payload) < {end}:\n"
         f"        return None\n"
         f"    raw = int.from_bytes(payload[{layout.start}:{end}], \"{layout.endian}\", signed={layout.signed})\n"
