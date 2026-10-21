@@ -85,6 +85,19 @@ def list_dtcs(*, status: str | None = "verified", maker: str | None = None, limi
     return db.session.scalars(stmt).all()
 
 
+def page_dtcs(*, status: str | None = "verified", maker: str | None = None, page: int = 1,
+              per_page: int = 50):
+    """관리자 목록용 고장코드 페이지. 한 화면에 모두 넣지 않는다."""
+    from app.core.pagination import paginate
+
+    stmt = select(KnowledgeDTC).order_by(KnowledgeDTC.code)
+    if status:
+        stmt = stmt.where(KnowledgeDTC.status == status)
+    if maker:
+        stmt = stmt.where(or_(KnowledgeDTC.maker == maker, KnowledgeDTC.maker.is_(None)))
+    return paginate(stmt, page, per_page)
+
+
 def list_terms(*, status: str = "verified", limit: int = 500):
     """용어 목록."""
     stmt = select(KnowledgeTerm).where(KnowledgeTerm.status == status).order_by(KnowledgeTerm.term).limit(limit)

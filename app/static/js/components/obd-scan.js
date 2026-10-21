@@ -96,10 +96,11 @@
       if (state.running) return;
       if (link.ready) {
         state.needConnect = false;
-        notice.textContent = `진단기 연결됨(${link.info.name || "이름 없음"}). '스캔하기'를 누르세요.`;
+        notice.textContent = `진단기 자동 인식됨(${link.info.name || "이름 없음"}). '스캔하기'를 누르세요.`;
         stage("lookup");
       } else if (!state.needConnect) {
-        notice.textContent = "시동을 켜고 진단기를 연결한 뒤 '스캔하기'를 누르세요.";
+        notice.textContent = link.message
+          || "시동을 켜고 진단기를 OBD2 단자에 꽂아 두세요. 인식되면 '스캔하기'를 누르세요.";
         stage("connect");
       }
     }

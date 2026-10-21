@@ -1,5 +1,5 @@
 {% extends "layouts/admin.html" %}
-{% from "components/ui.html" import page_header, badge, empty %}
+{% from "components/ui.html" import page_header, badge, empty, pager %}
 {% block title %}지식베이스 - 고장코드{% endblock %}
 
 {% block content %}
@@ -64,7 +64,7 @@
 
 <section class="card" aria-label="고장코드 목록">
   <div class="table-scroll">
-  {% if items %}
+  {% if page.items %}
   <table class="rtable">
     <thead>
       <tr>
@@ -80,7 +80,7 @@
       </tr>
     </thead>
     <tbody>
-      {% for item in items %}
+      {% for item in page.items %}
       <tr>
         <td data-primary class="mono font-semibold">{{ item.code }}</td>
         <td>{{ item.detail_name or "-" }}</td>
@@ -123,6 +123,9 @@
       {% endfor %}
     </tbody>
   </table>
+  {% set args = {"status": status} %}
+  {% if maker %}{% do args.update({"maker": maker}) %}{% endif %}
+  {{ pager(page, "knowledge.dtcs", args) }}
   {% else %}
   {{ empty("고장코드가 없습니다.") }}
   {% endif %}

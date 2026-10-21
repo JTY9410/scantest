@@ -27,6 +27,8 @@
   const BLE_CHUNK = 20;
   const PROBE_MS = 3000;
   const RECONNECT_MS = 5000;
+  const WATCH_MS = 4000;
+  const MIN_IGNITION_V = 6;
   const CONNECT_TRIES = 3;
   const DEVICES_KEY = "wecar.obd.devices";
   const OLD_KEYS = { device: "wecar.obd.lastDevice", transport: "wecar.obd.transport", protocols: "wecar.obd.protocols" };
@@ -403,6 +405,12 @@
       this.owner = null;
       this._queue = Promise.resolve();
       this._session = 0;
+      this._watchTimer = null;
+      this._watchBusy = false;
+      this._onSerialConnect = (event) => this._plugIn(event.target);
+      this._onSerialDisconnect = () => {
+        if (this.state === "idle" || this.state === "waiting") this._emit(this.state, this.message);
+      };
       for (const transport of [this.ble, this.serial]) {
         transport.onText = (text) => {
           if (transport === this.active) this.driver?.feed(text);
@@ -426,6 +434,77 @@
 
     get ready() {
       return this.state === "ready";
+    }
+
+    _voltageOf(info) {
+      const volts = Number.parseFloat(String(info?.voltage || "").replace(/[^0-9.]/g, ""));
+      return Number.isFinite(volts) ? volts : null;
+    }
+
+    // USB·블루투스 시리얼이 꽂히거나, 기억한 BLE 진단기가 다시 보이면 자동으로 붙인다.
+    // 전압이 너무 낮으면(시동 OFF) 끊고 다시 감시한다.
+    startWatch() {
+      if (this._watchTimer) return;
+      if (this.serial.supported && navigator.serial?.addEventListener) {
+        navigator.serial.addEventListener("connect", this._onSerialConnect);
+        navigator.serial.addEventListener("disconnect", this._onSerialDisconnect);
+      }
+      this._watchTimer = setInterval(() => this._watchTick(), WATCH_MS);
+      this._watchTick();
+    }
+
+    stopWatch() {
+      if (this._watchTimer) {
+        clearInterval(this._watchTimer);
+        this._watchTimer = null;
+      }
+      navigator.serial?.removeEventListener?.("connect", this._onSerialConnect);
+      navigator.serial?.removeEventListener?.("disconnect", this._onSerialDisconnect);
+    }
+
+    async _plugIn(port) {
+      if (!port || this.ready || this.busy || this._watchBusy) return;
+      if (this.state === "searching" || this.state === "connecting") return;
+      this._watchBusy = true;
+      try {
+        this._emit("connecting", "OBD2 단자에 진단기가 연결됐습니다. 인식하는 중…");
+        await this._connect(this.serial, port);
+        await this._ensurePower();
+      } catch {
+        // 다음 감시 주기에서 다시 시도한다
+      } finally {
+        this._watchBusy = false;
+      }
+    }
+
+    async _ensurePower() {
+      if (!this.ready || !this.driver?.caps?.voltage) return true;
+      const volts = this._voltageOf(this.info);
+      if (volts === null || volts >= MIN_IGNITION_V) return true;
+      this._emit("waiting", `진단기는 인식됐지만 전압이 ${volts.toFixed(1)}V입니다. 시동을 ON으로 두세요.`);
+      await this._release();
+      this._emit("waiting", `진단기는 인식됐지만 전압이 ${volts.toFixed(1)}V입니다. 시동을 ON으로 두세요.`);
+      return false;
+    }
+
+    async _watchTick() {
+      if (this.ready || this.busy || this._watchBusy) return;
+      if (this.state === "searching" || this.state === "connecting") return;
+      this._watchBusy = true;
+      try {
+        const found = await this.autoConnect();
+        if (found && this.ready) await this._ensurePower();
+        else if (!found && (this.state === "idle" || this.state === "waiting")) {
+          const recent = Memory.list()[0];
+          this._emit(this.state === "waiting" ? "waiting" : "idle", recent
+            ? `시동을 켜고 '${recent.name}'을(를) OBD2 단자에 꽂아 두세요. 연결되면 자동으로 인식합니다.`
+            : "시동을 켜고 진단기를 OBD2 단자에 꽂아 두세요. 한 번 연결한 뒤에는 자동으로 인식합니다.");
+        }
+      } catch {
+        // 다음 주기에 다시 시도
+      } finally {
+        this._watchBusy = false;
+      }
     }
 
     get busy() {
@@ -507,7 +586,9 @@
         ...known, key, transport: transport.kind, id: target.id || null, name, dialect,
         chip: info.chip, version: info.version, ...transport.hint(), lastUsedAt: Date.now(),
       });
-      this._emit("ready", `${name} 연결됨 (${D.DIALECTS[dialect]})`);
+      const volts = this._voltageOf(info);
+      const power = volts === null ? "" : ` · 전압 ${volts.toFixed(1)}V`;
+      this._emit("ready", `${name} 자동 인식됨 (${D.DIALECTS[dialect]}${power})`);
       this._sync(this.entry);
       this.dispatchEvent(new CustomEvent("devices"));
     }
@@ -602,6 +683,7 @@
     }
 
     // 기억한 진단기를 최근에 쓴 순서로, 이 사이트가 허락받은 기기 중에서 찾아 버튼 없이 연결한다.
+    // 시리얼 포트가 하나뿐이면 기억 키가 달라도 그 포트로 붙인다(처음 꽂은 USB 어댑터).
     async autoConnect() {
       const bleDevices = this.ble.supported && navigator.bluetooth.getDevices
         ? await navigator.bluetooth.getDevices().catch(() => []) : [];
@@ -615,12 +697,17 @@
           }
         } else if (entry.transport === "serial") {
           const port = ports.find((p) => serialKey(p) === entry.key)
-            || (entry.key === "serial:" && ports.length === 1 ? ports[0] : null);
+            || (entry.key === "serial:" && ports.length === 1 ? ports[0] : null)
+            || (ports.length === 1 ? ports[0] : null);
           if (port) {
             await this._connect(this.serial, port).catch(() => {});
-            return true;
+            return this.ready;
           }
         }
+      }
+      if (ports.length === 1 && !this.ready) {
+        await this._connect(this.serial, ports[0]).catch(() => {});
+        return this.ready;
       }
       return false;
     }
@@ -821,7 +908,11 @@
     }
 
     const recent = link.devices()[0];
-    if (recent) status.textContent = `최근 연결한 진단기: ${recent.name}. 시동을 켜고 '진단기 연결'을 누르세요.`;
+    if (recent) {
+      status.textContent = `최근 연결한 진단기: ${recent.name}. 시동을 켜고 OBD2 단자에 꽂으면 자동으로 인식합니다.`;
+    } else {
+      status.textContent = "시동을 켜고 진단기를 OBD2 단자에 꽂아 두세요. 한 번 연결한 뒤에는 자동으로 인식합니다.";
+    }
     renderDevices();
     link.addEventListener("devices", renderDevices);
     select.addEventListener("change", () => {
@@ -835,7 +926,7 @@
       findBtn.disabled = locked || !link.ble.supported;
       allBtn.disabled = findBtn.disabled;
       if (serialBtn) serialBtn.disabled = locked || !link.serial.supported;
-      offBtn.disabled = detail.state === "idle" || link.busy;
+      offBtn.disabled = detail.state === "idle" || detail.state === "waiting" || link.busy;
       info.hidden = detail.state !== "ready";
       if (detail.state === "ready") {
         q("[data-obd-name]").textContent = link.info.name || "-";
@@ -851,7 +942,7 @@
     serialBtn?.addEventListener("click", () => link.findSerial().catch(() => {}));
     allBtn.addEventListener("click", () => link.find({ all: true }).catch(() => {}));
     offBtn.addEventListener("click", () => link.disconnect());
-    link.autoConnect().catch(() => {});
+    link.startWatch();
     return link;
   }
 

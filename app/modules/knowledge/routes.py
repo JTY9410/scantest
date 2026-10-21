@@ -3,6 +3,7 @@ from flask import Blueprint, Response, flash, jsonify, redirect, render_template
 from flask_login import current_user
 
 from app.core.errors import ServiceError
+from app.core.pagination import clamp_page, clamp_per_page
 from app.modules.auth.access import admin_required
 from app.modules.knowledge import importer, service
 
@@ -46,9 +47,12 @@ def dtcs():
     """List DTC meanings."""
     status = request.args.get("status", "all")
     maker = request.args.get("maker", "").strip()[:50] or None
-    items = service.list_dtcs(status=None if status == "all" else status, maker=maker)
+    page = service.page_dtcs(
+        status=None if status == "all" else status, maker=maker,
+        page=clamp_page(request.args.get("page")),
+        per_page=clamp_per_page(request.args.get("per_page"), 50))
     return render_template(
-        "knowledge/dtcs.html", items=items, status=status, maker=maker or "",
+        "knowledge/dtcs.html", page=page, items=page.items, status=status, maker=maker or "",
         totals=service.status_totals("dtc", maker))
 
 

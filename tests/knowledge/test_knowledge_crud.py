@@ -110,6 +110,23 @@ def test_dtc_lookup(app):
         assert "Misfire" in p0300.description
 
 
+def test_dtcs_page_is_paginated(admin_client, app):
+    from app.extensions import db
+    from app.modules.knowledge.models import KnowledgeDTC
+
+    with app.app_context():
+        for index in range(55):
+            db.session.add(KnowledgeDTC(
+                code=f"P{index:04d}", description=f"sample {index}", source="manual", status="draft"))
+        db.session.commit()
+    first = admin_client.get("/admin/knowledge/dtcs?status=draft")
+    body = first.get_data(as_text=True)
+    assert first.status_code == 200
+    # 상단 '고장코드 추가' 폼 1칸 + 목록 50칸
+    assert body.count('name="code"') == 51
+    assert "page=2" in body or "다음" in body
+
+
 def test_admin_can_edit_and_delete_knowledge(admin_client):
     import re
 

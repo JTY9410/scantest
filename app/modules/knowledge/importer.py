@@ -1,9 +1,9 @@
 """Knowledge base import/export and log parsing."""
 import json
 import re
-from datetime import datetime
 from typing import Any
 
+from app.core.time import utcnow
 from app.extensions import db
 from app.modules.knowledge.models import KnowledgeCommand, KnowledgeDTC, KnowledgeFormula, KnowledgeTerm
 
@@ -227,7 +227,7 @@ def export_knowledge_json() -> dict:
     terms = db.session.query(KnowledgeTerm).filter_by(status="verified").all()
     
     return {
-        "exported_at": datetime.utcnow().isoformat(),
+        "exported_at": utcnow().isoformat(),
         "commands": [
             {
                 "maker": c.maker,
