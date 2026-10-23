@@ -53,6 +53,25 @@ def test_https_login_accepts_origin_when_referrer_missing(client, make_user):
     assert "아이디 또는 비밀번호가 올바르지 않습니다." in response.get_data(as_text=True)
 
 
+def test_https_login_works_without_referrer_or_origin(app, client, make_user):
+    """운영(HTTPS)에서는 Referer/Origin이 없어도 CSRF 토큰만 맞으면 로그인 검사를 한다."""
+    app.config["WTF_CSRF_SSL_STRICT"] = False
+    make_user("wecar", type="admin", password=ADMIN_PASSWORD)
+    base = "https://admin.test"
+    html = client.get("/admin/login", base_url=base).get_data(as_text=True)
+    match = re.search(r'name="csrf_token"[^>]*value="([^"]+)"', html)
+    assert match
+
+    response = client.post(
+        "/admin/login",
+        data={"csrf_token": match.group(1), "tid": "wecar", "password": "not-the-password"},
+        base_url=base,
+    )
+
+    assert response.status_code == 401
+    assert "아이디 또는 비밀번호가 올바르지 않습니다." in response.get_data(as_text=True)
+
+
 def test_csrf_error_explains_refresh(client, make_user):
     make_user("wecar", type="admin", password=ADMIN_PASSWORD)
 
