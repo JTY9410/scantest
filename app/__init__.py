@@ -9,6 +9,7 @@ from werkzeug.exceptions import HTTPException
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.config import CONFIGS
+from app.core.csrf_origin import CsrfOriginReferrer
 from app.extensions import csrf, db, limiter, login_manager, migrate
 
 CSP = (
@@ -36,8 +37,9 @@ def create_app(config_name: str | None = None) -> Flask:
     _check_required_settings(app)
 
     app.json.sort_keys = False
+    # ProxyFix로 호스트·스킴을 맞춘 뒤, Origin→Referer 보정(Flask-WTF HTTPS CSRF).
     app.wsgi_app = ProxyFix(
-        app.wsgi_app,
+        CsrfOriginReferrer(app.wsgi_app),
         x_for=app.config["PROXY_FIX_HOPS"],
         x_proto=app.config["PROXY_FIX_HOPS"],
         x_host=app.config["PROXY_FIX_HOPS"],
@@ -133,17 +135,27 @@ def _error_page(code: int, message: str | None = None):
 def _register_errors(app: Flask) -> None:
     from app.core.errors import ServiceError
     from app.modules.api import handle_http_error
+    from flask_wtf.csrf import CSRFError
+
+    csrf_refresh = "보안 토큰이 만료되었습니다. 페이지를 새로고침한 뒤 다시 시도하세요."
 
     @app.errorhandler(ServiceError)
     def service_error(error: ServiceError):
         return _error_page(error.status, error.message)
 
+    @app.errorhandler(CSRFError)
+    def csrf_error(error: CSRFError):
+        if request.path.startswith("/api"):
+            return handle_http_error(error)
+        return _error_page(400, csrf_refresh)
+
     @app.errorhandler(HTTPException)
     def http_error(error: HTTPException):
         if request.path.startswith("/api"):
             return handle_http_error(error)
-        if error.code == 400 and "CSRF" in (error.description or ""):
-            return _error_page(400, "보안 토큰이 만료되었습니다. 페이지를 새로고침한 뒤 다시 시도하세요.")
+        description = error.description or ""
+        if error.code == 400 and ("CSRF" in description or "referrer" in description.lower()):
+            return _error_page(400, csrf_refresh)
         return _error_page(error.code or 500)
 
     @app.errorhandler(Exception)

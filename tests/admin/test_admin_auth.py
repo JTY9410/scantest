@@ -1,3 +1,5 @@
+import re
+
 import pyotp
 from sqlalchemy import select
 
@@ -31,6 +33,33 @@ def test_login_requires_csrf_token(client, make_user):
     response = client.post("/admin/login", data={"tid": "wecar", "password": ADMIN_PASSWORD})
 
     assert response.status_code == 400
+
+
+def test_https_login_accepts_origin_when_referrer_missing(client, make_user):
+    """일부 브라우저·웹뷰는 POST에 Referer를 빼 Origin만 보낸다. 로그인 400을 막는다."""
+    make_user("wecar", type="admin", password=ADMIN_PASSWORD)
+    base = "https://admin.test"
+    html = client.get("/admin/login", base_url=base).get_data(as_text=True)
+    match = re.search(r'name="csrf_token"[^>]*value="([^"]+)"', html)
+    assert match
+    response = client.post(
+        "/admin/login",
+        data={"csrf_token": match.group(1), "tid": "wecar", "password": "not-the-password"},
+        base_url=base,
+        headers={"Origin": "https://admin.test"},
+    )
+
+    assert response.status_code == 401
+    assert "아이디 또는 비밀번호가 올바르지 않습니다." in response.get_data(as_text=True)
+
+
+def test_csrf_error_explains_refresh(client, make_user):
+    make_user("wecar", type="admin", password=ADMIN_PASSWORD)
+
+    response = client.post("/admin/login", data={"tid": "wecar", "password": ADMIN_PASSWORD})
+
+    assert response.status_code == 400
+    assert "보안 토큰이 만료되었습니다" in response.get_data(as_text=True)
 
 
 def test_wrong_password_is_rejected_and_audited(app, client, make_user):
