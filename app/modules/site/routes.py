@@ -28,3 +28,9 @@ def service_worker():
     response = current_app.response_class(body, mimetype="text/javascript")
     response.headers["Cache-Control"] = "no-cache"
     return response
+
+
+@bp.get("/manifest.webmanifest")
+def web_manifest():
+    """일부 브라우저·설치 경로가 /static 없이 루트 manifest를 요청한다."""
+    return redirect(url_for("static", filename="manifest.webmanifest"), code=302)

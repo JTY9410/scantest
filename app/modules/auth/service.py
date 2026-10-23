@@ -33,9 +33,21 @@ def authenticate(tid: str, password: str) -> User:
 
 
 def mark_logged_in(user: User) -> None:
+    """로그인 시각·감사기록을 남긴다. 버전 충돌 시 한 번 다시 읽어 저장한다."""
+    from sqlalchemy.orm.exc import StaleDataError
+
     user.last_login_at = utcnow()
     audit.record("관리자 로그인", "User", user.id, user_id=user.id)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except StaleDataError:
+        db.session.rollback()
+        fresh = db.session.get(User, user.id)
+        if fresh is None:
+            raise
+        fresh.last_login_at = utcnow()
+        audit.record("관리자 로그인", "User", fresh.id, user_id=fresh.id)
+        db.session.commit()
 
 
 def verify_otp(user: User, code: str) -> bool:
