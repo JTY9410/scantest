@@ -1,5 +1,6 @@
 {% set tabs = [
   ("canlab.index", "개요", ("canlab.index",)),
+  ("canlab.datasets", "데이터셋", ("canlab.datasets", "canlab.dataset")),
   ("canlab.analysis", "데이터입력분석", ("canlab.analysis", "canlab.pending", "canlab.run", "canlab.apply_run")),
   ("canlab.compare", "스캔·위스캔 비교", ("canlab.compare", "canlab.compare_show")),
   ("canlab.rules", "디코딩 규칙", ("canlab.rules", "canlab.logic", "canlab.confirm_logic", "canlab.advise_logic",
@@ -7,6 +8,8 @@
                                  "canlab.rollback_change", "canlab.reference_list", "canlab.reference_sync",
                                  "canlab.reference_register", "canlab.reference_approve", "canlab.reference_reject",
                                  "canlab.reference_retry")),
+  ("canlab.reports", "운영 결과지", ("canlab.reports", "canlab.report")),
+  ("canlab.live", "블루투스 수집", ("canlab.live",)),
 ] %}
 <nav class="mb-6 flex flex-wrap gap-2 print:hidden" aria-label="CAN 역분석 메뉴">
   {% for endpoint_name, label, actives in tabs %}

@@ -57,7 +57,7 @@
       <tr>
         <td class="mono text-sm">{{ item.request }}</td>
         <td class="mono text-sm">{{ item.response or "-" }}</td>
-        <td><button type="button" class="btn btn-sm btn-secondary" onclick="addToKB('{{ item.request }}', '{{ item.response or '' }}')">KB에 추가 (후보)</button></td>
+        <td><a class="btn btn-sm btn-secondary" href="{{ url_for('knowledge.commands') }}">진단 명령에서 수동 등록</a></td>
       </tr>
       {% endfor %}
     </tbody>
@@ -83,27 +83,11 @@
         <td>{{ item.service }}</td>
         <td class="mono font-semibold">{{ item.pid }}</td>
         <td class="mono text-sm">{{ item.response or "-" }}</td>
-        <td><button type="button" class="btn btn-sm btn-primary" onclick="addFormula('{{ item.service }}', '{{ item.pid }}', '{{ item.response or '' }}')">공식 후보 만들기</button></td>
+        <td><a class="btn btn-sm btn-primary" href="{{ url_for('knowledge.formulas') }}">디코드 공식에서 수동 등록</a></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
 </section>
 {% endif %}
-
-<script>
-function addToKB(request, response) {
-  const label = prompt("명령어 라벨을 입력하세요:");
-  if (!label) return;
-  alert("KB 추가 기능은 관리자가 직접 /admin/knowledge/commands 에서 수동으로 입력하세요. (자동 추가 API는 미구현)");
-}
-
-function addFormula(service, pid, response) {
-  const label = prompt("PID 라벨을 입력하세요 (예: 실주행거리):");
-  if (!label) return;
-  const formula = prompt("디코드 공식을 입력하세요 (예: (A*256+B)/10):");
-  if (!formula) return;
-  alert("공식 추가 기능은 관리자가 직접 /admin/knowledge/formulas 에서 수동으로 입력하세요. (자동 추가 API는 미구현)");
-}
-</script>
 {% endblock %}

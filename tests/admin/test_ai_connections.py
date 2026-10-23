@@ -15,7 +15,7 @@ def _setup_openai(client) -> str:
     token = csrf_token(client, "/admin/ai/openai")
     client.post(
         "/admin/ai/openai",
-        data={"csrf_token": token, "settings-model": "gpt-test", "settings-features": ["explain"],
+        data={"csrf_token": token, "settings-model": "gpt-test", "settings-features": ["canlab"],
               "settings-monthly_budget": "50.00", "settings-monthly_token_limit": "100000"},
     )
     client.post("/admin/ai/openai/key", data={"csrf_token": token, "key-api_key": SECRET_KEY})
@@ -38,7 +38,7 @@ def test_key_is_encrypted_and_only_last4_is_shown(app, admin_client):
         assert decrypt(connection.key_enc) == SECRET_KEY
     assert connection.key_last4 == "WXYZ"
     assert str(connection.monthly_budget) == "50.00"
-    assert connection.features == {"explain": True, "search": False, "draft": False, "canlab": False}
+    assert connection.features == {"canlab": True}
 
     for url in ("/admin/ai", "/admin/ai/openai"):
         html = admin_client.get(url).get_data(as_text=True)

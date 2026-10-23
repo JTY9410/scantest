@@ -4,6 +4,7 @@
   "use strict";
 
   const RECONNECT_WAIT_MS = 20000;
+  const CONSECUTIVE_TIMEOUT_LIMIT = 5;
   const P = window.WecarObdPlan;
   const STAGES = ["connect", "lookup", "scan", "analyze"];
   const CAR_FIELDS = [
@@ -36,9 +37,54 @@
     const counts = q("[data-scan-counts]");
     const retryBtn = q("[data-scan-retry]");
     const logList = q("[data-scan-log]");
+    const problemsBox = q("[data-comm-problems]");
+    const problemsList = q("[data-comm-problems-list]");
+    const problemsBanner = q("[data-comm-problems-banner]");
 
     const state = { carNo: "", car: null, lookupError: null, running: false, stop: false, pending: null,
-      needConnect: false };
+      needConnect: false, consecutiveTimeouts: 0 };
+
+    function clearProblems() {
+      state.consecutiveTimeouts = 0;
+      if (problemsList) problemsList.replaceChildren();
+      if (problemsBox) problemsBox.hidden = true;
+      if (problemsBanner) {
+        problemsBanner.hidden = true;
+        problemsBanner.textContent = "";
+      }
+    }
+
+    function pushProblem(record) {
+      if (!problemsBox || !problemsList || !record.error || record.error === "skipped") return;
+      problemsBox.hidden = false;
+      const item = document.createElement("li");
+      const status = STATUS_TEXT[record.error] || record.error;
+      const reply = (record.reply || "").replace(/[\r\n>]+/g, " ").replace(/\s+/g, " ").trim();
+      const parts = [
+        `${record.header ? `${record.header} ` : ""}${record.command || ""} · ${record.label || ""}`,
+        `→ ${status}${record.reason ? ` — ${record.reason}` : ""}`,
+        reply ? `원문: ${reply}` : "원문: (없음)",
+        record.tMs != null ? `${record.tMs} ms` : "",
+      ].filter(Boolean);
+      item.className = "text-danger";
+      item.textContent = parts.join(" · ");
+      problemsList.append(item);
+      problemsList.scrollTop = problemsList.scrollHeight;
+      if (record.error === "timeout" || record.error === "disconnected") {
+        state.consecutiveTimeouts += 1;
+      } else {
+        state.consecutiveTimeouts = 0;
+      }
+      if (problemsBanner && state.consecutiveTimeouts >= CONSECUTIVE_TIMEOUT_LIMIT) {
+        problemsBanner.hidden = false;
+        problemsBanner.textContent =
+          `연속 ${state.consecutiveTimeouts}회 무응답·끊김. 진단기·시동을 확인하거나 '중지' 후 다시 연결하세요.`;
+        if (state.consecutiveTimeouts === CONSECUTIVE_TIMEOUT_LIMIT) {
+          state.stop = true;
+          scanStatus.textContent = "연속 무응답으로 스캔을 중단합니다. 지금까지의 결과를 저장합니다.";
+        }
+      }
+    }
 
     function stage(current, failed = false) {
       const index = STAGES.indexOf(current);
@@ -160,13 +206,21 @@
 
     function logStep(record) {
       const item = document.createElement("li");
-      const result = record.error
-        ? (STATUS_TEXT[record.error] || record.error) + (record.reason ? ` — ${record.reason}` : "")
-        : record.reply.replace(/[\r\n>]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "빈 응답";
+      let result;
+      if (record.error) {
+        result = (STATUS_TEXT[record.error] || record.error) + (record.reason ? ` — ${record.reason}` : "");
+        if (record.reply) {
+          result += ` · ${String(record.reply).replace(/[\r\n>]+/g, " ").replace(/\s+/g, " ").trim()}`;
+        }
+      } else {
+        result = record.reply.replace(/[\r\n>]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 80) || "빈 응답";
+      }
       item.textContent = `${record.header ? `${record.header} ` : ""}${record.command} · ${record.label} → ${result}`;
       if (record.error && record.error !== "skipped") item.className = "text-danger";
       logList.append(item);
       logList.scrollTop = logList.scrollHeight;
+      pushProblem(record);
+      if (!record.error || record.error === "skipped") state.consecutiveTimeouts = 0;
     }
 
     // 주소 설정·오류 복구는 진단기 드라이버(obd-driver.js)가 명령 체계에 맞게 한다.
@@ -277,6 +331,7 @@
       lookupFailed.hidden = true;
       progress.hidden = false;
       logList.replaceChildren();
+      clearProblems();
       counts.textContent = "";
       bar.value = 0;
       stage("scan");

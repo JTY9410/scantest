@@ -1,0 +1,11 @@
+{# 스캔·BLE 수집 중 무응답·통신 오류를 즉시 보여 주는 패널. JS가 data-comm-problems에 항목을 채운다. #}
+{% macro comm_problems(title="통신 문제") -%}
+<section class="grid gap-2 rounded-md border border-danger/40 bg-danger/5 p-3" data-comm-problems hidden
+         aria-labelledby="comm-problems-title" role="region">
+  <div class="flex flex-wrap items-center justify-between gap-2">
+    <h3 id="comm-problems-title" class="font-bold text-danger">{{ title }}</h3>
+    <p class="text-sm text-muted" data-comm-problems-banner hidden></p>
+  </div>
+  <ol class="mono grid max-h-48 gap-1 overflow-y-auto text-sm" data-comm-problems-list aria-live="assertive" aria-label="통신 문제 목록"></ol>
+</section>
+{%- endmacro %}

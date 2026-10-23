@@ -39,8 +39,8 @@
         <h2 id="usage-title" class="text-lg font-bold">이용 기록</h2>
         <ul class="mt-4 grid grid-cols-2 gap-3">
           {% set links = [
-            ("검사한 스캔", summary.scans_tested, url_for('monitoring.scans', user_id=member.id)),
-            ("소유 차량 스캔", summary.scans_owned, url_for('monitoring.scans', user_id=member.id)),
+            ("검사한 스캔", summary.scans_tested, url_for('monitoring.scans', user_id=member.id, role='tester')),
+            ("소유 차량 스캔", summary.scans_owned, url_for('monitoring.scans', user_id=member.id, role='owner')),
             ("앱 로그", summary.applogs, url_for('monitoring.applogs', user_id=member.id)),
             ("불일치 신고", summary.reports, url_for('monitoring.reports', user_id=member.id)),
           ] %}

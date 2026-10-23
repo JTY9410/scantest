@@ -46,11 +46,13 @@ def scans():
     device = (request.args.get("device") or "").strip()[:100]
     maker = (request.args.get("maker") or "").strip()[:50]
     model = (request.args.get("model") or "").strip()[:50]
-    page = service.search_scans(scan_type=scan_type, device=device, maker=maker, model=model, **params)
+    role = request.args.get("role", "") if request.args.get("role") in ("tester", "owner") else ""
+    page = service.search_scans(
+        scan_type=scan_type, device=device, maker=maker, model=model, role=role, **params)
     return render_template(
         "monitoring/scans.html", page=page, params=params, scan_type=scan_type, device=device,
-        maker=maker, model=model, types=list(ScanType),
-        filters=_filters(params, type=scan_type, device=device, maker=maker, model=model),
+        maker=maker, model=model, role=role, types=list(ScanType),
+        filters=_filters(params, type=scan_type, device=device, maker=maker, model=model, role=role),
         member=service.member_name(params["user_id"]),
     )
 

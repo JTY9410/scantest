@@ -39,7 +39,8 @@ def _size() -> int:
 
 
 def search_scans(*, q: str, scan_type: str, user_id: int | None, start: date | None,
-                 end: date | None, page: int, device: str = "", maker: str = "", model: str = "") -> Page:
+                 end: date | None, page: int, device: str = "", maker: str = "", model: str = "",
+                 role: str = "") -> Page:
     stmt = (
         select(Scan)
         .options(joinedload(Scan.tester), joinedload(Scan.owner), joinedload(Scan.company),
@@ -49,7 +50,12 @@ def search_scans(*, q: str, scan_type: str, user_id: int | None, start: date | N
     if scan_type in ("ev", "ice"):
         stmt = stmt.where(Scan.type == scan_type)
     if user_id:
-        stmt = stmt.where(or_(Scan.tester_id == user_id, Scan.owner_id == user_id))
+        if role == "tester":
+            stmt = stmt.where(Scan.tester_id == user_id)
+        elif role == "owner":
+            stmt = stmt.where(Scan.owner_id == user_id)
+        else:
+            stmt = stmt.where(or_(Scan.tester_id == user_id, Scan.owner_id == user_id))
     if device:
         stmt = stmt.where(Scan.device_uid.ilike(f"%{device.strip()[:100]}%"))
     if maker:

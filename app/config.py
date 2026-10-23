@@ -90,6 +90,7 @@ class Config:
 
 
 class DevelopmentConfig(Config):
+    # 로컬 HTTP. HTTPS 운영의 Referer 완화는 ProductionConfig.WTF_CSRF_SSL_STRICT 만 쓴다.
     APP_ENV = "development"
     DEBUG = True
     SESSION_COOKIE_SECURE = _bool("SESSION_COOKIE_SECURE", False)

@@ -23,7 +23,14 @@
   <p>스캔 오류 {{ scanned.errors|length }}건:
     {% for e in scanned.errors[:3] %}{{ e.label }}({{ e.status_label }}){{ ", " if not loop.last }}{% endfor %}
     {% if scanned.errors|length > 3 %}외 {{ scanned.errors|length - 3 }}건{% endif %}.
-    <a class="underline" href="{{ url_for('scanner.result', scan_id=scan.id, _anchor='errors-title') }}">오류 기록 보기</a></p>
+    <a class="underline" href="{{ url_for('scanner.result', scan_id=scan.id, _anchor='errors-title') }}">오류 기록 보기</a>
+    · <a class="underline" href="{{ url_for('scanner.result', scan_id=scan.id, _anchor='ai-verify-title') }}">AI 검증</a></p>
+</div>
+{% endif %}
+{% if scanned and scanned.ai_verify %}
+<div class="flash flash-info mb-6"><span aria-hidden="true" class="font-bold">i</span>
+  <p>AI 검증: {{ scanned.ai_verify.summary }}
+    <a class="underline" href="{{ url_for('scanner.result', scan_id=scan.id, _anchor='ai-verify-title') }}">자세히</a></p>
 </div>
 {% endif %}
 

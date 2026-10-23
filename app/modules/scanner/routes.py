@@ -10,6 +10,7 @@ from app.extensions import db, limiter
 from app.modules.auth.access import admin_required
 from app.modules.canlab.service import obd_config
 from app.modules.scanner import analysis, clear_service, service
+from app.modules.scanner import ai_verify as ai_verify_service
 from app.modules.scanner.obd import SYSTEMS
 from app.modules.scanner import ethernet
 from app.modules.scanner.plan import build_plan
@@ -29,7 +30,8 @@ def flow_config() -> dict:
     """스캔 흐름(스캔하기 화면, 대시보드 카드)이 쓰는 주소와 차량정보 조회 설정 여부."""
     return {"lookupUrl": url_for("scanner.lookup"), "planUrl": url_for("scanner.plan"),
             "runUrl": url_for("scanner.run"), "keyMissing": not car_info.configured(),
-            "settingsUrl": url_for("admin.car_info_settings")}
+            "settingsUrl": url_for("admin.car_info_settings"),
+            "aiVerifyUrlTemplate": url_for("scanner.ai_verify", scan_id=0).replace("/0/", "/{id}/")}
 
 
 @bp.get("/")
@@ -148,7 +150,22 @@ def result(scan_id: int):
     result = service.scan_result(scan)
     return render_template("scanner/result.html", scan=scan, result=result, summary=analysis.summarize(result),
                            systems=SYSTEMS, transports=service.TRANSPORTS,
-                           step_groups=analysis.group_steps(result.get("steps")))
+                           step_groups=analysis.group_steps(result.get("steps")),
+                           ai_verify=result.get("ai_verify") if isinstance(result.get("ai_verify"), dict) else None)
+
+
+@bp.post("/<int:scan_id>/ai-verify")
+@admin_required
+@limiter.limit("20 per hour")
+def ai_verify(scan_id: int):
+    """실패·무응답 단계를 AI(또는 규칙)로 검증해 결과 JSON에 붙인다."""
+    try:
+        scan = get_visible_scan(current_user, scan_id)
+        payload = ai_verify_service.verify_scan(current_user, scan)
+    except ServiceError as error:
+        db.session.rollback()
+        return {"message": error.message}, error.status
+    return payload, 200
 
 
 @bp.get("/<int:scan_id>/pdf")

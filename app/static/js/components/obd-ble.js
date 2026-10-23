@@ -15,18 +15,52 @@
   const startBtn = root.querySelector("[data-ble-start]");
   const stopBtn = root.querySelector("[data-ble-stop]");
   const saveBtn = root.querySelector("[data-ble-save]");
+  const problemsBox = root.querySelector("[data-comm-problems]");
+  const problemsList = root.querySelector("[data-comm-problems-list]");
+  const problemsBanner = root.querySelector("[data-comm-problems-banner]");
 
   let lines = [];
   let running = false;
   let stopRequested = false;
+  let consecutiveFail = 0;
 
   function setStatus(text) {
     statusEl.textContent = text;
   }
 
+  function clearProblems() {
+    consecutiveFail = 0;
+    if (problemsList) problemsList.replaceChildren();
+    if (problemsBox) problemsBox.hidden = true;
+    if (problemsBanner) {
+      problemsBanner.hidden = true;
+      problemsBanner.textContent = "";
+    }
+  }
+
+  function pushProblem(text) {
+    if (!problemsBox || !problemsList) return;
+    problemsBox.hidden = false;
+    const item = document.createElement("li");
+    item.className = "text-danger";
+    item.textContent = text;
+    problemsList.append(item);
+    consecutiveFail += 1;
+    if (problemsBanner && consecutiveFail >= 5) {
+      problemsBanner.hidden = false;
+      problemsBanner.textContent = `연속 ${consecutiveFail}회 통신 문제. 시동·진단기 연결을 확인하세요.`;
+    }
+  }
+
   function log(text) {
     logEl.textContent += `${text}\n`;
     logEl.scrollTop = logEl.scrollHeight;
+    const lower = String(text).toLowerCase();
+    if (/timeout|no data|can error|unable|끊김|실패|error/.test(lower) && !/ RX /.test(text)) {
+      pushProblem(text.trim());
+    } else if (/ RX /.test(text)) {
+      consecutiveFail = 0;
+    }
   }
 
   link.addEventListener("status", ({ detail }) => {
@@ -48,6 +82,7 @@
     saveBtn.disabled = true;
     stopBtn.disabled = false;
     logEl.textContent = "";
+    clearProblems();
     try {
       lines = await window.WecarObd.capture(link, config.requests, {
         vehicle,

@@ -1,4 +1,5 @@
 {% from "components/ui.html" import csrf %}
+{% from "components/comm_problems.html" import comm_problems %}
 
 {# 진단기 연결 패널 아래에 둔다. 같은 페이지의 연결을 그대로 쓰므로 페이지를 옮기지 않고 스캔한다. #}
 {% macro scan_flow(config, car_no="", id_prefix="scan") -%}
@@ -47,6 +48,7 @@
     <progress class="h-2 w-full" max="100" value="0" data-scan-bar aria-label="스캔 진행률"></progress>
     <p class="font-semibold" role="status" aria-live="polite" data-scan-status></p>
     <p class="text-sm text-muted tabular-nums" data-scan-counts></p>
+    {{ comm_problems("스캔 통신 문제") }}
     <button class="btn btn-secondary justify-self-start" type="button" data-scan-retry hidden>저장 다시 시도</button>
     <ol class="mono grid max-h-80 gap-1 overflow-y-auto rounded-md border border-line p-3 text-sm" data-scan-log aria-label="단계별 응답"></ol>
   </div>

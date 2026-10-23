@@ -38,11 +38,9 @@ class AiStatus(enum.StrEnum):
         }[self.value]
 
 
+# 런타임에서 쓰는 기능만 둔다. 스캔 오류 검증·결과지·비교도 canlab 연결을 쓴다.
 AI_FEATURES = {
-    "explain": "진단 결과 설명",
-    "search": "승인 문서 검색",
-    "draft": "안내문 초안",
-    "canlab": "CAN 분석(결과지 판독·보고서)",
+    "canlab": "CAN 분석·스캔 오류 검증(결과지·보고서·비교)",
 }
 
 
