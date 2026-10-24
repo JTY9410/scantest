@@ -70,11 +70,7 @@ def create_app(config_name: str | None = None) -> Flask:
 
 def _check_required_settings(app: Flask) -> None:
     if app.config.get("TESTING"):
-        return  # Skip in tests
-    # Skip check if running flask db commands (migrations)
-    import sys
-    if len(sys.argv) > 1 and sys.argv[1] == 'db':
-        return
+        return  # Skip in tests only
     missing = [k for k in app.config["REQUIRED_SETTINGS"] if not app.config.get(k)]
     if missing:
         raise RuntimeError(f"필수 환경변수가 없습니다: {', '.join(missing)}")

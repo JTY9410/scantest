@@ -6,13 +6,21 @@ from app.modules.knowledge.models import KnowledgeCommand, KnowledgeFormula
 from app.modules.knowledge.service import scan_commands, verified_layouts
 
 
+@pytest.fixture(autouse=True)
+def reset_experimental_config(app):
+    """Reset SCANNER_ALLOW_EXPERIMENTAL to False after each test"""
+    yield
+    with app.app_context():
+        app.config["SCANNER_ALLOW_EXPERIMENTAL"] = False
+
+
 @pytest.fixture
 def experimental_command(app):
     """Create experimental command"""
     with app.app_context():
         cmd = KnowledgeCommand(
             maker="현대",
-            command="22TEST",
+            command="22B001",  # Valid UDS read command
             label="테스트 명령어",
             source="test",
             status="experimental",
@@ -29,7 +37,7 @@ def verified_command(app):
     with app.app_context():
         cmd = KnowledgeCommand(
             maker="현대",
-            command="22PROD",
+            command="22B002",  # Valid UDS read command
             label="검증된 명령어",
             source="test",
             status="verified",
@@ -46,7 +54,7 @@ def experimental_formula(app):
     with app.app_context():
         formula = KnowledgeFormula(
             maker="현대",
-            command="22TEST",
+            command="22B003",
             label="테스트 수식",
             formula="A[0]",
             source="test",

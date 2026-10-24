@@ -188,7 +188,9 @@ def estimate_soh_by_time(
         "harsh": "가혹 사용 (고속충전 빈번 추정)"
     }.get(usage_pattern, "일반 사용")
     
-    soh = max(60.0, min(100.0, soh_raw))
+    # 정수로 반올림하여 반환
+    soh = int(round(soh_raw))
+    soh = max(0, min(100, soh))
     
     return SOHEstimate(
         soh=soh,

@@ -114,6 +114,8 @@ class TestingConfig(Config):
     CAR_INFO_API_URL = "https://car-info.test/api/get_car_info"
     CAR_INFO_API_KEY = "test-car-info-key"
     REQUIRED_SETTINGS = []  # Don't check required settings in tests
+    # Override to ensure False in tests unless explicitly set
+    SCANNER_ALLOW_EXPERIMENTAL = False
 
 
 class ProductionConfig(Config):
