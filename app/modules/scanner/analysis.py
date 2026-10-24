@@ -3,7 +3,10 @@
 - 주행 중 진단 실행 비율(IUMPR): CARB OBD-II 일반 기준 0.336 미만을 표시한다.
 - 전기차 배터리 판정은 위스캔 기본 보고서 기준(report.judgments)으로 하고, 여기서는 값과 OBDb 정상 범위를 보여 준다.
   정상 범위를 벗어난 값은 '이상값'으로 따로 두고 요약 계산(편차·타당성 검사)에서 뺀다.
+- SOH가 직접 읽히지 않으면 누적 데이터와 운영 시간으로 역산한다(soh_estimation.py).
 """
+
+from app.modules.scanner import soh_estimation
 
 IUMPR_MINIMUM = 0.336
 PACK_SUM_TOLERANCE = 0.03
@@ -27,9 +30,44 @@ def _range(limits: list | None, unit: str) -> str | None:
 def _ev(result: dict) -> list[dict]:
     items = []
     cells = result.get("cells") or {}
+    
+    # SOH: 직접 읽기 → 없으면 역산 시도
     if soh := _item(result, "soh"):
         items.append({"label": "배터리 건강 상태(SOH)", "value": f"{soh['value']:g} %",
-                      "range": _range(soh.get("range"), "%")})
+                      "range": _range(soh.get("range"), "%"), "method": "direct"})
+    else:
+        # SOH 역산 시도
+        signals = {}
+        for key in ["cum_charge_ah", "cum_discharge_ah", "cum_charge_kwh", "cum_discharge_kwh", 
+                    "operating_time_s", "pack_voltage", "pack_current"]:
+            if val := _value(result, key):
+                signals[key] = val
+        
+        if signals:
+            car_info = result.get("car") or {}
+            estimated_soh = soh_estimation.estimate_soh_multimethod(signals, car_info)
+            
+            if estimated_soh.soh is not None:
+                method_label = {
+                    "coulomb_counting": "누적 충방전량 기반 추정",
+                    "energy_throughput": "누적 에너지량 기반 추정",
+                    "time_based_fallback": "운영 시간 기반 추정",
+                    "fusion": "복합 추정"
+                }.get(estimated_soh.method, estimated_soh.method)
+                
+                value_text = f"{estimated_soh.soh:g} % (추정)"
+                if estimated_soh.confidence < 0.7:
+                    value_text += f" [신뢰도 {int(estimated_soh.confidence * 100)}%]"
+                
+                items.append({
+                    "label": "배터리 건강 상태(SOH)", 
+                    "value": value_text,
+                    "range": "60 ~ 100 %",
+                    "method": "estimated",
+                    "estimation_method": method_label,
+                    "assumptions": estimated_soh.assumptions
+                })
+    
     high, low = _item(result, "max_cell_v"), _item(result, "min_cell_v")
     if cells:
         items.append({"label": "셀 전압", "value": f"최저 {cells['min']:g} V · 최고 {cells['max']:g} V · 편차 "

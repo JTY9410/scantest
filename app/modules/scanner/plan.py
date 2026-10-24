@@ -46,6 +46,20 @@ SEARCH_TIMEOUT_MS = 30000
 UDS_TIMEOUT_MS = 3000
 SNAPSHOT_LIMIT = 3
 DOIP_NOTE = "이더넷 진단(DoIP, ISO 13400)은 전용 장비가 필요해 이 스캔에서는 조회하지 않습니다."
+
+# 제조사별 제한사항 안내 (2026-10-24 연구 결과)
+RESTRICTED_MANUFACTURERS = {
+    "TESLA": "Tesla 차량은 CAN 게이트웨이 보호로 인해 OBD2 포트를 통한 제한적인 진단만 가능합니다. "
+             "표준 OBD2 명령어(모드 01, 03, 07, 09 일부)만 응답하며, 배터리 BMS 데이터는 접근할 수 없습니다. "
+             "Tesla API를 통한 클라우드 기반 데이터 수집을 권장합니다.",
+    "BYD": "BYD 차량(2020년 이후)은 강화된 게이트웨이 보안으로 인해 표준 OBD2 명령어 외에는 제한적입니다. "
+           "BMS 데이터 접근이 어려우며, BYD 전용 진단 장비가 필요할 수 있습니다. "
+           "LFP 배터리 특성상 SOC/SOH 추정이 더 어렵습니다.",
+    "POLESTAR": "Polestar 차량은 Volvo 플랫폼 기반으로 강화된 보안이 적용되어 있습니다. "
+                "서비스 모드 진입이 필요하며, 표준 OBD2 명령어 외의 제조사 전용 명령어는 제한됩니다.",
+    "VOLVO": "Volvo 전기차(XC40/C40 Recharge)는 VIDA 전용 진단 시스템이 필요합니다. "
+             "OBD2 표준 명령어 외에는 접근이 제한되며, BMS 데이터는 제한적으로만 조회 가능합니다."
+}
 INFO09 = (("02", "차대번호(VIN)"), ("04", "소프트웨어 보정 ID"), ("06", "보정 검증 번호(CVN)"),
           ("0A", "ECU 이름"), ("08", "주행 중 진단 실행 비율(가솔린)"), ("0B", "주행 중 진단 실행 비율(디젤)"))
 # 위카 앱 main(793889c) 콘솔 프리셋(ATSH7DF~7E8, 1902FFFFFF)은 넣지 않는다.
@@ -254,4 +268,12 @@ def build_plan(car: dict | None = None, *, expand: bool = False) -> dict:
         add("rule", label, request["command"], header=header, timeout=UDS_TIMEOUT_MS, optional=True,
             bus="can" if header else None)
 
-    return {"steps": steps, "notes": [DOIP_NOTE]}
+    # 제조사별 제한사항 체크
+    notes = [DOIP_NOTE]
+    maker_name = str((car or {}).get("diag_company") or "").upper()
+    for restricted_maker, warning in RESTRICTED_MANUFACTURERS.items():
+        if restricted_maker in maker_name or maker_name in restricted_maker:
+            notes.append(f"[{restricted_maker} 제한사항] {warning}")
+            break
+    
+    return {"steps": steps, "notes": notes}
