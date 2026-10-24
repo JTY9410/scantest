@@ -1,4 +1,5 @@
 import enum
+import os
 from datetime import datetime
 
 from sqlalchemy import (
@@ -247,12 +248,32 @@ class ScanLogic(ScopeMixin, TimestampMixin, db.Model):
     """
 
     __tablename__ = "scan_logics"
-    __table_args__ = (
+    
+    # Build table_args conditionally: include partial unique index only for non-SQLite
+    _base_table_args = [
         CheckConstraint("status IN ('draft', 'active', 'retired')", name="status_valid"),
-        # Unique index for active logic per scope (PostgreSQL only - SQLite doesn't support partial WHERE)
-        # For SQLite tests, we rely on application logic to prevent multiple active logics
         Index("ix_scan_logics_revision", "revision"),
+    ]
+    
+    # Only add the partial unique index if not using SQLite (for tests)
+    # SQLite in-memory is used when TESTING=True or TEST_DATABASE_URL contains sqlite
+    _is_sqlite_test = (
+        os.environ.get("TESTING") == "True" or 
+        "sqlite" in os.environ.get("TEST_DATABASE_URL", "") or
+        "sqlite" in os.environ.get("SQLALCHEMY_DATABASE_URI", "")
     )
+    
+    if not _is_sqlite_test:
+        from sqlalchemy import text
+        _base_table_args.append(
+            Index("uq_scan_logics_active_scope", 
+                  text("coalesce(maker, '')"), 
+                  text("coalesce(model, '')"),
+                  unique=True, 
+                  postgresql_where=text("status = 'active'"))
+        )
+    
+    __table_args__ = tuple(_base_table_args)
 
     id: Mapped[int] = mapped_column(
         BigInteger().with_variant(Integer(), "sqlite"),

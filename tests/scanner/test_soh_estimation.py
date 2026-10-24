@@ -104,7 +104,7 @@ def test_estimate_soh_by_time_mild():
     
     # 1년 * 2.5% * 0.75 (temp) * 0.8 (usage) = 1.5%
     assert result.method == "time_based"
-    assert 94 <= result.soh <= 98
+    assert 97 <= result.soh <= 99  # 98.5 is within this range
 
 
 def test_estimate_soh_multimethod_coulomb_priority():
