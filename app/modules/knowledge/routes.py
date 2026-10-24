@@ -1,6 +1,6 @@
 """지식베이스 화면."""
 from flask import Blueprint, Response, flash, jsonify, redirect, render_template, request, url_for
-from flask_login import current_user
+from flask_login import current_user, login_required
 
 from app.core.errors import ServiceError
 from app.core.pagination import clamp_page, clamp_per_page
@@ -297,3 +297,119 @@ def import_json():
         return jsonify({"status": "ok", "count": count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+
+@bp.route("/commands/<int:command_id>/promote", methods=["POST"])
+@admin_required
+def promote_command_route(command_id):
+    """명령어 승격"""
+    from app.modules.knowledge.service import promote_command
+    from flask_login import current_user
+    
+    evidence = request.form.get("evidence", "")
+    return_status = request.form.get("return_status", "experimental")
+    
+    if promote_command(command_id, current_user.id, evidence):
+        flash("명령어가 verified 상태로 승격되었습니다.", "success")
+    else:
+        flash("승격 실패", "error")
+    
+    return redirect(url_for("knowledge.commands", status=return_status))
+
+
+@bp.route("/commands/<int:command_id>/demote", methods=["POST"])
+@admin_required
+def demote_command_route(command_id):
+    """명령어 강등"""
+    from app.modules.knowledge.service import demote_command
+    from flask_login import current_user
+    
+    reason = request.form.get("reason", "")
+    return_status = request.form.get("return_status", "verified")
+    
+    if demote_command(command_id, current_user.id, reason):
+        flash("명령어가 experimental 상태로 강등되었습니다.", "warning")
+    else:
+        flash("강등 실패", "error")
+    
+    return redirect(url_for("knowledge.commands", status=return_status))
+
+
+@bp.route("/commands/bulk-promote", methods=["POST"])
+@admin_required
+def bulk_promote_commands():
+    """명령어 일괄 승격"""
+    from app.modules.knowledge.service import promote_command
+    from flask_login import current_user
+    
+    ids = request.form.getlist("ids")
+    evidence = request.form.get("evidence", "")
+    
+    success_count = 0
+    for cmd_id in ids:
+        try:
+            if promote_command(int(cmd_id), current_user.id, evidence):
+                success_count += 1
+        except Exception:
+            pass
+    
+    flash(f"{success_count}개 명령어가 승격되었습니다.", "success")
+    return redirect(url_for("knowledge.commands", status="experimental"))
+
+
+@bp.route("/formulas/<int:formula_id>/promote", methods=["POST"])
+@admin_required
+def promote_formula_route(formula_id):
+    """수식 승격"""
+    from app.modules.knowledge.service import promote_formula
+    from flask_login import current_user
+    
+    evidence = request.form.get("evidence", "")
+    return_status = request.form.get("return_status", "experimental")
+    
+    if promote_formula(formula_id, current_user.id, evidence):
+        flash("수식이 verified 상태로 승격되었습니다.", "success")
+    else:
+        flash("승격 실패", "error")
+    
+    return redirect(url_for("knowledge.formulas", status=return_status))
+
+
+@bp.route("/formulas/<int:formula_id>/demote", methods=["POST"])
+@admin_required
+def demote_formula_route(formula_id):
+    """수식 강등"""
+    from app.modules.knowledge.service import demote_formula
+    from flask_login import current_user
+    
+    reason = request.form.get("reason", "")
+    return_status = request.form.get("return_status", "verified")
+    
+    if demote_formula(formula_id, current_user.id, reason):
+        flash("수식이 experimental 상태로 강등되었습니다.", "warning")
+    else:
+        flash("강등 실패", "error")
+    
+    return redirect(url_for("knowledge.formulas", status=return_status))
+
+
+@bp.route("/formulas/bulk-promote", methods=["POST"])
+@admin_required
+def bulk_promote_formulas():
+    """수식 일괄 승격"""
+    from app.modules.knowledge.service import promote_formula
+    from flask_login import current_user
+    
+    ids = request.form.getlist("ids")
+    evidence = request.form.get("evidence", "")
+    
+    success_count = 0
+    for formula_id in ids:
+        try:
+            if promote_formula(int(formula_id), current_user.id, evidence):
+                success_count += 1
+        except Exception:
+            pass
+    
+    flash(f"{success_count}개 수식이 승격되었습니다.", "success")
+    return redirect(url_for("knowledge.formulas", status="experimental"))

@@ -59,12 +59,18 @@ def create_app(config_name: str | None = None) -> Flask:
     _register_template_helpers(app)
 
     from app.cli import register_cli
-
     register_cli(app)
+    
+    # Register knowledge base CLI
+    from app.modules.knowledge import cli as knowledge_cli
+    knowledge_cli.init_app(app)
+    
     return app
 
 
 def _check_required_settings(app: Flask) -> None:
+    if app.config.get("TESTING"):
+        return  # Skip in tests
     missing = [k for k in app.config["REQUIRED_SETTINGS"] if not app.config.get(k)]
     if missing:
         raise RuntimeError(f"필수 환경변수가 없습니다: {', '.join(missing)}")

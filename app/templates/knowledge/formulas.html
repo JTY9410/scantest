@@ -5,41 +5,63 @@
 {% block content %}
 {{ page_header("지식베이스: 디코드 공식", "진단 응답을 해석하는 디코드 공식 목록입니다.") }}
 
-<section class="card mb-6">
-  <form method="get" class="flex gap-4 items-end">
+<section class="card card-body mb-6">
+  <h2 class="text-lg font-bold">필터</h2>
+  <form method="get" class="mt-3 flex flex-wrap gap-4">
+    <div class="field">
+      <label for="status" class="field-label">상태</label>
+      <select id="status" name="status" class="input" onchange="this.form.submit()">
+        <option value="all" {% if status == "all" %}selected{% endif %}>전체</option>
+        <option value="verified" {% if status == "verified" %}selected{% endif %}>검증됨</option>
+        <option value="experimental" {% if status == "experimental" %}selected{% endif %}>실험</option>
+        <option value="draft" {% if status == "draft" %}selected{% endif %}>초안</option>
+        <option value="deprecated" {% if status == "deprecated" %}selected{% endif %}>폐기됨</option>
+      </select>
+    </div>
     <div class="field flex-1">
       <label for="maker" class="field-label">제조사</label>
       <input id="maker" name="maker" type="search" value="{{ maker }}" class="input" placeholder="예: 현대">
     </div>
-    <div class="field">
-      <label for="status" class="field-label">상태</label>
-      <select id="status" name="status" class="input">
-        <option value="verified" {% if status == "verified" %}selected{% endif %}>검증됨</option>
-        <option value="draft" {% if status == "draft" %}selected{% endif %}>초안</option>
-      </select>
-    </div>
-    <button type="submit" class="btn btn-primary">검색</button>
+    <button type="submit" class="btn btn-primary self-end">검색</button>
   </form>
 </section>
+
+{% if status == 'experimental' %}
+<section class="card card-body mb-6">
+  <form id="bulkPromoteForm" method="post" action="{{ url_for('knowledge.bulk_promote_formulas') }}">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="evidence" id="bulkEvidence">
+    <div class="flex gap-2">
+      <button type="button" class="btn btn-primary" onclick="openBulkPromoteModal()">선택 항목 승격</button>
+      <span class="text-sm text-muted self-center" id="selectedCount">0개 선택됨</span>
+    </div>
+  </form>
+</section>
+{% endif %}
 
 <section class="card overflow-hidden" aria-label="공식 목록">
   {% if items %}
   <table class="rtable">
     <thead>
       <tr>
-        <th scope="col">PID</th>
+        {% if status == 'experimental' %}<th scope="col"><input type="checkbox" id="selectAll" onchange="toggleAll(this)"></th>{% endif %}
+        <th scope="col">명령어</th>
+        <th scope="col">헤더</th>
         <th scope="col">라벨</th>
         <th scope="col">공식</th>
         <th scope="col">단위</th>
         <th scope="col">제조사</th>
         <th scope="col">출처</th>
         <th scope="col">상태</th>
+        <th scope="col">작업</th>
       </tr>
     </thead>
     <tbody>
       {% for item in items %}
       <tr>
-        <td data-primary class="mono text-sm">{{ item.pid or "-" }}</td>
+        {% if status == 'experimental' %}<td><input type="checkbox" class="item-checkbox" name="ids" value="{{ item.id }}" form="bulkPromoteForm" onchange="updateSelectedCount()"></td>{% endif %}
+        <td data-primary class="mono text-sm">{{ item.command or "-" }}</td>
+        <td class="mono text-sm">{{ item.header or "-" }}</td>
         <td>{{ item.label }}</td>
         <td class="mono text-sm">{{ item.formula[:50] }}{% if item.formula|length > 50 %}...{% endif %}</td>
         <td>{{ item.unit or "-" }}</td>
@@ -48,9 +70,19 @@
         <td>
           {% if item.status == "verified" %}
             {{ badge("검증됨", "success") }}
+          {% elif item.status == "experimental" %}
+            {{ badge("실험", "warning") }}
           {% elif item.status == "draft" %}
             {{ badge("초안", "warning") }}
-            <button type="button" class="btn btn-sm btn-primary" onclick="verify({{ item.id }}, 'formula')">검증</button>
+          {% else %}
+            {{ badge("폐기됨", "") }}
+          {% endif %}
+        </td>
+        <td>
+          {% if item.status == "experimental" %}
+          <button type="button" class="btn btn-sm btn-primary" onclick="openPromoteModal({{ item.id }}, 'formula')">승격</button>
+          {% elif item.status == "verified" %}
+          <button type="button" class="btn btn-sm" onclick="openDemoteModal({{ item.id }}, 'formula')">강등</button>
           {% endif %}
         </td>
       </tr>
@@ -62,20 +94,119 @@
   {% endif %}
 </section>
 
-<script type="module">
-async function verify(id, type) {
-  if (!confirm("이 공식을 검증하시겠습니까?")) return;
-  try {
-    const res = await fetch(`/admin/knowledge/${type}s/${id}/verify`, { method: "POST" });
-    if (res.ok) {
-      location.reload();
-    } else {
-      alert("검증 실패");
-    }
-  } catch (error) {
-    alert("오류: " + error.message);
+<!-- Promotion/Demotion Modal -->
+<div id="promotionModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; justify-content:center; align-items:center;">
+  <div class="card" style="max-width:500px; width:90%; max-height:90vh; overflow-y:auto;">
+    <div class="card-body">
+      <h3 id="modalTitle" class="text-lg font-bold mb-4">항목 승격</h3>
+      <form id="modalForm" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="return_status" value="{{ status }}">
+        <div class="field">
+          <label for="modalInput" id="modalLabel" class="field-label">검증 근거</label>
+          <textarea id="modalInput" name="evidence" class="input" rows="4" required placeholder="실차 테스트 결과, 문서 확인 등"></textarea>
+        </div>
+        <div class="flex gap-2 mt-4">
+          <button type="submit" class="btn btn-primary">확인</button>
+          <button type="button" class="btn btn-secondary" onclick="closeModal()">취소</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script>
+window.openPromoteModal = function(id, type) {
+  const modal = document.getElementById('promotionModal');
+  const form = document.getElementById('modalForm');
+  const title = document.getElementById('modalTitle');
+  const label = document.getElementById('modalLabel');
+  const input = document.getElementById('modalInput');
+  
+  title.textContent = type === 'command' ? '명령어 승격' : '수식 승격';
+  label.textContent = '검증 근거';
+  input.name = 'evidence';
+  input.placeholder = '실차 테스트 결과, 문서 확인 등';
+  input.value = '';
+  
+  form.action = `/admin/knowledge/${type}s/${id}/promote`;
+  modal.style.display = 'flex';
+  input.focus();
+};
+
+window.openDemoteModal = function(id, type) {
+  const modal = document.getElementById('promotionModal');
+  const form = document.getElementById('modalForm');
+  const title = document.getElementById('modalTitle');
+  const label = document.getElementById('modalLabel');
+  const input = document.getElementById('modalInput');
+  
+  title.textContent = type === 'command' ? '명령어 강등' : '수식 강등';
+  label.textContent = '강등 사유';
+  input.name = 'reason';
+  input.placeholder = '재검증 필요, 오류 발견 등';
+  input.value = '';
+  
+  form.action = `/admin/knowledge/${type}s/${id}/demote`;
+  modal.style.display = 'flex';
+  input.focus();
+};
+
+window.openBulkPromoteModal = function() {
+  const checkboxes = document.querySelectorAll('.item-checkbox:checked');
+  if (checkboxes.length === 0) {
+    alert('승격할 항목을 선택해주세요.');
+    return;
   }
-}
-window.verify = verify;
+  
+  const modal = document.getElementById('promotionModal');
+  const form = document.getElementById('modalForm');
+  const title = document.getElementById('modalTitle');
+  const label = document.getElementById('modalLabel');
+  const input = document.getElementById('modalInput');
+  
+  title.textContent = `${checkboxes.length}개 항목 일괄 승격`;
+  label.textContent = '검증 근거 (전체 공통)';
+  input.name = 'evidence';
+  input.placeholder = '실차 테스트 결과, 문서 확인 등';
+  input.value = '';
+  
+  form.action = '';
+  form.onsubmit = function(e) {
+    e.preventDefault();
+    document.getElementById('bulkEvidence').value = input.value;
+    document.getElementById('bulkPromoteForm').submit();
+  };
+  
+  modal.style.display = 'flex';
+  input.focus();
+};
+
+window.closeModal = function() {
+  document.getElementById('promotionModal').style.display = 'none';
+  document.getElementById('modalForm').onsubmit = null;
+};
+
+window.toggleAll = function(checkbox) {
+  document.querySelectorAll('.item-checkbox').forEach(cb => {
+    cb.checked = checkbox.checked;
+  });
+  updateSelectedCount();
+};
+
+window.updateSelectedCount = function() {
+  const count = document.querySelectorAll('.item-checkbox:checked').length;
+  const el = document.getElementById('selectedCount');
+  if (el) el.textContent = `${count}개 선택됨`;
+  const selectAll = document.getElementById('selectAll');
+  if (selectAll) {
+    const total = document.querySelectorAll('.item-checkbox').length;
+    selectAll.checked = count === total && total > 0;
+  }
+};
+
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeModal();
+});
 </script>
 {% endblock %}

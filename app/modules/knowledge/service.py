@@ -182,23 +182,47 @@ def _scope(maker: str | None):
 
 
 def scan_commands(maker: str | None = None, limit: int = 40) -> list[dict]:
-    """스캔 계획에 넣을 검증된 읽기 명령. 세션·보안·쓰기·루틴은 빼니다."""
-    stmt = select(KnowledgeCommand).where(KnowledgeCommand.status == "verified", _scope(maker))
+    """스캔 계획에 넣을 검증된 읽기 명령. 세션·보안·쓰기·루틴은 빼니다.
+    SCANNER_ALLOW_EXPERIMENTAL이 True이면 실험 상태 명령도 포함하고 [실험] 라벨을 붙입니다."""
+    from flask import current_app
+    
+    allow_experimental = current_app.config.get("SCANNER_ALLOW_EXPERIMENTAL", False)
+    
+    if allow_experimental:
+        stmt = select(KnowledgeCommand).where(
+            KnowledgeCommand.status.in_(["verified", "experimental"]),
+            _scope(maker)
+        )
+    else:
+        stmt = select(KnowledgeCommand).where(KnowledgeCommand.status == "verified", _scope(maker))
+    
     rows = []
     for row in db.session.scalars(stmt.order_by(KnowledgeCommand.id.desc()).limit(limit * 2)):
         command = re.sub(r"\s+", "", row.command or "").upper()
         if not _READ.fullmatch(command) or command[:2] in _BLOCKED:
             continue
         header = (row.header or "").strip().upper() or None
-        rows.append({"header": header, "command": command, "label": row.label or command})
+        label = row.label or command
+        if allow_experimental and row.status == "experimental":
+            label = f"[실험] {label}"
+        rows.append({"header": header, "command": command, "label": label})
         if len(rows) >= limit:
             break
     return rows
 
 
 def verified_layouts(maker: str | None = None, limit: int = 40) -> list[dict]:
-    """적용 규칙이 없는 신호를 읽을 검증 수식. source_detail에 layout·signal_key가 있을 때만."""
-    stmt = select(KnowledgeFormula).where(KnowledgeFormula.status == "verified")
+    """적용 규칙이 없는 신호를 읽을 검증 수식. source_detail에 layout·signal_key가 있을 때만.
+    SCANNER_ALLOW_EXPERIMENTAL이 True이면 실험 상태 수식도 포함하고 [실험] 라벨을 붙입니다."""
+    from flask import current_app
+    
+    allow_experimental = current_app.config.get("SCANNER_ALLOW_EXPERIMENTAL", False)
+    
+    if allow_experimental:
+        stmt = select(KnowledgeFormula).where(KnowledgeFormula.status.in_(["verified", "experimental"]))
+    else:
+        stmt = select(KnowledgeFormula).where(KnowledgeFormula.status == "verified")
+    
     if maker:
         stmt = stmt.where(or_(KnowledgeFormula.maker == maker, KnowledgeFormula.maker.is_(None)))
     else:
@@ -211,7 +235,10 @@ def verified_layouts(maker: str | None = None, limit: int = 40) -> list[dict]:
             signal_key = detail["signal_key"]
         except (TypeError, ValueError, KeyError):
             continue
-        found.append({"signal_key": signal_key, "layout": layout, "label": row.label, "unit": row.unit,
+        label = row.label
+        if allow_experimental and row.status == "experimental":
+            label = f"[실험] {label}"
+        found.append({"signal_key": signal_key, "layout": layout, "label": label, "unit": row.unit,
                       "formula": row.formula})
         if len(found) >= limit:
             break
