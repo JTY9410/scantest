@@ -61,6 +61,9 @@ class Config:
     SMS_DEV_CODE = os.environ.get("SMS_DEV_CODE") or None
     SMS_EXPIRE_MINUTES = 10
 
+    # 실험 상태의 명령어/수식 사용 허용 (기본값: False, 운영에서는 끈다)
+    SCANNER_ALLOW_EXPERIMENTAL = _bool("SCANNER_ALLOW_EXPERIMENTAL", False)
+
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
     RATELIMIT_HEADERS_ENABLED = True
     ADMIN_LOGIN_RATE_LIMIT = os.environ.get("ADMIN_LOGIN_RATE_LIMIT", "5 per minute")
@@ -103,13 +106,16 @@ class TestingConfig(Config):
     SECRET_KEY = "test-secret-key"
     JWT_SECRET = "test-jwt-secret-with-enough-length-for-hs256"
     ENCRYPTION_KEY = Fernet.generate_key().decode()
-    SQLALCHEMY_DATABASE_URI = os.environ.get("TEST_DATABASE_URL")
+    SQLALCHEMY_DATABASE_URI = os.environ.get("TEST_DATABASE_URL") or "sqlite:///:memory:"
     SESSION_COOKIE_SECURE = False
     REMEMBER_COOKIE_SECURE = False
     RATELIMIT_STORAGE_URI = "memory://"
     SMS_DEV_CODE = "1111"
     CAR_INFO_API_URL = "https://car-info.test/api/get_car_info"
     CAR_INFO_API_KEY = "test-car-info-key"
+    REQUIRED_SETTINGS = []  # Don't check required settings in tests
+    # Override to ensure False in tests unless explicitly set
+    SCANNER_ALLOW_EXPERIMENTAL = False
 
 
 class ProductionConfig(Config):

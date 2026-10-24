@@ -54,7 +54,10 @@ class SoftDeleteMixin:
 class Company(TimestampMixin, SoftDeleteMixin, db.Model):
     __tablename__ = "companies"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     code: Mapped[str] = mapped_column(String(255), unique=True)
     name: Mapped[str] = mapped_column(String(255))
 
@@ -68,7 +71,10 @@ class User(UserMixin, TimestampMixin, SoftDeleteMixin, db.Model):
         Index("ix_users_created_at", "created_at"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     company_id: Mapped[int | None] = mapped_column(
         ForeignKey("companies.id", ondelete="SET NULL"), index=True
     )
@@ -145,7 +151,10 @@ class User(UserMixin, TimestampMixin, SoftDeleteMixin, db.Model):
 class RefreshToken(TimestampMixin, SoftDeleteMixin, db.Model):
     __tablename__ = "refresh_tokens"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     token: Mapped[str] = mapped_column(String(64), unique=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -166,7 +175,10 @@ class SmsVerification(TimestampMixin, db.Model):
     __tablename__ = "sms_verifications"
     __table_args__ = (Index("ix_sms_verifications_mobile_key", "mobile", "sms_code_key"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     mobile: Mapped[str] = mapped_column(String(255))
     sms_code: Mapped[str] = mapped_column(String(20))
     sms_code_key: Mapped[str] = mapped_column(String(255))

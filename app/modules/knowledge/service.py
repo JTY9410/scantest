@@ -182,23 +182,47 @@ def _scope(maker: str | None):
 
 
 def scan_commands(maker: str | None = None, limit: int = 40) -> list[dict]:
-    """스캔 계획에 넣을 검증된 읽기 명령. 세션·보안·쓰기·루틴은 빼니다."""
-    stmt = select(KnowledgeCommand).where(KnowledgeCommand.status == "verified", _scope(maker))
+    """스캔 계획에 넣을 검증된 읽기 명령. 세션·보안·쓰기·루틴은 빼니다.
+    SCANNER_ALLOW_EXPERIMENTAL이 True이면 실험 상태 명령도 포함하고 [실험] 라벨을 붙입니다."""
+    from flask import current_app
+    
+    allow_experimental = current_app.config.get("SCANNER_ALLOW_EXPERIMENTAL", False)
+    
+    if allow_experimental:
+        stmt = select(KnowledgeCommand).where(
+            KnowledgeCommand.status.in_(["verified", "experimental"]),
+            _scope(maker)
+        )
+    else:
+        stmt = select(KnowledgeCommand).where(KnowledgeCommand.status == "verified", _scope(maker))
+    
     rows = []
     for row in db.session.scalars(stmt.order_by(KnowledgeCommand.id.desc()).limit(limit * 2)):
         command = re.sub(r"\s+", "", row.command or "").upper()
         if not _READ.fullmatch(command) or command[:2] in _BLOCKED:
             continue
         header = (row.header or "").strip().upper() or None
-        rows.append({"header": header, "command": command, "label": row.label or command})
+        label = row.label or command
+        if allow_experimental and row.status == "experimental":
+            label = f"[실험] {label}"
+        rows.append({"header": header, "command": command, "label": label})
         if len(rows) >= limit:
             break
     return rows
 
 
 def verified_layouts(maker: str | None = None, limit: int = 40) -> list[dict]:
-    """적용 규칙이 없는 신호를 읽을 검증 수식. source_detail에 layout·signal_key가 있을 때만."""
-    stmt = select(KnowledgeFormula).where(KnowledgeFormula.status == "verified")
+    """적용 규칙이 없는 신호를 읽을 검증 수식. source_detail에 layout·signal_key가 있을 때만.
+    SCANNER_ALLOW_EXPERIMENTAL이 True이면 실험 상태 수식도 포함하고 [실험] 라벨을 붙입니다."""
+    from flask import current_app
+    
+    allow_experimental = current_app.config.get("SCANNER_ALLOW_EXPERIMENTAL", False)
+    
+    if allow_experimental:
+        stmt = select(KnowledgeFormula).where(KnowledgeFormula.status.in_(["verified", "experimental"]))
+    else:
+        stmt = select(KnowledgeFormula).where(KnowledgeFormula.status == "verified")
+    
     if maker:
         stmt = stmt.where(or_(KnowledgeFormula.maker == maker, KnowledgeFormula.maker.is_(None)))
     else:
@@ -211,7 +235,10 @@ def verified_layouts(maker: str | None = None, limit: int = 40) -> list[dict]:
             signal_key = detail["signal_key"]
         except (TypeError, ValueError, KeyError):
             continue
-        found.append({"signal_key": signal_key, "layout": layout, "label": row.label, "unit": row.unit,
+        label = row.label
+        if allow_experimental and row.status == "experimental":
+            label = f"[실험] {label}"
+        found.append({"signal_key": signal_key, "layout": layout, "label": label, "unit": row.unit,
                       "formula": row.formula})
         if len(found) >= limit:
             break
@@ -677,3 +704,124 @@ def remember_rule(rule, user_id: int | None) -> None:
                      formula=rule.formula, label=signal.label if signal else rule.signal_key, user_id=user_id)
     remember_command(maker=rule.maker, model=rule.model, header=rule.request_id, command=f"22{rule.did}",
                      label=signal.label if signal else rule.signal_key, user_id=user_id)
+
+
+def promote_command(command_id: int, user_id: int | None = None, evidence: str | None = None) -> bool:
+    """명령어를 verified 상태로 승격"""
+    from app.modules.knowledge.models import KnowledgeCommand, PromotionLog
+    from datetime import datetime, timezone
+    
+    cmd = db.session.get(KnowledgeCommand, command_id)
+    if not cmd:
+        return False
+    
+    old_status = cmd.status
+    if old_status == "verified":
+        return True  # Already verified
+    
+    # Create audit log
+    log = PromotionLog(
+        entity_type="command",
+        entity_id=command_id,
+        old_status=old_status,
+        new_status="verified",
+        promoted_by=user_id,
+            promoted_at=datetime.now(timezone.utc),
+        evidence=evidence
+    )
+    
+    cmd.status = "verified"
+    cmd.verified_by = user_id
+    cmd.verified_at = datetime.now(timezone.utc)
+    
+    db.session.add(log)
+    db.session.commit()
+    return True
+
+
+def promote_formula(formula_id: int, user_id: int | None = None, evidence: str | None = None) -> bool:
+    """수식을 verified 상태로 승격"""
+    from app.modules.knowledge.models import KnowledgeFormula, PromotionLog
+    from datetime import datetime, timezone
+    
+    formula = db.session.get(KnowledgeFormula, formula_id)
+    if not formula:
+        return False
+    
+    old_status = formula.status
+    if old_status == "verified":
+        return True
+    
+    log = PromotionLog(
+        entity_type="formula",
+        entity_id=formula_id,
+        old_status=old_status,
+        new_status="verified",
+        promoted_by=user_id,
+            promoted_at=datetime.now(timezone.utc),
+        evidence=evidence
+    )
+    
+    formula.status = "verified"
+    formula.verified_by = user_id
+    formula.verified_at = datetime.now(timezone.utc)
+    
+    db.session.add(log)
+    db.session.commit()
+    return True
+
+
+def demote_command(command_id: int, user_id: int | None = None, reason: str | None = None) -> bool:
+    """명령어를 experimental 상태로 강등"""
+    from app.modules.knowledge.models import KnowledgeCommand, PromotionLog
+    from datetime import datetime, timezone
+    
+    cmd = db.session.get(KnowledgeCommand, command_id)
+    if not cmd:
+        return False
+    
+    old_status = cmd.status
+    
+    log = PromotionLog(
+        entity_type="command",
+        entity_id=command_id,
+        old_status=old_status,
+        new_status="experimental",
+        promoted_by=user_id,
+            promoted_at=datetime.now(timezone.utc),
+        notes=f"Demoted: {reason}" if reason else "Demoted"
+    )
+    
+    cmd.status = "experimental"
+    
+    db.session.add(log)
+    db.session.commit()
+    return True
+
+
+def demote_formula(formula_id: int, user_id: int | None = None, reason: str | None = None) -> bool:
+    """수식을 experimental 상태로 강등"""
+    from app.modules.knowledge.models import KnowledgeFormula, PromotionLog
+    from datetime import datetime, timezone
+    
+    formula = db.session.get(KnowledgeFormula, formula_id)
+    if not formula:
+        return False
+    
+    old_status = formula.status
+    
+    log = PromotionLog(
+        entity_type="formula",
+        entity_id=formula_id,
+        old_status=old_status,
+        new_status="experimental",
+        promoted_by=user_id,
+            promoted_at=datetime.now(timezone.utc),
+        notes=f"Demoted: {reason}" if reason else "Demoted"
+    )
+    
+    formula.status = "experimental"
+    
+    db.session.add(log)
+    db.session.commit()
+    return True

@@ -173,3 +173,23 @@ class KnowledgeTerm(db.Model):
         Index("ix_knowledge_terms_source", "source"),
         Index("ix_knowledge_terms_status", "status"),
     )
+
+
+class PromotionLog(db.Model):
+    """명령어/수식 상태 승격 감사 로그"""
+    __tablename__ = "promotion_log"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(20), nullable=False)  # 'command' or 'formula'
+    entity_id: Mapped[int] = mapped_column(nullable=False)
+    old_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    new_status: Mapped[str] = mapped_column(String(20), nullable=False)
+    promoted_by: Mapped[int | None]  # user_id
+    promoted_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)
+    evidence: Mapped[str | None] = mapped_column(Text)  # 검증 근거
+    notes: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        Index("ix_promotion_log_entity", "entity_type", "entity_id"),
+        Index("ix_promotion_log_promoted_at", "promoted_at"),
+    )

@@ -45,9 +45,9 @@ def _ev(result: dict) -> list[dict]:
         
         if signals:
             car_info = result.get("car") or {}
-            estimated_soh = soh_estimation.estimate_soh_multimethod(signals, car_info)
+            estimated_soh = soh_estimation.estimate_soh(signals, car_info)
             
-            if estimated_soh.soh is not None:
+            if estimated_soh and estimated_soh.soh is not None:
                 method_label = {
                     "coulomb_counting": "누적 충방전량 기반 추정",
                     "energy_throughput": "누적 에너지량 기반 추정",

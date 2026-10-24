@@ -49,7 +49,10 @@ class AiConnection(TimestampMixin, db.Model):
 
     __tablename__ = "ai_connections"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     provider: Mapped[str] = mapped_column(String(20), unique=True)
     model: Mapped[str] = mapped_column(String(100))
     features: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict)
