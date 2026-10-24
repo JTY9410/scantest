@@ -87,7 +87,10 @@ class CanDataset(ScopeMixin, TimestampMixin, db.Model):
         Index("ix_can_datasets_created_at", "created_at"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     kind: Mapped[str] = mapped_column(String(20))
     source: Mapped[str] = mapped_column(String(10), default=DatasetSource.UPLOAD)
     vehicle: Mapped[str] = mapped_column(String(100))
@@ -126,7 +129,10 @@ class GroundTruthValue(TimestampMixin, db.Model):
         Index("ix_ground_truth_values_dataset_id", "dataset_id"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     dataset_id: Mapped[int] = mapped_column(ForeignKey("can_datasets.id", ondelete="CASCADE"))
     label: Mapped[str] = mapped_column(String(200))
     signal_key: Mapped[str | None] = mapped_column(String(50))
@@ -156,7 +162,10 @@ class AnalysisRun(ScopeMixin, db.Model):
     __tablename__ = "analysis_runs"
     __table_args__ = (Index("ix_analysis_runs_created_at", "created_at"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     # 차량번호 조회 결과: {car_no, maker, model, submodel, grade, year, registered}
     vehicle: Mapped[dict | None] = mapped_column(JSON)
     # 1단계 리버스 해석: [{header, did, command, example, values: [{label, value, unit, source}]}]
@@ -189,7 +198,10 @@ class DecodeRule(ScopeMixin, TimestampMixin, db.Model):
         Index("ix_decode_rules_signal_key", "signal_key", "revision"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     signal_key: Mapped[str] = mapped_column(String(50))
     revision: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(10), default=RuleStatus.CANDIDATE)
@@ -242,7 +254,10 @@ class ScanLogic(ScopeMixin, TimestampMixin, db.Model):
         Index("ix_scan_logics_revision", "revision"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     revision: Mapped[int] = mapped_column(Integer)
     status: Mapped[str] = mapped_column(String(10), default=LogicStatus.DRAFT)
     commands: Mapped[list[dict]] = mapped_column(JSON, default=list)
@@ -287,7 +302,10 @@ class RuleChange(ScopeMixin, db.Model):
         Index("ix_rule_changes_created_at", "created_at"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     action: Mapped[str] = mapped_column(String(10))
     logic_id: Mapped[int | None] = mapped_column(ForeignKey("scan_logics.id", ondelete="SET NULL"))
     before: Mapped[dict] = mapped_column(JSON, default=dict)
@@ -311,7 +329,10 @@ class RuleIncident(ScopeMixin, db.Model):
     __tablename__ = "rule_incidents"
     __table_args__ = (Index("ix_rule_incidents_created_at", "created_at"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     scan_id: Mapped[int | None] = mapped_column(BigInteger)
     logic_id: Mapped[int | None] = mapped_column(ForeignKey("scan_logics.id", ondelete="SET NULL"))
     label: Mapped[str] = mapped_column(String(200))
@@ -346,7 +367,10 @@ class CanReference(ScopeMixin, TimestampMixin, db.Model):
         Index("ix_can_references_status", "status"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     source_type: Mapped[str] = mapped_column(String(10))
     title: Mapped[str] = mapped_column(String(200))
     url: Mapped[str] = mapped_column(String(500), unique=True)
@@ -375,7 +399,10 @@ class DiagnosticReport(db.Model):
     __tablename__ = "diagnostic_reports"
     __table_args__ = (Index("ix_diagnostic_reports_created_at", "created_at"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     dataset_id: Mapped[int | None] = mapped_column(ForeignKey("can_datasets.id", ondelete="SET NULL"))
     vehicle: Mapped[str] = mapped_column(String(100))
     values: Mapped[dict] = mapped_column(JSON, default=dict)
@@ -400,7 +427,10 @@ class ScanWescanCompare(ScopeMixin, db.Model):
     __tablename__ = "scan_wescan_compares"
     __table_args__ = (Index("ix_scan_wescan_compares_created_at", "created_at"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     scan_dataset_id: Mapped[int] = mapped_column(ForeignKey("can_datasets.id", ondelete="CASCADE"))
     scan_id: Mapped[int | None] = mapped_column(BigInteger)
     analysis_run_id: Mapped[int | None] = mapped_column(ForeignKey("analysis_runs.id", ondelete="SET NULL"))

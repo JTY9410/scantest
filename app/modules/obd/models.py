@@ -43,7 +43,10 @@ class ObdProfile(TimestampMixin, db.Model):
         CheckConstraint("dialect IN ('elm327', 'stn', 'slcan')", name="dialect_valid"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     name: Mapped[str] = mapped_column(String(100), unique=True)
     transport: Mapped[str] = mapped_column(String(10))
     device_name_prefix: Mapped[str] = mapped_column(String(50))
@@ -83,7 +86,10 @@ class ObdDevice(TimestampMixin, db.Model):
         CheckConstraint("dialect IN ('elm327', 'stn', 'slcan')", name="dialect_valid"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     platform: Mapped[str] = mapped_column(String(10))
     transport: Mapped[str] = mapped_column(String(10))
@@ -111,7 +117,10 @@ class TelematicsDevice(TimestampMixin, db.Model):
 
     __tablename__ = "telematics_devices"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     serial: Mapped[str] = mapped_column(String(64), unique=True)
     name: Mapped[str] = mapped_column(String(100))
     token_hash: Mapped[str] = mapped_column(String(64), unique=True)

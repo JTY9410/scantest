@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any
 
 from flask import has_request_context, request
-from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Index, String
+from sqlalchemy import JSON, BigInteger, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.time import utcnow
@@ -21,7 +21,10 @@ class Activity(db.Model):
         Index("ix_activities_created_at", "created_at"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), index=True
     )

@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, String, Text
+from sqlalchemy import BigInteger, DateTime, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
@@ -13,7 +13,10 @@ class CarMismatchReport(TimestampMixin, SoftDeleteMixin, db.Model):
     __tablename__ = "car_mismatch_reports"
     __table_args__ = (Index("ix_car_mismatch_reports_created_at", "created_at"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"), index=True)
     car_no: Mapped[str] = mapped_column(String(20))
     api_vin: Mapped[str] = mapped_column(String(17))
@@ -32,7 +35,10 @@ class Applog(TimestampMixin, db.Model):
         Index("ix_applogs_type", "type"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id", ondelete="SET NULL"), index=True

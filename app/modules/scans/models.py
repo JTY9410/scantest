@@ -40,7 +40,10 @@ class Code(TimestampMixin, SoftDeleteMixin, db.Model):
         Index("ix_codes_type_code", "type", "code"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     type: Mapped[str] = mapped_column(String(10))
     code: Mapped[str] = mapped_column(String(255))
     unit_name: Mapped[str] = mapped_column(String(255))
@@ -61,7 +64,10 @@ class Scan(TimestampMixin, SoftDeleteMixin, db.Model):
         Index("ix_scans_car_no", "car_no"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     type: Mapped[str] = mapped_column(String(10))
     device_type: Mapped[str] = mapped_column(String(255))
     device_uid: Mapped[str] = mapped_column(String(255))
@@ -120,7 +126,10 @@ class MakerScanCommand(db.Model):
         Index("ix_maker_scan_commands_maker", "maker"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     maker: Mapped[str] = mapped_column(String(50))
     model: Mapped[str | None] = mapped_column(String(100))
     header: Mapped[str | None] = mapped_column(String(8))
@@ -146,7 +155,10 @@ class DtcClearLog(db.Model):
         Index("ix_dtc_clear_logs_created_at", "created_at"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     scan_id: Mapped[int] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"))
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     ip: Mapped[str] = mapped_column(String(45), default="")
@@ -171,7 +183,10 @@ class ScanCode(TimestampMixin, SoftDeleteMixin, db.Model):
     __tablename__ = "scan_codes"
     __table_args__ = (CheckConstraint("type IN ('ev', 'ice')", name="type_valid"),)
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     type: Mapped[str] = mapped_column(String(10))
     scan_id: Mapped[int] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
     code_id: Mapped[int] = mapped_column(ForeignKey("codes.id", ondelete="RESTRICT"), index=True)
@@ -188,7 +203,10 @@ class CarInfoSetting(TimestampMixin, db.Model):
 
     __tablename__ = "car_info_settings"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     url: Mapped[str] = mapped_column(String(500), default=DEFAULT_CAR_INFO_URL)
     key_enc: Mapped[str | None] = mapped_column(Text)
     key_last4: Mapped[str | None] = mapped_column(String(4))
@@ -208,7 +226,10 @@ class CarInfoCache(TimestampMixin, db.Model):
 
     __tablename__ = "car_info_cache"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     car_no: Mapped[str] = mapped_column(String(20), unique=True)
     dto: Mapped[dict[str, Any]] = mapped_column(JSON)
     fetched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
@@ -219,7 +240,10 @@ class ScanDocument(TimestampMixin, db.Model):
 
     __tablename__ = "scan_documents"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True
+    )
     scan_id: Mapped[int] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), unique=True)
     filename: Mapped[str] = mapped_column(String(200))
     content: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
