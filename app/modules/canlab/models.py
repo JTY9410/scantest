@@ -248,32 +248,18 @@ class ScanLogic(ScopeMixin, TimestampMixin, db.Model):
     """
 
     __tablename__ = "scan_logics"
-    
-    # Build table_args conditionally: include partial unique index only for non-SQLite
-    _base_table_args = [
+    __table_args__ = (
         CheckConstraint("status IN ('draft', 'active', 'retired')", name="status_valid"),
+        # 부분 unique 인덱스: 범위(maker, model)마다 active 상태는 하나만 허용
+        # PostgreSQL과 SQLite 모두 WHERE 절 지원 (SQLite 3.8.0+)
+        Index("uq_scan_logics_active_scope", 
+              text("coalesce(maker, '')"), 
+              text("coalesce(model, '')"),
+              unique=True, 
+              postgresql_where=text("status = 'active'"),
+              sqlite_where=text("status = 'active'")),
         Index("ix_scan_logics_revision", "revision"),
-    ]
-    
-    # Only add the partial unique index if not using SQLite (for tests)
-    # SQLite in-memory is used when TESTING=True or TEST_DATABASE_URL contains sqlite
-    _is_sqlite_test = (
-        os.environ.get("TESTING") == "True" or 
-        "sqlite" in os.environ.get("TEST_DATABASE_URL", "") or
-        "sqlite" in os.environ.get("SQLALCHEMY_DATABASE_URI", "")
     )
-    
-    if not _is_sqlite_test:
-        from sqlalchemy import text
-        _base_table_args.append(
-            Index("uq_scan_logics_active_scope", 
-                  text("coalesce(maker, '')"), 
-                  text("coalesce(model, '')"),
-                  unique=True, 
-                  postgresql_where=text("status = 'active'"))
-        )
-    
-    __table_args__ = tuple(_base_table_args)
 
     id: Mapped[int] = mapped_column(
         BigInteger().with_variant(Integer(), "sqlite"),
