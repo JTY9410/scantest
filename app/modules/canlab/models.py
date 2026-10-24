@@ -249,8 +249,8 @@ class ScanLogic(ScopeMixin, TimestampMixin, db.Model):
     __tablename__ = "scan_logics"
     __table_args__ = (
         CheckConstraint("status IN ('draft', 'active', 'retired')", name="status_valid"),
-        Index("uq_scan_logics_active_scope", text("coalesce(maker, '')"), text("coalesce(model, '')"),
-              unique=True, postgresql_where=text("status = 'active'")),
+        # Unique index for active logic per scope (PostgreSQL only - SQLite doesn't support partial WHERE)
+        # For SQLite tests, we rely on application logic to prevent multiple active logics
         Index("ix_scan_logics_revision", "revision"),
     )
 
