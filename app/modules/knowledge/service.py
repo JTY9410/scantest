@@ -677,3 +677,124 @@ def remember_rule(rule, user_id: int | None) -> None:
                      formula=rule.formula, label=signal.label if signal else rule.signal_key, user_id=user_id)
     remember_command(maker=rule.maker, model=rule.model, header=rule.request_id, command=f"22{rule.did}",
                      label=signal.label if signal else rule.signal_key, user_id=user_id)
+
+
+def promote_command(command_id: int, user_id: int | None = None, evidence: str | None = None) -> bool:
+    """명령어를 verified 상태로 승격"""
+    from app.modules.knowledge.models import KnowledgeCommand, PromotionLog
+    from datetime import datetime
+    
+    cmd = db.session.get(KnowledgeCommand, command_id)
+    if not cmd:
+        return False
+    
+    old_status = cmd.status
+    if old_status == "verified":
+        return True  # Already verified
+    
+    # Create audit log
+    log = PromotionLog(
+        entity_type="command",
+        entity_id=command_id,
+        old_status=old_status,
+        new_status="verified",
+        promoted_by=user_id,
+        promoted_at=datetime.utcnow(),
+        evidence=evidence
+    )
+    
+    cmd.status = "verified"
+    cmd.verified_by = user_id
+    cmd.verified_at = datetime.utcnow()
+    
+    db.session.add(log)
+    db.session.commit()
+    return True
+
+
+def promote_formula(formula_id: int, user_id: int | None = None, evidence: str | None = None) -> bool:
+    """수식을 verified 상태로 승격"""
+    from app.modules.knowledge.models import KnowledgeFormula, PromotionLog
+    from datetime import datetime
+    
+    formula = db.session.get(KnowledgeFormula, formula_id)
+    if not formula:
+        return False
+    
+    old_status = formula.status
+    if old_status == "verified":
+        return True
+    
+    log = PromotionLog(
+        entity_type="formula",
+        entity_id=formula_id,
+        old_status=old_status,
+        new_status="verified",
+        promoted_by=user_id,
+        promoted_at=datetime.utcnow(),
+        evidence=evidence
+    )
+    
+    formula.status = "verified"
+    formula.verified_by = user_id
+    formula.verified_at = datetime.utcnow()
+    
+    db.session.add(log)
+    db.session.commit()
+    return True
+
+
+def demote_command(command_id: int, user_id: int | None = None, reason: str | None = None) -> bool:
+    """명령어를 experimental 상태로 강등"""
+    from app.modules.knowledge.models import KnowledgeCommand, PromotionLog
+    from datetime import datetime
+    
+    cmd = db.session.get(KnowledgeCommand, command_id)
+    if not cmd:
+        return False
+    
+    old_status = cmd.status
+    
+    log = PromotionLog(
+        entity_type="command",
+        entity_id=command_id,
+        old_status=old_status,
+        new_status="experimental",
+        promoted_by=user_id,
+        promoted_at=datetime.utcnow(),
+        notes=f"Demoted: {reason}" if reason else "Demoted"
+    )
+    
+    cmd.status = "experimental"
+    
+    db.session.add(log)
+    db.session.commit()
+    return True
+
+
+def demote_formula(formula_id: int, user_id: int | None = None, reason: str | None = None) -> bool:
+    """수식을 experimental 상태로 강등"""
+    from app.modules.knowledge.models import KnowledgeFormula, PromotionLog
+    from datetime import datetime
+    
+    formula = db.session.get(KnowledgeFormula, formula_id)
+    if not formula:
+        return False
+    
+    old_status = formula.status
+    
+    log = PromotionLog(
+        entity_type="formula",
+        entity_id=formula_id,
+        old_status=old_status,
+        new_status="experimental",
+        promoted_by=user_id,
+        promoted_at=datetime.utcnow(),
+        notes=f"Demoted: {reason}" if reason else "Demoted"
+    )
+    
+    formula.status = "experimental"
+    
+    db.session.add(log)
+    db.session.commit()
+    return True
