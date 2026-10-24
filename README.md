@@ -99,3 +99,12 @@ docker push wecarmobility/wecarscan_dh:latest && docker push wecarmobility/wecar
 
 - SMS 발송, 진단서 PDF, 이메일 발송은 이전 서버처럼 응답만 유지하고 실제 발송·생성은 하지 않습니다.
 - 이전 Laravel 서버의 MySQL 데이터는 옮기지 않았습니다.
+
+### Mac 상시 실행(운영 방식, gunicorn)
+
+개발 서버(Flask 디버거) 대신 prod 이미지로 web 을 띄웁니다. db 컨테이너와 데이터는 그대로 씁니다.
+
+```bash
+docker compose -f compose.yaml -f compose.mac.yaml up -d --build web
+docker compose -f compose.yaml -f compose.mac.yaml run --rm web flask db upgrade   # 이전이 있을 때
+```
