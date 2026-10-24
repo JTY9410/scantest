@@ -709,7 +709,7 @@ def remember_rule(rule, user_id: int | None) -> None:
 def promote_command(command_id: int, user_id: int | None = None, evidence: str | None = None) -> bool:
     """명령어를 verified 상태로 승격"""
     from app.modules.knowledge.models import KnowledgeCommand, PromotionLog
-    from datetime import datetime
+    from datetime import datetime, timezone
     
     cmd = db.session.get(KnowledgeCommand, command_id)
     if not cmd:
@@ -726,13 +726,13 @@ def promote_command(command_id: int, user_id: int | None = None, evidence: str |
         old_status=old_status,
         new_status="verified",
         promoted_by=user_id,
-        promoted_at=datetime.utcnow(),
+            promoted_at=datetime.now(timezone.utc),
         evidence=evidence
     )
     
     cmd.status = "verified"
     cmd.verified_by = user_id
-    cmd.verified_at = datetime.utcnow()
+    cmd.verified_at = datetime.now(timezone.utc)
     
     db.session.add(log)
     db.session.commit()
@@ -742,7 +742,7 @@ def promote_command(command_id: int, user_id: int | None = None, evidence: str |
 def promote_formula(formula_id: int, user_id: int | None = None, evidence: str | None = None) -> bool:
     """수식을 verified 상태로 승격"""
     from app.modules.knowledge.models import KnowledgeFormula, PromotionLog
-    from datetime import datetime
+    from datetime import datetime, timezone
     
     formula = db.session.get(KnowledgeFormula, formula_id)
     if not formula:
@@ -758,13 +758,13 @@ def promote_formula(formula_id: int, user_id: int | None = None, evidence: str |
         old_status=old_status,
         new_status="verified",
         promoted_by=user_id,
-        promoted_at=datetime.utcnow(),
+            promoted_at=datetime.now(timezone.utc),
         evidence=evidence
     )
     
     formula.status = "verified"
     formula.verified_by = user_id
-    formula.verified_at = datetime.utcnow()
+    formula.verified_at = datetime.now(timezone.utc)
     
     db.session.add(log)
     db.session.commit()
@@ -774,7 +774,7 @@ def promote_formula(formula_id: int, user_id: int | None = None, evidence: str |
 def demote_command(command_id: int, user_id: int | None = None, reason: str | None = None) -> bool:
     """명령어를 experimental 상태로 강등"""
     from app.modules.knowledge.models import KnowledgeCommand, PromotionLog
-    from datetime import datetime
+    from datetime import datetime, timezone
     
     cmd = db.session.get(KnowledgeCommand, command_id)
     if not cmd:
@@ -788,7 +788,7 @@ def demote_command(command_id: int, user_id: int | None = None, reason: str | No
         old_status=old_status,
         new_status="experimental",
         promoted_by=user_id,
-        promoted_at=datetime.utcnow(),
+            promoted_at=datetime.now(timezone.utc),
         notes=f"Demoted: {reason}" if reason else "Demoted"
     )
     
@@ -802,7 +802,7 @@ def demote_command(command_id: int, user_id: int | None = None, reason: str | No
 def demote_formula(formula_id: int, user_id: int | None = None, reason: str | None = None) -> bool:
     """수식을 experimental 상태로 강등"""
     from app.modules.knowledge.models import KnowledgeFormula, PromotionLog
-    from datetime import datetime
+    from datetime import datetime, timezone
     
     formula = db.session.get(KnowledgeFormula, formula_id)
     if not formula:
@@ -816,7 +816,7 @@ def demote_formula(formula_id: int, user_id: int | None = None, reason: str | No
         old_status=old_status,
         new_status="experimental",
         promoted_by=user_id,
-        promoted_at=datetime.utcnow(),
+            promoted_at=datetime.now(timezone.utc),
         notes=f"Demoted: {reason}" if reason else "Demoted"
     )
     
