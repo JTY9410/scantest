@@ -47,4 +47,4 @@ volumes:
   pgdata:
     name: wecarscan_dh_pgdata
   node_modules:
-    name: wecarscan_dh_node_modules
+    name: scantest_node_modules
