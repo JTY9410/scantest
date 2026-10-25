@@ -75,9 +75,9 @@ def test_transport():
             
     except TransportError as exc:
         return {"success": False, "message": exc.message, "details": {}}, 400
-    except Exception as exc:
+    except Exception:
         current_app.logger.exception("전송 연결 테스트 실패")
-        return {"success": False, "message": f"테스트 실패: {str(exc)}", "details": {}}, 500
+        return {"success": False, "message": "테스트 중 오류가 발생했습니다.", "details": {}}, 500
 
 
 @bp.post("/run-with-transport")
