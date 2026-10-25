@@ -5,9 +5,22 @@ from flask_login import current_user, login_required
 from app.core.errors import ServiceError
 from app.core.pagination import clamp_page, clamp_per_page
 from app.modules.auth.access import admin_required
-from app.modules.knowledge import importer, service
+from app.modules.knowledge import alerts, importer, service
 
 bp = Blueprint("knowledge", __name__, url_prefix="/admin/knowledge")
+
+
+@bp.app_context_processor
+def _command_alerts():
+    """관리자 화면 상단 배너용 대기 알림 수. 로그인한 관리자에게만, 실패해도 화면은 그린다."""
+    def command_alert_count() -> int:
+        try:
+            if not getattr(current_user, "is_authenticated", False) or not getattr(current_user, "is_admin", False):
+                return 0
+            return alerts.pending_count()
+        except Exception:  # noqa: BLE001 — 배너 때문에 화면이 깨지면 안 된다
+            return 0
+    return {"command_alert_count": command_alert_count}
 
 _STATUS = {"verified": "검증됨", "draft": "초안", "deprecated": "폐기됨"}
 
@@ -28,7 +41,7 @@ def commands():
     items = service.command_views(status=None if status == "all" else status, maker=maker)
     return render_template(
         "knowledge/commands.html", items=items, status=status, maker=maker or "",
-        totals=service.status_totals("command", maker))
+        totals=service.status_totals("command", maker), deletion_alerts=alerts.pending_alerts())
 
 
 @bp.get("/formulas")
@@ -85,6 +98,32 @@ def _save(action, redirect_to: str):
 def save_command():
     """명령을 추가하거나 고친다."""
     return _save(service.save_command, "knowledge.commands")
+
+
+@bp.post("/commands/alerts/<int:alert_id>/delete")
+@admin_required
+def alert_delete(alert_id: int):
+    """삭제 여부 알림: 관리자가 삭제를 고른다."""
+    try:
+        alerts.resolve_delete(alert_id, current_user.id)
+    except ServiceError as exc:
+        flash(exc.message, "error")
+    else:
+        flash("알림의 명령을 삭제했습니다.", "success")
+    return redirect(url_for("knowledge.commands"))
+
+
+@bp.post("/commands/alerts/<int:alert_id>/keep")
+@admin_required
+def alert_keep(alert_id: int):
+    """삭제 여부 알림: 관리자가 유지를 고른다."""
+    try:
+        alerts.resolve_keep(alert_id, current_user.id)
+    except ServiceError as exc:
+        flash(exc.message, "error")
+    else:
+        flash("명령을 유지합니다. 새 실패가 기준을 다시 넘으면 다시 알립니다.", "success")
+    return redirect(url_for("knowledge.commands"))
 
 
 @bp.post("/commands/<int:cmd_id>/delete")

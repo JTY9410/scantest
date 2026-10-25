@@ -5,6 +5,38 @@
 {% block content %}
 {{ page_header("지식베이스: 진단 명령어", "차량 진단에 사용되는 UDS/OBD-II 명령어 목록입니다. 스캔에서 응답한 읽기는 초안으로 쌓입니다.") }}
 
+{% if deletion_alerts %}
+<section id="deletion-alerts" class="card card-body mb-6 border-2" style="border-color:#e30313" role="alert">
+  <h2 class="text-lg font-bold" style="color:#e30313">삭제 여부 확인 필요 · {{ deletion_alerts|length }}건</h2>
+  <p class="mt-1 text-sm text-muted">검증 명령이 실제 스캔에서 계속 동작하지 않았습니다. 삭제할지 유지할지 골라주세요. 자동으로 지우지 않습니다.</p>
+  <div class="table-wrap mt-3"><table class="table">
+    <thead><tr><th scope="col">제조사</th><th scope="col">주소</th><th scope="col">명령</th><th scope="col">이름</th><th scope="col">사유</th><th scope="col">알림 시각</th><th scope="col">처리</th></tr></thead>
+    <tbody>
+    {% for a in deletion_alerts %}
+      <tr>
+        <td data-label="제조사">{{ a.maker or "공통" }}</td>
+        <td data-label="주소">{{ a.header or "-" }}</td>
+        <td data-label="명령" class="font-mono">{{ a.command }}</td>
+        <td data-label="이름">{{ a.label or "-" }}</td>
+        <td data-label="사유" class="text-sm">{{ a.reason }}</td>
+        <td data-label="알림 시각" class="text-sm">{{ a.created_at.strftime("%Y-%m-%d %H:%M") if a.created_at else "-" }}</td>
+        <td data-label="처리" class="whitespace-nowrap">
+          <form method="post" action="{{ url_for('knowledge.alert_delete', alert_id=a.id) }}" class="inline" onsubmit="return confirm('이 명령을 삭제할까요?')">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-danger btn-sm">삭제</button>
+          </form>
+          <form method="post" action="{{ url_for('knowledge.alert_keep', alert_id=a.id) }}" class="inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button type="submit" class="btn btn-secondary btn-sm">유지</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
 <section class="card card-body mb-6">
   <h2 class="text-lg font-bold">엑셀·PDF로 명령 넣기</h2>
   <p class="mt-1 text-sm text-muted">주소, 명령, 이름이 있는 xlsx, pdf를 올리면 읽기 명령만 초안으로 저장합니다. 세션 변경과 지우기 명령은 넣지 않습니다.</p>

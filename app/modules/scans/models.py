@@ -16,7 +16,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 
 from app.extensions import db
 from app.modules.accounts.models import Company, SoftDeleteMixin, TimestampMixin, User
@@ -134,6 +134,12 @@ class MakerScanCommand(db.Model):
     model: Mapped[str | None] = mapped_column(String(100))
     header: Mapped[str | None] = mapped_column(String(8))
     command: Mapped[str] = mapped_column(String(32))
+
+    @validates("maker")
+    def _normalize_maker(self, _key, value):
+        from app.core.makers import normalize_maker
+        return normalize_maker(value) or value
+
     hits: Mapped[int] = mapped_column(Integer, default=1)
     last_scan_id: Mapped[int | None] = mapped_column(BigInteger)
     last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True))

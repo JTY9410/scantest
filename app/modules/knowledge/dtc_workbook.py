@@ -19,6 +19,8 @@ from app.modules.scans.models import Code
 _NS = {"m": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 _SOURCE = "workbook"
 _FILE = "자동차_제조사별_DTC_고장코드_데이터베이스.xlsx"
+from app.core.makers import maker_aliases, normalize_maker  # noqa: E402
+
 _MAKER_ALIASES = {
     "현대": "hyundai",
     "기아": "kia",
@@ -81,7 +83,7 @@ def _maker_names(maker: str | None) -> set[str]:
     text = (maker or "").strip()
     if not text:
         return set()
-    names = {text.casefold()}
+    names = {n.casefold() for n in maker_aliases(text)} | {text.casefold()}
     alias = _MAKER_ALIASES.get(text)
     if alias:
         names.add(alias)
@@ -96,7 +98,7 @@ def _upsert_dtc(row: list[str], *, maker: str | None, generic: bool) -> str:
     code = code.upper()
     if not re.fullmatch(r"[PCBU][0-9A-F]{4}", code) or not korean:
         return ""
-    maker_name = (maker or "").strip()[:50] or None
+    maker_name = (normalize_maker(maker) or "")[:50] or None
     existing = db.session.scalar(select(KnowledgeDTC).where(
         KnowledgeDTC.code == code,
         KnowledgeDTC.source == _SOURCE,

@@ -14,6 +14,7 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ServiceError
+from app.core.makers import normalize_maker
 from app.extensions import db
 from app.modules.knowledge.models import KnowledgeDTC
 from app.modules.scans.models import Code
@@ -31,7 +32,7 @@ _MAKER_PREFIXES = (
     ("landrover", "Land Rover"),
     ("polestar", "Polestar"),
     ("lincoln", "Lincoln"),
-    ("nissan", "Nissan"),
+    ("nissan", "닛산"),
     ("honda", "Honda"),
     ("hyundai", "Hyundai"),
     ("kia", "Kia"),
@@ -95,6 +96,7 @@ def import_dtc_catalog(path: Path | None = None) -> dict[str, int]:
 
 def _upsert_dtc(*, code: str, maker: str, ecu: str | None, detail: str, memo: str | None,
                 source_detail: str) -> str:
+    maker = normalize_maker(maker) or maker
     existing = db.session.scalar(select(KnowledgeDTC).where(
         KnowledgeDTC.code == code,
         KnowledgeDTC.source == _SOURCE,

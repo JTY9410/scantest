@@ -131,6 +131,12 @@
     <main id="main" class="mx-auto w-full max-w-6xl flex-1 px-4 py-6 sm:px-6 lg:py-8" tabindex="-1">
       {% include "components/install_hint.html" %}
       {{ flashes() }}
+      {% set _alerts = command_alert_count() %}
+      {% if _alerts and endpoint != "knowledge.commands" %}
+      <a href="{{ url_for('knowledge.commands') }}#deletion-alerts" class="card card-body mb-4 block font-bold" style="border:2px solid #e30313;color:#e30313" role="alert">
+        검증 명령 {{ _alerts }}건이 실제 스캔에서 동작하지 않습니다. 삭제 여부를 확인해주세요 →
+      </a>
+      {% endif %}
       {% block content %}{% endblock %}
     </main>
 

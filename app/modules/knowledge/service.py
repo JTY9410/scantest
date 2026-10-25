@@ -4,6 +4,7 @@ import re
 from sqlalchemy import func, or_, select
 
 from app.core.errors import ServiceError
+from app.core.makers import maker_aliases, normalize_maker
 from app.core.time import utcnow
 from app.extensions import db
 from app.modules.knowledge.models import (
@@ -37,7 +38,7 @@ def list_commands(*, status: str | None = "verified", maker: str | None = None, 
     if status:
         stmt = stmt.where(KnowledgeCommand.status == status)
     if maker:
-        stmt = stmt.where(or_(KnowledgeCommand.maker == maker, KnowledgeCommand.maker.is_(None)))
+        stmt = stmt.where(or_(KnowledgeCommand.maker.in_(maker_aliases(maker)), KnowledgeCommand.maker.is_(None)))
     stmt = stmt.limit(limit)
     return db.session.scalars(stmt).all()
 
@@ -69,7 +70,7 @@ def list_formulas(*, status: str = "verified", maker: str | None = None, limit: 
     """해석에 쓸 수식. 기본은 검증된 항목만."""
     stmt = select(KnowledgeFormula).where(KnowledgeFormula.status == status).order_by(KnowledgeFormula.pid)
     if maker:
-        stmt = stmt.where(or_(KnowledgeFormula.maker == maker, KnowledgeFormula.maker.is_(None)))
+        stmt = stmt.where(or_(KnowledgeFormula.maker.in_(maker_aliases(maker)), KnowledgeFormula.maker.is_(None)))
     stmt = stmt.limit(limit)
     return db.session.scalars(stmt).all()
 
@@ -80,7 +81,7 @@ def list_dtcs(*, status: str | None = "verified", maker: str | None = None, limi
     if status:
         stmt = stmt.where(KnowledgeDTC.status == status)
     if maker:
-        stmt = stmt.where(or_(KnowledgeDTC.maker == maker, KnowledgeDTC.maker.is_(None)))
+        stmt = stmt.where(or_(KnowledgeDTC.maker.in_(maker_aliases(maker)), KnowledgeDTC.maker.is_(None)))
     stmt = stmt.limit(limit)
     return db.session.scalars(stmt).all()
 
@@ -94,7 +95,7 @@ def page_dtcs(*, status: str | None = "verified", maker: str | None = None, page
     if status:
         stmt = stmt.where(KnowledgeDTC.status == status)
     if maker:
-        stmt = stmt.where(or_(KnowledgeDTC.maker == maker, KnowledgeDTC.maker.is_(None)))
+        stmt = stmt.where(or_(KnowledgeDTC.maker.in_(maker_aliases(maker)), KnowledgeDTC.maker.is_(None)))
     return paginate(stmt, page, per_page)
 
 
@@ -177,7 +178,7 @@ _BLOCKED = {"10", "27", "2E", "31", "04", "14"}
 
 def _scope(maker: str | None):
     if maker:
-        return or_(KnowledgeCommand.maker == maker, KnowledgeCommand.maker.is_(None))
+        return or_(KnowledgeCommand.maker.in_(maker_aliases(maker)), KnowledgeCommand.maker.is_(None))
     return KnowledgeCommand.maker.is_(None)
 
 
@@ -224,7 +225,7 @@ def verified_layouts(maker: str | None = None, limit: int = 40) -> list[dict]:
         stmt = select(KnowledgeFormula).where(KnowledgeFormula.status == "verified")
     
     if maker:
-        stmt = stmt.where(or_(KnowledgeFormula.maker == maker, KnowledgeFormula.maker.is_(None)))
+        stmt = stmt.where(or_(KnowledgeFormula.maker.in_(maker_aliases(maker)), KnowledgeFormula.maker.is_(None)))
     else:
         stmt = stmt.where(KnowledgeFormula.maker.is_(None))
     found = []
@@ -312,7 +313,7 @@ def status_totals(kind: str, maker: str | None = None) -> dict[str, int]:
     model = KnowledgeCommand if kind == "command" else KnowledgeDTC
     stmt = select(model.status, func.count()).group_by(model.status)
     if maker:
-        stmt = stmt.where(model.maker == maker)
+        stmt = stmt.where(model.maker.in_(maker_aliases(maker)))
     counts = {status: count for status, count in db.session.execute(stmt)}
     return {
         "all": sum(counts.values()),
@@ -449,7 +450,7 @@ def _save_collected(row: KnowledgeCommand, formula: str | None, unit: str | None
     pid = command[2:] if command.startswith("01") and len(command) == 4 else None
     existing = db.session.scalar(select(KnowledgeFormula).where(
         KnowledgeFormula.command == command,
-        KnowledgeFormula.maker == row.maker if row.maker else KnowledgeFormula.maker.is_(None),
+        KnowledgeFormula.maker.in_(maker_aliases(row.maker)) if row.maker else KnowledgeFormula.maker.is_(None),
         KnowledgeFormula.model == row.model if row.model else KnowledgeFormula.model.is_(None),
     ))
     if existing is None:
@@ -536,7 +537,7 @@ def delete_term(term_id: int) -> None:
 
 def remember_seen_commands(maker: str | None, model: str | None, steps: list[dict]) -> int:
     """응답한 읽기 명령을 초안으로 남긴다. 있는 행과 막힌 명령은 건드리지 않는다."""
-    maker_name = (maker or "").strip() or None
+    maker_name = normalize_maker(maker)
     model_name = (model or "").strip() or None
     if model_name == "미확인":
         model_name = None
@@ -555,7 +556,7 @@ def remember_seen_commands(maker: str | None, model: str | None, steps: list[dic
         seen.add(key)
         existing = db.session.scalar(select(KnowledgeCommand.id).where(
             KnowledgeCommand.command == command,
-            KnowledgeCommand.maker == maker_name if maker_name else KnowledgeCommand.maker.is_(None),
+            KnowledgeCommand.maker.in_(maker_aliases(maker_name)) if maker_name else KnowledgeCommand.maker.is_(None),
             KnowledgeCommand.header == header if header else KnowledgeCommand.header.is_(None),
         ))
         if existing is not None:
@@ -573,7 +574,7 @@ def remember_seen_commands(maker: str | None, model: str | None, steps: list[dic
 
 def remember_unknown_dtcs(maker: str | None, codes: list[str]) -> int:
     """설명 없는 고장코드를 제조사 초안으로만 남긴다. 뜻을 만들지 않는다."""
-    maker_name = (maker or "").strip() or None
+    maker_name = normalize_maker(maker)
     added = 0
     seen = set()
     for raw in codes:
@@ -587,7 +588,7 @@ def remember_unknown_dtcs(maker: str | None, codes: list[str]) -> int:
             continue
         existing = db.session.scalar(select(KnowledgeDTC.id).where(
             KnowledgeDTC.code == code,
-            KnowledgeDTC.maker == maker_name if maker_name else KnowledgeDTC.maker.is_(None),
+            KnowledgeDTC.maker.in_(maker_aliases(maker_name)) if maker_name else KnowledgeDTC.maker.is_(None),
             KnowledgeDTC.status == "draft"))
         if existing is not None:
             continue
@@ -602,7 +603,7 @@ def remember_unknown_dtcs(maker: str | None, codes: list[str]) -> int:
 
 def _command_row(maker, model, header, command) -> KnowledgeCommand | None:
     return db.session.scalar(select(KnowledgeCommand).where(
-        KnowledgeCommand.maker == maker if maker else KnowledgeCommand.maker.is_(None),
+        KnowledgeCommand.maker.in_(maker_aliases(maker)) if maker else KnowledgeCommand.maker.is_(None),
         KnowledgeCommand.model == model if model else KnowledgeCommand.model.is_(None),
         KnowledgeCommand.header == header if header else KnowledgeCommand.header.is_(None),
         KnowledgeCommand.command == command,
@@ -612,7 +613,7 @@ def _command_row(maker, model, header, command) -> KnowledgeCommand | None:
 
 def remember_observed_commands(maker: str | None, model: str | None, commands: list[dict]) -> int:
     """역분석 기록의 읽기 명령을 제조사·차종 초안으로 남긴다. 다시 저장하면 응답 예시만 고친다."""
-    maker_name = (maker or "").strip() or None
+    maker_name = normalize_maker(maker)
     model_name = (model or "").strip() or None
     added = 0
     seen = set()
@@ -673,7 +674,7 @@ def remember_formula(*, maker: str | None, model: str | None, signal_key: str, l
     command = f"22{did}" if did else None
     detail = json.dumps({"signal_key": signal_key, "layout": layout}, ensure_ascii=False)
     existing = db.session.scalar(select(KnowledgeFormula).where(
-        KnowledgeFormula.maker == maker if maker else KnowledgeFormula.maker.is_(None),
+        KnowledgeFormula.maker.in_(maker_aliases(maker)) if maker else KnowledgeFormula.maker.is_(None),
         KnowledgeFormula.model == model if model else KnowledgeFormula.model.is_(None),
         KnowledgeFormula.command == command,
         KnowledgeFormula.label == label[:200],

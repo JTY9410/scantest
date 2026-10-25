@@ -274,6 +274,8 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     remember(scan, result["steps"])
     from app.modules.knowledge.service import remember_seen_commands
     remember_seen_commands(scan.car_maker, scan.car_model, result["steps"])
+    from app.modules.knowledge.alerts import record_command_outcomes
+    record_command_outcomes(scan.car_maker, result["steps"], scan.id)
     record_incidents(scan.id, logic, result["errors"])
     for code in {c.id: c for c in matched.values()}.values():
         db.session.add(ScanCode(type=scan.type, scan_id=scan.id, code_id=code.id))

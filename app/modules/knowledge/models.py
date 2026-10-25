@@ -3,7 +3,9 @@ from datetime import datetime
 from typing import Literal
 
 from sqlalchemy import Index, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, validates
+
+from app.core.makers import normalize_maker
 
 from app.extensions import db
 
@@ -41,6 +43,10 @@ class KnowledgeCommand(db.Model):
     verified_at: Mapped[datetime | None]
     created_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now(), nullable=False)
+
+    @validates("maker")
+    def _normalize_maker(self, _key, value):
+        return normalize_maker(value)
 
     __table_args__ = (
         Index("ix_knowledge_commands_maker", "maker"),
@@ -87,6 +93,10 @@ class KnowledgeFormula(db.Model):
     created_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now(), nullable=False)
 
+    @validates("maker")
+    def _normalize_maker(self, _key, value):
+        return normalize_maker(value)
+
     __table_args__ = (
         Index("ix_knowledge_formulas_maker", "maker"),
         Index("ix_knowledge_formulas_ecu_name", "ecu_name"),
@@ -132,6 +142,10 @@ class KnowledgeDTC(db.Model):
     verified_at: Mapped[datetime | None]
     created_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now(), nullable=False)
+
+    @validates("maker")
+    def _normalize_maker(self, _key, value):
+        return normalize_maker(value)
 
     __table_args__ = (
         Index("ix_knowledge_dtcs_maker", "maker"),
@@ -192,4 +206,47 @@ class PromotionLog(db.Model):
     __table_args__ = (
         Index("ix_promotion_log_entity", "entity_type", "entity_id"),
         Index("ix_promotion_log_promoted_at", "promoted_at"),
+    )
+
+
+class CommandHealth(db.Model):
+    """검증 명령의 실제 스캔 성공·실패 누적(마지막 알림 처리 이후)."""
+    __tablename__ = "command_health"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    command_id: Mapped[int] = mapped_column(nullable=False, unique=True)
+    attempts: Mapped[int] = mapped_column(default=0, nullable=False)
+    failures: Mapped[int] = mapped_column(default=0, nullable=False)
+    consecutive_failures: Mapped[int] = mapped_column(default=0, nullable=False)
+    last_status: Mapped[str | None] = mapped_column(String(20))
+    last_scan_id: Mapped[int | None]
+    last_ok_at: Mapped[datetime | None]
+    last_failed_at: Mapped[datetime | None]
+    updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class CommandDeletionAlert(db.Model):
+    """실제 스캔에서 계속 실패한 검증 명령의 삭제 여부 확인 알림. 삭제는 관리자가 누를 때만."""
+    __tablename__ = "command_deletion_alerts"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    command_id: Mapped[int] = mapped_column(nullable=False)
+    # 명령이 지워진 뒤에도 알림 기록이 읽히도록 당시 값을 남긴다.
+    maker: Mapped[str | None] = mapped_column(String(50))
+    header: Mapped[str | None] = mapped_column(String(10))
+    command: Mapped[str] = mapped_column(String(200), nullable=False)
+    label: Mapped[str | None] = mapped_column(String(200))
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")  # pending/deleted/kept
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    attempts: Mapped[int] = mapped_column(default=0, nullable=False)
+    failures: Mapped[int] = mapped_column(default=0, nullable=False)
+    consecutive_failures: Mapped[int] = mapped_column(default=0, nullable=False)
+    last_status: Mapped[str | None] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)
+    resolved_at: Mapped[datetime | None]
+    resolved_by: Mapped[int | None]
+
+    __table_args__ = (
+        Index("ix_command_deletion_alerts_status", "status"),
+        Index("ix_command_deletion_alerts_command", "command_id"),
     )

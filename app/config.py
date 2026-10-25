@@ -64,6 +64,14 @@ class Config:
     # 실험 상태의 명령어/수식 사용 허용 (기본값: False, 운영에서는 끈다)
     SCANNER_ALLOW_EXPERIMENTAL = _bool("SCANNER_ALLOW_EXPERIMENTAL", False)
 
+    # 검증 명령 삭제 여부 알림(docs/command-alerts.md). 실제 스캔 응답이 아래 기준을 넘으면
+    # 관리자에게 "삭제/유지"를 묻는 알림을 만든다. 자동 삭제는 하지 않는다.
+    #  - 연속 실패 COMMAND_ALERT_CONSECUTIVE 회 이상, 또는
+    #  - 시도 COMMAND_ALERT_MIN_ATTEMPTS 회 이상이면서 실패율 COMMAND_ALERT_FAILURE_RATE 이상
+    COMMAND_ALERT_CONSECUTIVE = int(os.environ.get("COMMAND_ALERT_CONSECUTIVE", "5"))
+    COMMAND_ALERT_MIN_ATTEMPTS = int(os.environ.get("COMMAND_ALERT_MIN_ATTEMPTS", "20"))
+    COMMAND_ALERT_FAILURE_RATE = float(os.environ.get("COMMAND_ALERT_FAILURE_RATE", "0.8"))
+
     RATELIMIT_STORAGE_URI = os.environ.get("RATELIMIT_STORAGE_URI", "memory://")
     RATELIMIT_HEADERS_ENABLED = True
     ADMIN_LOGIN_RATE_LIMIT = os.environ.get("ADMIN_LOGIN_RATE_LIMIT", "5 per minute")

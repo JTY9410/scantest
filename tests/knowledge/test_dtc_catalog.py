@@ -78,7 +78,7 @@ def test_dtc_catalog_import_uses_pbcu_and_stays_draft(app, tmp_path):
     with app.app_context():
         first = import_dtc_catalog(path)
         nissan = db.session.scalar(select(KnowledgeDTC).where(
-            KnowledgeDTC.code == "P0102", KnowledgeDTC.maker == "Nissan"))
+            KnowledgeDTC.code == "P0102", KnowledgeDTC.maker == "닛산"))
         audi = db.session.scalar(select(KnowledgeDTC).where(
             KnowledgeDTC.code == "U1122", KnowledgeDTC.maker == "Audi/VW"))
         benz = db.session.scalar(select(KnowledgeDTC).where(
@@ -92,7 +92,7 @@ def test_dtc_catalog_import_uses_pbcu_and_stays_draft(app, tmp_path):
         )
         again = import_dtc_catalog(path)
         copies = db.session.scalar(select(func.count()).select_from(KnowledgeDTC).where(
-            KnowledgeDTC.code == "P0102", KnowledgeDTC.maker == "Nissan"))
+            KnowledgeDTC.code == "P0102", KnowledgeDTC.maker == "닛산"))
     assert first["sheet"] == 3 and first["dtcs"] == 3
     assert saved[0][0] == "draft" and saved[0][1].startswith("MAF")
     assert saved[1] == ("draft", "abs")
