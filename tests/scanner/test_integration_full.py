@@ -60,12 +60,14 @@ def mock_doip_server():
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     
-    time.sleep(0.2)  # 서버 시작 대기
+    time.sleep(0.3)  # 서버 시작 대기
     
     yield ('127.0.0.1', port)
     
+    # 확실히 종료
     server.shutdown()
     server.server_close()
+    thread.join(timeout=1.0)
 
 
 # === Mock J2534 Bridge (HTTP 서버) ===
@@ -137,12 +139,14 @@ def mock_j2534_server():
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     
-    time.sleep(0.2)  # 서버 시작 대기
+    time.sleep(0.3)  # 서버 시작 대기
     
     yield f'http://127.0.0.1:{port}'
     
+    # 확실히 종료
     server.shutdown()
     server.server_close()
+    thread.join(timeout=1.0)
 
 
 # === 통합 테스트 ===
