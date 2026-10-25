@@ -1,107 +1,250 @@
 {% extends "layouts/admin.html" %}
 {% from "components/ui.html" import page_header, csrf %}
-{% block title %}이더넷 진단{% endblock %}
+{% block title %}다중 전송 방식 진단{% endblock %}
 
 {% block content %}
-{{ page_header("이더넷 진단", "DoIP 게이트웨이 또는 J2534 패스스루로 읽기만 진행합니다. CAN 스캔과 결과 해석은 같습니다. 세션 변경·쓰기·지우기는 보내지 않습니다.", back=(url_for('scanner.index'), "스캔하기")) }}
+{{ page_header("다중 전송 방식 진단", "DoIP, J2534 등 다양한 방식으로 차량 진단이 가능합니다. 읽기만 진행하며 세션 변경·쓰기·지우기는 보내지 않습니다.", back=(url_for('scanner.index'), "스캔하기")) }}
 
-<section class="card card-body grid gap-4" aria-labelledby="doip-title">
+{# 연결 방식 선택 #}
+<section class="card card-body grid gap-4" aria-labelledby="transport-title">
+  <div>
+    <h2 id="transport-title" class="text-lg font-bold">연결 방식 선택</h2>
+    <p class="mt-1 text-sm text-muted">차량과 연결할 방식을 선택하세요.</p>
+  </div>
+  
+  <div class="grid gap-3">
+    <label class="flex items-start gap-3 rounded-md border border-line p-3 cursor-pointer hover:bg-gray-50">
+      <input type="radio" name="transport" value="doip" class="mt-1">
+      <div class="flex-1">
+        <div class="font-semibold">DoIP (이더넷)</div>
+        <div class="text-sm text-muted">ISO 13400, 로컬 서버 전용, CAN 프로토콜</div>
+        <div class="mt-1 text-xs text-yellow-600">실험적 기능 (mock 검증)</div>
+      </div>
+    </label>
+    
+    <label class="flex items-start gap-3 rounded-md border border-line p-3 cursor-pointer hover:bg-gray-50">
+      <input type="radio" name="transport" value="j2534_can" class="mt-1">
+      <div class="flex-1">
+        <div class="font-semibold">J2534 패스스루 (CAN)</div>
+        <div class="text-sm text-muted">Windows 브리지 필요, CAN 프로토콜</div>
+        <div class="mt-1 text-xs text-yellow-600">실험적 기능 (mock 검증)</div>
+      </div>
+    </label>
+    
+    <label class="flex items-start gap-3 rounded-md border border-line p-3 opacity-50 cursor-not-allowed">
+      <input type="radio" name="transport" value="j2534_kline" class="mt-1" disabled>
+      <div class="flex-1">
+        <div class="font-semibold">J2534 패스스루 (K-Line)</div>
+        <div class="text-sm text-muted">인터페이스만 구현, 실장비 미검증</div>
+        <div class="mt-1 text-xs text-red-600">사용 불가 (미검증)</div>
+      </div>
+    </label>
+    
+    <label class="flex items-start gap-3 rounded-md border border-line p-3 opacity-50 cursor-not-allowed">
+      <input type="radio" name="transport" value="j2534_j1850" class="mt-1" disabled>
+      <div class="flex-1">
+        <div class="font-semibold">J2534 패스스루 (J1850)</div>
+        <div class="text-sm text-muted">인터페이스만 구현, 실장비 미검증</div>
+        <div class="mt-1 text-xs text-red-600">사용 불가 (미검증)</div>
+      </div>
+    </label>
+  </div>
+</section>
+
+{# DoIP 설정 #}
+<section class="card card-body grid gap-4 mt-6" id="doip-section" style="display:none;" aria-labelledby="doip-title">
   <div>
     <h2 id="doip-title" class="text-lg font-bold">DoIP 게이트웨이</h2>
-    <p class="mt-1 text-sm text-muted">차량과 같은 망의 로컬 서버에서만 13400 포트로 연결합니다. 배포 서버는 차량 랜에 닿지 않습니다.</p>
+    <p class="mt-1 text-sm text-muted">차량과 같은 망의 로컬 서버에서만 13400 포트로 연결합니다.</p>
   </div>
   <form id="doip-form" class="grid gap-3 sm:grid-cols-2">
     {{ csrf() }}
     <label class="field">차량번호<input name="carNo" class="input" required maxlength="20" placeholder="12가3456"></label>
     <label class="field">게이트웨이<input name="host" class="input" required placeholder="192.168.0.20"></label>
     <label class="field">포트<input name="port" class="input" inputmode="numeric" value="13400"></label>
-    <button class="btn btn-primary self-end" type="submit">이더넷 스캔</button>
+    <div class="flex gap-2">
+      <button class="btn btn-secondary" type="button" id="doip-test">연결 테스트</button>
+      <button class="btn btn-primary" type="submit">스캔 시작</button>
+    </div>
   </form>
-  <p class="font-semibold" role="status" aria-live="polite" id="doip-status">게이트웨이 주소를 입력한 뒤 스캔을 시작하세요.</p>
+  <p class="font-semibold" role="status" aria-live="polite" id="doip-status"></p>
   <p class="text-sm">성공 <span id="doip-ok">0</span> · 실패 <span id="doip-fail">0</span> · 전체 <span id="doip-total">0</span></p>
   <ol id="doip-steps" class="grid gap-1 text-sm"></ol>
 </section>
 
-<section class="card card-body mt-6 grid gap-4" aria-labelledby="j2534-title">
+{# J2534 설정 #}
+<section class="card card-body mt-6 grid gap-4" id="j2534-section" style="display:none;" aria-labelledby="j2534-title">
   <div>
-    <h2 id="j2534-title" class="text-lg font-bold">J2534 기록</h2>
-    <p class="mt-1 text-sm text-muted">한 줄에 주소, 명령, 응답 바이트를 적습니다. 예: <span class="mono">E400 0100 41 00 BE 1F B8 13</span></p>
+    <h2 id="j2534-title" class="text-lg font-bold">J2534 브리지</h2>
+    <p class="mt-1 text-sm text-muted">Windows PC에서 실행 중인 브리지 서버에 연결합니다.</p>
   </div>
   <form id="j2534-form" class="grid gap-3">
     {{ csrf() }}
     <label class="field">차량번호<input name="carNo" class="input" required maxlength="20" placeholder="12가3456"></label>
-    <label class="field">단계 기록<textarea name="log" class="input" rows="6" required></textarea></label>
-    <button class="btn btn-primary" type="submit">기록 해석하고 저장</button>
+    <label class="field">브리지 URL<input name="bridgeUrl" class="input" required placeholder="http://192.168.1.100:5000"></label>
+    <div class="flex gap-2">
+      <button class="btn btn-secondary" type="button" id="j2534-test">연결 테스트</button>
+      <button class="btn btn-primary" type="submit">스캔 시작</button>
+    </div>
   </form>
   <p class="font-semibold" role="status" aria-live="polite" id="j2534-status"></p>
 </section>
 
 <script type="module">
-const csrf = document.querySelector("#doip-form [name=csrf_token]").value
+const csrf = document.querySelector("[name=csrf_token]").value
 
-document.getElementById("doip-form").addEventListener("submit", async (event) => {
-  event.preventDefault()
-  const form = event.currentTarget
-  const status = document.getElementById("doip-status")
-  const list = document.getElementById("doip-steps")
-  list.replaceChildren()
-  status.textContent = "게이트웨이에 연결하는 중입니다."
-  const body = {
-    carNo: form.carNo.value,
-    host: form.host.value,
-    port: form.port.value,
-  }
-  const response = await fetch("{{ url_for('scanner.ethernet_run') }}", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
-    body: JSON.stringify(body),
-  })
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ""
-  while (true) {
-    const chunk = await reader.read()
-    if (chunk.done) break
-    buffer += decoder.decode(chunk.value, { stream: true })
-    const lines = buffer.split("\n")
-    buffer = lines.pop()
-    for (const line of lines) {
-      if (!line.trim()) continue
-      const event = JSON.parse(line)
-      if (event.type === "progress") {
-        document.getElementById("doip-ok").textContent = event.ok
-        document.getElementById("doip-fail").textContent = event.fail
-        document.getElementById("doip-total").textContent = event.total
-        const item = document.createElement("li")
-        item.textContent = `${event.header} ${event.command} ${event.label}`
-        list.append(item)
-        status.textContent = `${event.label} 진행 중`
-      } else if (event.type === "done") {
-        status.textContent = "분석을 저장했습니다."
-        location.href = event.url
-      } else if (event.type === "error") {
-        status.textContent = event.message
-      }
+// 연결 방식 선택
+document.querySelectorAll('input[name="transport"]').forEach(radio => {
+  radio.addEventListener('change', (e) => {
+    document.getElementById('doip-section').style.display = 'none'
+    document.getElementById('j2534-section').style.display = 'none'
+    
+    if (e.target.value === 'doip') {
+      document.getElementById('doip-section').style.display = 'block'
+    } else if (e.target.value === 'j2534_can') {
+      document.getElementById('j2534-section').style.display = 'block'
     }
+  })
+})
+
+// DoIP 연결 테스트
+document.getElementById('doip-test')?.addEventListener('click', async () => {
+  const form = document.getElementById('doip-form')
+  const status = document.getElementById('doip-status')
+  
+  status.textContent = '연결 테스트 중...'
+  
+  try {
+    const response = await fetch('/admin/scan/test-transport', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+      body: JSON.stringify({
+        transport: 'doip',
+        config: {
+          host: form.host.value,
+          port: parseInt(form.port.value) || 13400
+        }
+      })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success) {
+      status.textContent = '✓ ' + result.message
+      status.className = 'font-semibold text-green-600'
+    } else {
+      status.textContent = '✗ ' + result.message
+      status.className = 'font-semibold text-red-600'
+    }
+  } catch (err) {
+    status.textContent = '✗ 테스트 실패: ' + err.message
+    status.className = 'font-semibold text-red-600'
   }
 })
 
-document.getElementById("j2534-form").addEventListener("submit", async (event) => {
-  event.preventDefault()
-  const form = event.currentTarget
-  const status = document.getElementById("j2534-status")
-  status.textContent = "기록을 해석하는 중입니다."
-  const response = await fetch("{{ url_for('scanner.ethernet_j2534') }}", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-CSRFToken": csrf },
-    body: JSON.stringify({ carNo: form.carNo.value, log: form.log.value }),
-  })
-  const payload = await response.json()
-  if (!response.ok) {
-    status.textContent = payload.message || "저장하지 못했습니다."
-    return
+// J2534 연결 테스트
+document.getElementById('j2534-test')?.addEventListener('click', async () => {
+  const form = document.getElementById('j2534-form')
+  const status = document.getElementById('j2534-status')
+  
+  status.textContent = '연결 테스트 중...'
+  
+  try {
+    const response = await fetch('/admin/scan/test-transport', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+      body: JSON.stringify({
+        transport: 'j2534_can',
+        config: {
+          bridge_url: form.bridgeUrl.value
+        }
+      })
+    })
+    
+    const result = await response.json()
+    
+    if (result.success) {
+      status.textContent = '✓ ' + result.message
+      status.className = 'font-semibold text-green-600'
+    } else {
+      status.textContent = '✗ ' + result.message
+      status.className = 'font-semibold text-red-600'
+    }
+  } catch (err) {
+    status.textContent = '✗ 테스트 실패: ' + err.message
+    status.className = 'font-semibold text-red-600'
   }
-  location.href = payload.url
+})
+
+// DoIP 스캔
+document.getElementById('doip-form').addEventListener('submit', async (e) => {
+  e.preventDefault()
+  const form = e.target
+  const status = document.getElementById('doip-status')
+  
+  status.textContent = '스캔 시작 중...'
+  
+  try {
+    const response = await fetch('/admin/scan/run-with-transport', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+      body: JSON.stringify({
+        carNo: form.carNo.value,
+        transport: 'doip',
+        config: {
+          host: form.host.value,
+          port: parseInt(form.port.value) || 13400
+        }
+      })
+    })
+    
+    const result = await response.json()
+    
+    if (response.ok) {
+      location.href = result.url
+    } else {
+      status.textContent = '✗ ' + result.message
+      status.className = 'font-semibold text-red-600'
+    }
+  } catch (err) {
+    status.textContent = '✗ 스캔 실패: ' + err.message
+    status.className = 'font-semibold text-red-600'
+  }
+})
+
+// J2534 스캔
+document.getElementById('j2534-form').addEventListener('submit', async (e) => {
+  e.preventDefault()
+  const form = e.target
+  const status = document.getElementById('j2534-status')
+  
+  status.textContent = '스캔 시작 중...'
+  
+  try {
+    const response = await fetch('/admin/scan/run-with-transport', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+      body: JSON.stringify({
+        carNo: form.carNo.value,
+        transport: 'j2534_can',
+        config: {
+          bridge_url: form.bridgeUrl.value
+        }
+      })
+    })
+    
+    const result = await response.json()
+    
+    if (response.ok) {
+      location.href = result.url
+    } else {
+      status.textContent = '✗ ' + result.message
+      status.className = 'font-semibold text-red-600'
+    }
+  } catch (err) {
+    status.textContent = '✗ 스캔 실패: ' + err.message
+    status.className = 'font-semibold text-red-600'
+  }
 })
 </script>
 {% endblock %}
