@@ -14,7 +14,7 @@ from flask import Flask
 from sqlalchemy import select
 
 from app import db
-from app.models.actor import Actor
+from app.modules.accounts.models import User
 from app.models.scan import Scan
 from app.models.scan_report import ScanReport
 from app.modules.scanner.service import run_scan_with_transport
@@ -64,7 +64,7 @@ def mock_j2534_bridge():
 
 @pytest.mark.integration
 def test_full_scan_with_doip(
-    app: Flask, mock_doip_gateway: Any, admin: Actor
+    app: Flask, mock_doip_gateway: Any, admin: User
 ) -> None:
     """DoIP 게이트웨이로 전체 스캔 흐름 검증."""
     with app.app_context():
@@ -99,7 +99,7 @@ def test_full_scan_with_doip(
 
 @pytest.mark.integration
 def test_full_scan_with_j2534(
-    app: Flask, mock_j2534_bridge: Any, admin: Actor
+    app: Flask, mock_j2534_bridge: Any, admin: User
 ) -> None:
     """J2534 브리지로 전체 스캔 흐름 검증."""
     with app.app_context():
@@ -129,7 +129,7 @@ def test_full_scan_with_j2534(
 
 
 @pytest.mark.integration
-def test_blocked_services_in_scan(app: Flask, admin: Actor) -> None:
+def test_blocked_services_in_scan(app: Flask, admin: User) -> None:
     """스캔 중 차단된 서비스가 전송되지 않음을 검증."""
     with app.app_context():
         from app.modules.scanner.plan import get_commands

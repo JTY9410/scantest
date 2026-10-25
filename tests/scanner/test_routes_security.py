@@ -4,7 +4,7 @@ import pytest
 from flask import Flask
 from flask.testing import FlaskClient
 
-from app.models.actor import Actor
+from app.modules.accounts.models import User
 
 
 def test_transport_routes_require_auth(client: FlaskClient) -> None:
@@ -29,7 +29,7 @@ def test_transport_routes_require_auth(client: FlaskClient) -> None:
 
 
 def test_transport_routes_require_admin(
-    app: Flask, client: FlaskClient, user: Actor
+    app: Flask, client: FlaskClient, user: User
 ) -> None:
     """전송 계층 라우트는 관리자 권한을 요구합니다."""
     with client:
@@ -46,7 +46,7 @@ def test_transport_routes_require_admin(
 
 
 def test_test_transport_validates_input(
-    app: Flask, client: FlaskClient, admin: Actor
+    app: Flask, client: FlaskClient, admin: User
 ) -> None:
     """연결 테스트는 입력을 검증합니다."""
     with client.session_transaction() as session:
@@ -68,7 +68,7 @@ def test_test_transport_validates_input(
 
 
 def test_run_with_transport_validates_input(
-    app: Flask, client: FlaskClient, admin: Actor
+    app: Flask, client: FlaskClient, admin: User
 ) -> None:
     """스캔 실행은 입력을 검증합니다."""
     with client.session_transaction() as session:
@@ -90,7 +90,7 @@ def test_run_with_transport_validates_input(
 
 
 def test_csrf_protection_on_transport_routes(
-    app: Flask, client: FlaskClient, admin: Actor
+    app: Flask, client: FlaskClient, admin: User
 ) -> None:
     """전송 계층 라우트는 CSRF 보호를 적용합니다."""
     with client.session_transaction() as session:
@@ -108,7 +108,7 @@ def test_csrf_protection_on_transport_routes(
     assert response.status_code in (200, 400, 403)
 
 
-def test_doip_blocks_ssrf(app: Flask, client: FlaskClient, admin: Actor) -> None:
+def test_doip_blocks_ssrf(app: Flask, client: FlaskClient, admin: User) -> None:
     """DoIP는 SSRF를 차단합니다."""
     with client.session_transaction() as session:
         session["_user_id"] = str(admin.id)
