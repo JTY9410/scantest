@@ -16,9 +16,6 @@ TESTER = 0x0E00
 FUNCTIONAL = 0xE400
 DOIP_PORT = 13400
 _VERSION = b"\x02\xFD"
-
-# 타입 정의
-Connect = Callable[[str, int, float], socket.socket]
 _READS = (
     ("0100", "모드 01 지원", "obd"),
     ("0101", "레디니스", "obd"),
