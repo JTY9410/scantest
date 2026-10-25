@@ -15,8 +15,8 @@ from sqlalchemy import select
 
 from app import db
 from app.modules.accounts.models import User
-from app.models.scan import Scan
-from app.models.scan_report import ScanReport
+from app.modules.scans.models import Scan
+from app.modules.scans.report_models import ScanReport
 from app.modules.scanner.service import run_scan_with_transport
 
 
