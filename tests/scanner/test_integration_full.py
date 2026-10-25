@@ -148,12 +148,18 @@ def mock_j2534_server():
 # === 통합 테스트 ===
 
 def test_run_scan_with_transport_doip(
-    app: Flask, mock_doip_server: tuple[str, int], admin: User
+    app: Flask, mock_doip_server: tuple[str, int], make_user: Any
 ) -> None:
     """DoIP로 run_scan_with_transport() 전체 흐름을 검증합니다."""
     host, port = mock_doip_server
     
+    # admin 사용자 생성
+    admin_id = make_user("admin", type="admin")
+    
     with app.app_context():
+        from app.modules.accounts.models import User
+        admin = db.session.get(User, admin_id)
+        
         try:
             scan_id = run_scan_with_transport(
                 actor=admin,
@@ -178,10 +184,16 @@ def test_run_scan_with_transport_doip(
 
 
 def test_run_scan_with_transport_j2534(
-    app: Flask, mock_j2534_server: str, admin: User
+    app: Flask, mock_j2534_server: str, make_user: Any
 ) -> None:
     """J2534로 run_scan_with_transport() 전체 흐름을 검증합니다."""
+    # admin 사용자 생성
+    admin_id = make_user("admin2", type="admin")
+    
     with app.app_context():
+        from app.modules.accounts.models import User
+        admin = db.session.get(User, admin_id)
+        
         try:
             scan_id = run_scan_with_transport(
                 actor=admin,

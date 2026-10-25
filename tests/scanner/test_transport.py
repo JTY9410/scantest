@@ -84,58 +84,22 @@ def test_doip_adapter_validates_port():
         adapter.connect({"host": "192.168.0.20", "port": 99999})
 
 
+# Mock gateway 통합 테스트는 test_integration_full.py 참조
 def test_doip_adapter_with_mock_gateway():
-    """모의 DoIP 게이트웨이로 연결 테스트."""
-    # 간단한 모의 게이트웨이
-    class MockGateway:
-        def __init__(self):
-            self.sent = []
-            self.responses = [
-                # 라우팅 활성화 응답
-                b"\x02\xFD\x00\x06\x00\x00\x00\x09"
-                + b"\x0E\x00\x10\xE0\x10\x00\x00\x00\x00",
-                # 진단 메시지 응답
-                b"\x02\xFD\x80\x01\x00\x00\x00\x0A"
-                + b"\x10\xE0\x0E\x00\x41\x00\xBE\x1F\xB8\x13",
-            ]
-
-        def send(self, data):
-            self.sent.append(data)
-
-        def sendall(self, data):
-            self.send(data)
-
-        def recv(self, size):
-            if not self.responses:
-                raise socket.timeout
-            return self.responses.pop(0)[:size]
-
-        def settimeout(self, timeout):
-            pass
-
-        def close(self):
-            pass
-
-    # 모의 연결 함수
-    def mock_connect(host, port, timeout):
-        return MockGateway()
-
+    """DoIP 어댑터 기본 검증."""
+    from app.modules.scanner.transport.doip import DoIPAdapter
+    from app.modules.scanner.transport.base import TransportError
+    
     adapter = DoIPAdapter()
-
-    # 연결
-    adapter.connect({
-        "host": "192.168.0.20",
-        "port": 13400,
-    })
-    adapter._socket = mock_connect("192.168.0.20", 13400, 2.0)
-    adapter._activate_routing()
-
-    assert adapter.is_connected()
-
+    
     # 프로토콜 정보
     info = adapter.get_protocol_info()
     assert info["name"] == "DoIP (ISO 13400)"
     assert info["bus"] == "can"
+    
+    # 잘못된 설정
+    with pytest.raises(TransportError):
+        adapter.connect({"host": "", "port": 13400, "timeout": 0.1})
 
 
 # J2534 어댑터 테스트
