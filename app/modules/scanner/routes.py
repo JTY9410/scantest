@@ -100,9 +100,9 @@ def run_with_transport():
         
     except ServiceError as error:
         return {"message": error.message}, error.status
-    except Exception as exc:
+    except Exception:
         current_app.logger.exception("스캔 실행 실패")
-        return {"message": f"스캔 실패: {str(exc)}"}, 500
+        return {"message": "스캔 실행 중 오류가 발생했습니다."}, 500
 
 
 @bp.get("/")
