@@ -339,15 +339,26 @@ pytest tests/scanner/test_transport.py::test_j2534_adapter_with_real_mock_bridge
 다음 항목은 실제 장비로 검증하지 못했습니다:
 
 - **DoIP**:
+  - [x] TCP 연결 및 라우팅 활성화 (mock 검증)
+  - [x] 진단 메시지 송수신 (mock 검증)
+  - [x] 기능 주소 브로드캐스트 (mock 검증)
+  - [x] ISO-TP 프레임 변환 (mock 검증)
   - [ ] UDP 차량 탐색 (`discover_vehicle`)
   - [ ] 29비트 CAN 주소
-  - [ ] 여러 게이트웨이 동시 연결
+  - [ ] 실제 차량으로 전체 스캔
   
 - **J2534**:
+  - [x] HTTP API 인터페이스 (mock 검증)
+  - [x] CAN 프로토콜 인터페이스 (mock 검증)
+  - [ ] Windows에서 실제 J2534 DLL 로드
   - [ ] K-Line 프로토콜 (ISO 9141, ISO 14230)
-  - [ ] J1850 VPW/PWM
+  - [ ] J1850 VPW/PWM 프로토콜
+  - [ ] 실제 장비와 차량 연결
   - [ ] 여러 장비 동시 사용
-  - [ ] J2534 이더넷/DoIP 확장
+
+**구현 방식**:
+- DoIP: CAN 프로토콜은 완전 구현 및 mock 검증 완료
+- J2534: CAN 인터페이스만 구현, K-Line/J1850은 인터페이스만 존재
 
 ### 알려진 제한사항
 

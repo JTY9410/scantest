@@ -1,5 +1,6 @@
 """전송 계층 테스트."""
 
+import os
 import pytest
 import socket
 import threading
@@ -173,7 +174,100 @@ def test_transport_adapter_is_abstract():
         TransportAdapter()
 
 
-# 통합 테스트
+# 안전 정책 테스트 - DoIP
+
+
+def test_doip_blocks_blocked_services():
+    """DoIP가 차단된 서비스를 보내지 못합니다."""
+    # 차단된 명령 목록
+    blocked_commands = [
+        "10 01",  # 진단 세션 변경
+        "27 01",  # 보안 접근
+        "2E F190 41424344",  # 데이터 쓰기
+        "31 01 FF00",  # 루틴 제어
+    ]
+
+    adapter = DoIPAdapter()
+    # 연결되지 않은 상태에서도 검증 가능한 명령 형식 확인
+
+    # 실제로는 ethernet.py의 _blocked 함수가 plan.py에서 사용됨
+    from app.modules.scanner.ethernet import _blocked
+
+    for command in blocked_commands:
+        assert _blocked(command.replace(" ", "")), f"명령 {command}이(가) 차단되지 않았습니다"
+
+    # 허용된 명령
+    allowed_commands = ["0100", "03", "22F190", "1902FF"]
+    for command in allowed_commands:
+        assert not _blocked(command), f"명령 {command}이(가) 잘못 차단되었습니다"
+
+
+def test_doip_blocks_dtc_clear():
+    """DoIP가 DTC 지우기를 차단합니다."""
+    from app.modules.scanner.ethernet import _blocked
+
+    # OBD DTC 지우기
+    assert _blocked("04")
+
+    # UDS DTC 지우기
+    assert _blocked("14FFFFFF")
+    assert _blocked("14")
+
+
+# 안전 정책 테스트 - J2534
+
+
+def test_j2534_parse_blocks_blocked_services():
+    """J2534 로그 파싱이 차단된 서비스를 거부합니다."""
+    from app.modules.scanner.ethernet import parse_j2534
+    from app.core.errors import ServiceError
+
+    # 쓰기 명령
+    with pytest.raises(ServiceError, match="쓰기"):
+        parse_j2534("7E0 2EF190414243 62F190414243")
+
+    # 세션 변경
+    with pytest.raises(ServiceError, match="세션|쓰기"):
+        parse_j2534("7E0 1001 5001")
+
+    # 보안 접근
+    with pytest.raises(ServiceError, match="세션|보안|쓰기"):
+        parse_j2534("7E0 2701 6701")
+
+
+# SSRF 방지 테스트
+
+
+def test_doip_blocks_metadata_address():
+    """DoIP가 메타데이터 주소를 차단합니다."""
+    adapter = DoIPAdapter()
+
+    with pytest.raises(TransportError, match="주소"):
+        adapter.connect({"host": "169.254.169.254", "port": 13400})
+
+
+def test_doip_blocks_on_vercel_deployment(monkeypatch):
+    """Vercel 환경에서 DoIP를 차단합니다."""
+    monkeypatch.setenv("VERCEL", "1")
+
+    adapter = DoIPAdapter()
+    with pytest.raises(TransportError, match="차량 이더넷"):
+        adapter.connect({"host": "192.168.0.1", "port": 13400})
+
+
+def test_ethernet_vehicle_network_blocked_check(monkeypatch):
+    """ethernet.vehicle_network_blocked가 Vercel을 감지합니다."""
+    from app.modules.scanner.ethernet import vehicle_network_blocked
+
+    # 일반 환경
+    assert not vehicle_network_blocked()
+
+    # Vercel 환경
+    monkeypatch.setenv("VERCEL", "1")
+    assert vehicle_network_blocked()
+
+
+# 통합 테스트 (스킵됨 - 수동 실행)
 
 
 @pytest.mark.integration

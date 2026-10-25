@@ -9,10 +9,9 @@ J2534 DLL은 Windows에만 존재하므로, 로컬 브리지 프로세스를 통
 
 import json
 import time
+from http.client import HTTPConnection, HTTPSConnection
 from typing import Any
-from urllib.parse import urljoin
-
-import requests
+from urllib.parse import urljoin, urlparse
 
 from app.modules.scanner.transport.base import TransportAdapter, TransportError, TransportResult
 
@@ -43,7 +42,9 @@ class J2534Adapter(TransportAdapter):
 
     def __init__(self):
         self._bridge_url: str | None = None
-        self._session: requests.Session | None = None
+        self._bridge_host: str | None = None
+        self._bridge_port: int = 80
+        self._use_https: bool = False
         self._device_id: int | None = None
         self._channel_id: int | None = None
         self._protocol: int = PROTOCOL_ISO15765
@@ -86,8 +87,12 @@ class J2534Adapter(TransportAdapter):
         self._protocol = protocol_map.get(protocol_name, PROTOCOL_ISO15765)
 
         try:
-            self._session = requests.Session()
+            # URL 파싱
+            parsed = urlparse(bridge_url)
             self._bridge_url = bridge_url.rstrip("/")
+            self._bridge_host = parsed.hostname or "localhost"
+            self._bridge_port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            self._use_https = parsed.scheme == "https"
 
             # 브리지 상태 확인
             status = self._api_call("GET", "/api/status")
@@ -121,19 +126,17 @@ class J2534Adapter(TransportAdapter):
 
             self._connected = True
 
-        except requests.RequestException as exc:
+        except TransportError:
+            raise
+        except Exception as exc:
             raise TransportError(
                 f"J2534 브리지에 연결하지 못했습니다: {exc}. "
                 f"브리지가 {bridge_url}에서 실행 중인지 확인하세요."
             )
-        except TransportError:
-            raise
-        except Exception as exc:
-            raise TransportError(f"J2534 연결 실패: {exc}")
 
     def disconnect(self) -> None:
         """연결을 종료합니다."""
-        if not self._session:
+        if not self._connected:
             return
 
         try:
@@ -156,9 +159,8 @@ class J2534Adapter(TransportAdapter):
         except Exception:
             pass
         finally:
-            if self._session:
-                self._session.close()
-            self._session = None
+            self._bridge_url = None
+            self._bridge_host = None
             self._device_id = None
             self._channel_id = None
             self._connected = False
@@ -253,7 +255,7 @@ class J2534Adapter(TransportAdapter):
         Returns:
             [{"name": "...", "vendor": "...", "dll_path": "..."}]
         """
-        if not self._session or not self._bridge_url:
+        if not self._bridge_url:
             raise TransportError("브리지에 연결되지 않았습니다.")
 
         try:
@@ -296,27 +298,41 @@ class J2534Adapter(TransportAdapter):
             }
 
     def _api_call(self, method: str, path: str, data: dict | None = None) -> dict:
-        """브리지 API를 호출합니다."""
-        if not self._session or not self._bridge_url:
+        """브리지 API를 호출합니다 (urllib 사용)."""
+        if not self._bridge_host:
             raise TransportError("브리지에 연결되지 않았습니다.")
 
-        url = urljoin(self._bridge_url, path)
-
         try:
-            if method == "GET":
-                response = self._session.get(url, timeout=10)
+            # HTTP 연결
+            if self._use_https:
+                conn = HTTPSConnection(self._bridge_host, self._bridge_port, timeout=10)
             else:
-                response = self._session.post(url, json=data or {}, timeout=10)
+                conn = HTTPConnection(self._bridge_host, self._bridge_port, timeout=10)
 
-            result = response.json()
+            headers = {"Content-Type": "application/json", "Accept": "application/json"}
+            body = None
 
-            if not response.ok:
-                error = result.get("error", "알 수 없는 오류")
+            if method == "GET":
+                conn.request("GET", path, headers=headers)
+            else:
+                body = json.dumps(data or {}).encode("utf-8")
+                conn.request("POST", path, body=body, headers=headers)
+
+            response = conn.getresponse()
+            response_data = response.read().decode("utf-8")
+            conn.close()
+
+            result = json.loads(response_data) if response_data else {}
+
+            if response.status >= 400:
+                error = result.get("error") or result.get("message", "알 수 없는 오류")
                 raise TransportError(f"브리지 API 오류: {error}")
 
             return result
 
-        except requests.RequestException as exc:
+        except json.JSONDecodeError as exc:
+            raise TransportError(f"브리지 응답 파싱 실패: {exc}")
+        except Exception as exc:
             raise TransportError(f"브리지 통신 실패: {exc}")
 
     def _get_bus_type(self) -> str:
