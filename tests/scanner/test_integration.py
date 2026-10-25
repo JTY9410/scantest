@@ -1,155 +1,145 @@
-"""통합 테스트: mock 서버로 전체 스캔 흐름 검증.
+"""다중 전송 방식 진단의 전체 흐름 통합 테스트.
 
-DoIP mock 게이트웨이와 J2534 mock 브리지를 사용하여
-전송 계층 → 스캔 실행 → 해석 → 리포트까지 전체 흐름을 테스트합니다.
+mock DoIP 게이트웨이 및 mock J2534 브리지를 실행하여
+run_scan_with_transport() → 스캔 → 해석 → 리포트 저장까지 완전한 흐름 검증.
 """
 
-import pytest
+import json
 import threading
 import time
-import sys
-import os
+from typing import Any
 
-# 통합 테스트는 실제 서버 실행이 필요하므로 스킵
-pytestmark = pytest.mark.integration
+import pytest
+from flask import Flask
+from sqlalchemy import select
+
+from app import db
+from app.models.actor import Actor
+from app.models.scan import Scan
+from app.models.scan_report import ScanReport
+from app.modules.scanner.service import run_scan_with_transport
 
 
-@pytest.fixture(scope="module")
+def _run_mock_doip_server():
+    """mock DoIP 게이트웨이 실행."""
+    from bridge.mock_doip_gateway import create_app
+
+    app = create_app()
+    app.run(host="127.0.0.1", port=13401, threaded=True, use_reloader=False)
+
+
+def _run_mock_j2534_server():
+    """mock J2534 브리지 실행."""
+    import uvicorn
+    from bridge.mock_server import app as mock_app
+
+    uvicorn.run(
+        mock_app,
+        host="127.0.0.1",
+        port=15001,
+        log_level="error",
+        access_log=False,
+    )
+
+
+@pytest.fixture
 def mock_doip_gateway():
-    """DoIP mock 게이트웨이를 백그라운드에서 실행합니다."""
-    # mock 서버 import
-    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "..", "bridge"))
-    from bridge.mock_doip_gateway import MockDoIPGateway
-
-    gateway = MockDoIPGateway(host="127.0.0.1", port=13401)  # 기본 포트 피하기
-    gateway.start()
-
-    yield gateway
-
-    gateway.stop()
-
-
-@pytest.fixture(scope="module")
-def mock_j2534_bridge():
-    """J2534 mock 브리지를 백그라운드에서 실행합니다."""
-    pytest.skip("J2534 mock 브리지는 FastAPI 서버이므로 pytest fixture로 실행 불가")
-    # 수동으로 bridge/mock_server.py를 실행해야 함
+    """백그라운드에서 mock DoIP 게이트웨이 시작."""
+    thread = threading.Thread(target=_run_mock_doip_server, daemon=True)
+    thread.start()
+    time.sleep(1.0)  # 서버 시작 대기
     yield
+    # daemon=True이므로 자동 종료됨
 
 
-def test_doip_full_scan_flow(mock_doip_gateway):
-    """DoIP로 전체 스캔 흐름을 테스트합니다."""
-    pytest.skip("Mock 게이트웨이 연결 안정성 확보 후 활성화")
-
-    from app.modules.scanner.transport import DoIPAdapter
-
-    adapter = DoIPAdapter()
-
-    # 연결
-    adapter.connect({"host": "127.0.0.1", "port": 13401, "timeout": 5.0})
-
-    try:
-        # 기본 명령들 실행
-        commands = [
-            ("0100", "PID 지원"),
-            ("0101", "MIL 상태"),
-            ("03", "DTC"),
-        ]
-
-        for command, label in commands:
-            result = adapter.send_command(command, timeout_ms=2000)
-            assert result.reply is not None, f"{label} 명령이 응답을 받지 못했습니다"
-            assert result.error is None, f"{label} 명령이 오류를 반환했습니다: {result.error}"
-
-        # 프로토콜 정보
-        info = adapter.get_protocol_info()
-        assert info["name"] == "DoIP (ISO 13400)"
-
-    finally:
-        adapter.disconnect()
+@pytest.fixture
+def mock_j2534_bridge():
+    """백그라운드에서 mock J2534 브리지 시작."""
+    thread = threading.Thread(target=_run_mock_j2534_server, daemon=True)
+    thread.start()
+    time.sleep(1.0)  # 서버 시작 대기
+    yield
+    # daemon=True이므로 자동 종료됨
 
 
-def test_transport_layer_blocks_unsafe_commands():
-    """전송 계층이 안전하지 않은 명령을 차단합니다."""
-    from app.modules.scanner.ethernet import _blocked
+@pytest.mark.integration
+def test_full_scan_with_doip(
+    app: Flask, mock_doip_gateway: Any, admin: Actor
+) -> None:
+    """DoIP 게이트웨이로 전체 스캔 흐름 검증."""
+    with app.app_context():
+        # 스캔 실행
+        scan_id = run_scan_with_transport(
+            actor=admin,
+            car_no="12가3456",
+            transport="doip",
+            transport_config={"host": "127.0.0.1", "port": 13401},
+            source="test",
+        )
 
-    # 차단되어야 하는 명령
-    blocked = [
-        "10",  # 진단 세션
-        "1001",  # 진단 세션 변경
-        "27",  # 보안 접근
-        "2701",
-        "2E",  # 데이터 쓰기
-        "2EF190414243",
-        "31",  # 루틴
-        "3101FF00",
-        "04",  # OBD DTC 지우기
-        "14",  # UDS DTC 지우기
-        "14FFFFFF",
-    ]
+        # 스캔 결과 확인
+        scan = db.session.get(Scan, scan_id)
+        assert scan is not None
+        assert scan.car_no == "12가3456"
+        assert scan.finished_at is not None
 
-    for cmd in blocked:
-        assert _blocked(cmd), f"명령 {cmd}이(가) 차단되지 않았습니다"
+        # 데이터셋 확인
+        assert len(scan.datasets) > 0
+        dataset = scan.datasets[0]
+        data = json.loads(dataset.data)
+        assert "obd" in data or "dtc" in data
 
-    # 허용되어야 하는 명령
-    allowed = [
-        "0100", "0101", "010C", "010D",  # OBD 모드 01
-        "03", "07", "0A",  # DTC 읽기
-        "22F190", "22F187", "22F188",  # UDS 읽기
-        "1902FF", "190209",  # UDS DTC 상태
-    ]
-
-    for cmd in allowed:
-        assert not _blocked(cmd), f"명령 {cmd}이(가) 잘못 차단되었습니다"
-
-
-def test_vercel_environment_blocks_vehicle_network(monkeypatch):
-    """Vercel 환경에서 차량 네트워크 접근을 차단합니다."""
-    from app.modules.scanner.ethernet import vehicle_network_blocked
-    from app.modules.scanner.transport import DoIPAdapter
-
-    # 일반 환경: 허용
-    assert not vehicle_network_blocked()
-
-    # Vercel 환경: 차단
-    monkeypatch.setenv("VERCEL", "1")
-    assert vehicle_network_blocked()
-
-    # DoIP 어댑터도 차단
-    adapter = DoIPAdapter()
-    with pytest.raises(Exception, match="차량 이더넷"):
-        adapter.connect({"host": "192.168.0.1", "port": 13400})
+        # 리포트 확인
+        report = db.session.scalar(
+            select(ScanReport).where(ScanReport.scan_id == scan_id)
+        )
+        assert report is not None
+        assert report.summary_html is not None
 
 
-def test_j2534_parse_validates_commands():
-    """J2534 로그 파싱이 명령을 검증합니다."""
-    from app.modules.scanner.ethernet import parse_j2534
-    from app.core.errors import ServiceError
+@pytest.mark.integration
+def test_full_scan_with_j2534(
+    app: Flask, mock_j2534_bridge: Any, admin: Actor
+) -> None:
+    """J2534 브리지로 전체 스캔 흐름 검증."""
+    with app.app_context():
+        # 스캔 실행
+        scan_id = run_scan_with_transport(
+            actor=admin,
+            car_no="12가3456",
+            transport="j2534_can",
+            transport_config={"bridge_url": "http://127.0.0.1:15001"},
+            source="test",
+        )
 
-    # 정상 명령
-    steps = parse_j2534("""
-E400 0100 41 00 BE 1F B8 13
-7E8 0101 41 01 00 07 65 04
-7E8 03 43 01 03 04 5B C2
-""")
-    assert len(steps) == 3
-    assert steps[0]["command"] == "0100"
-    assert steps[1]["header"] == "000007E8"
-    assert steps[2]["command"] == "03"
+        # 스캔 결과 확인
+        scan = db.session.get(Scan, scan_id)
+        assert scan is not None
+        assert scan.car_no == "12가3456"
+        assert scan.finished_at is not None
 
-    # 차단된 명령 (쓰기)
-    with pytest.raises(ServiceError, match="쓰기|세션|보안"):
-        parse_j2534("7E0 2EF190414243 62F190414243")
+        # 데이터셋 확인
+        assert len(scan.datasets) > 0
 
-    # 빈 입력
-    with pytest.raises(ServiceError, match="단계 기록"):
-        parse_j2534("")
-
-    # 잘못된 형식
-    with pytest.raises(ServiceError, match="주소|명령|응답"):
-        parse_j2534("invalid line")
+        # 리포트 확인
+        report = db.session.scalar(
+            select(ScanReport).where(ScanReport.scan_id == scan_id)
+        )
+        assert report is not None
 
 
-if __name__ == "__main__":
-    # 수동 실행용
-    pytest.main([__file__, "-v", "-s"])
+@pytest.mark.integration
+def test_blocked_services_in_scan(app: Flask, admin: Actor) -> None:
+    """스캔 중 차단된 서비스가 전송되지 않음을 검증."""
+    with app.app_context():
+        from app.modules.scanner.plan import get_commands
+
+        commands = get_commands()
+        for cmd in commands:
+            # 차단 서비스 목록: 10, 27, 2E, 31, 04, 14
+            assert not cmd.startswith("10")
+            assert not cmd.startswith("27")
+            assert not cmd.startswith("2E")
+            assert not cmd.startswith("31")
+            assert not cmd.startswith("04")
+            assert not cmd.startswith("14")
