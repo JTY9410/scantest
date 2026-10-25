@@ -14,7 +14,7 @@ from http.client import HTTPConnection, HTTPSConnection
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-from app.modules.scanner.transport.base import TransportAdapter, TransportError, TransportResult, check_target_host
+from app.modules.scanner.transport.base import TransportAdapter, TransportError, TransportResult, check_target_host, ensure_server_transport_allowed
 
 _log = logging.getLogger(__name__)
 
@@ -67,6 +67,7 @@ class J2534Adapter(TransportAdapter):
         Raises:
             TransportError: 연결 실패 시
         """
+        ensure_server_transport_allowed()
         if not isinstance(config, dict):
             raise TransportError("연결 설정을 확인하세요.")
         raw_url = config.get("bridge_url")

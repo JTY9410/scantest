@@ -19,6 +19,7 @@ from app.modules.scanner.transport.base import (
     TransportResult,
     check_port,
     check_target_host,
+    serverless,
 )
 
 _log = logging.getLogger(__name__)
@@ -118,7 +119,8 @@ class DoIPAdapter(TransportAdapter):
             TransportError: 연결 실패 시
         """
         # Vercel 환경에서는 차량 네트워크에 접근 불가
-        if os.environ.get("VERCEL") == "1":
+        # 배포(서버리스) 환경에서는 차량 네트워크에 접근 불가
+        if serverless():
             raise TransportError(
                 "이 서버는 차량 이더넷에 연결할 수 없습니다. "
                 "차량과 같은 망의 로컬 서버에서 실행하세요."

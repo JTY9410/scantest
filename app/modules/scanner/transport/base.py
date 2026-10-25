@@ -5,6 +5,7 @@
 
 import ipaddress
 import logging
+import os
 import re
 import socket
 from abc import ABC, abstractmethod
@@ -26,12 +27,29 @@ _HOST = re.compile(r"^[A-Za-z0-9.-]{1,253}$")
 _BLOCKED_NAMES = {"metadata", "metadata.google.internal", "metadata.goog", "instance-data", "instance-data.ec2.internal"}
 
 
+SERVER_TRANSPORT_BLOCKED = "이 서버에서는 차량 연결을 사용할 수 없습니다. 휴대폰 앱이나 브라우저 스캔을 사용하세요."
+
+
+def serverless() -> bool:
+    """배포(Vercel 등 서버리스) 환경이면 True. 이 환경은 차량 망에 닿지 않는다."""
+    return os.environ.get("VERCEL") == "1" or bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+
+
+def ensure_server_transport_allowed() -> None:
+    """서버 측 차량 전송(DoIP·J2534)을 서버리스 환경에서 막는다."""
+    if serverless():
+        raise TransportError(SERVER_TRANSPORT_BLOCKED)
+
+
 def _blocked_ip(ip: ipaddress._BaseAddress) -> bool:
     """클라우드 메타데이터(링크 로컬)·멀티캐스트·미지정·예약 주소는 막는다.
 
     차량 게이트웨이와 로컬 브리지는 사설망·루프백에 있으므로 허용한다."""
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
         ip = ip.ipv4_mapped
+    if serverless():
+        # 방어 심화: 배포 환경에서는 공인 주소 외(사설·루프백·링크로컬·멀티캐스트·미지정·예약) 전부 차단
+        return not ip.is_global or ip.is_multicast
     if ip.is_loopback:
         return False
     return ip.is_link_local or ip.is_multicast or ip.is_unspecified or ip.is_reserved
