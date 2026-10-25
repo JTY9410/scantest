@@ -36,8 +36,30 @@ from app.modules.scanner.plan import DOIP_NOTE
 from app.modules.scans import car_info
 from app.modules.scans.models import Code, Scan, ScanCode, ScanDocument, ScanType
 
-TRANSPORTS = {"ble": "블루투스(BLE)", "serial": "블루투스 클래식·USB(시리얼)", "wifi": "WiFi", "lte": "LTE 단말기",
-              "doip": "이더넷(DoIP)", "j2534": "J2534 패스스루"}
+TRANSPORTS = {
+    "ble": "블루투스(BLE)", 
+    "serial": "블루투스 클래식·USB(시리얼)", 
+    "wifi": "WiFi", 
+    "lte": "LTE 단말기",
+    "doip": "이더넷(DoIP)", 
+    "j2534": "J2534 패스스루",
+}
+
+# 지원되는 전송 방식 (실제 구현된 것만)
+SUPPORTED_TRANSPORTS = {
+    "ble": {"name": "블루투스 (BLE)", "client_side": True, "status": "stable"},
+    "serial": {"name": "블루투스 클래식/USB", "client_side": True, "status": "stable"},
+    "wifi": {"name": "WiFi OBD", "client_side": True, "status": "stable"},
+    "lte": {"name": "LTE 단말기", "client_side": False, "status": "stable"},
+    "doip": {"name": "DoIP (이더넷)", "client_side": False, "status": "experimental", 
+             "note": "로컬 서버 전용, CAN 프로토콜만 지원"},
+    "j2534_can": {"name": "J2534 패스스루 (CAN)", "client_side": False, "status": "experimental",
+                  "note": "Windows 브리지 필요, CAN 프로토콜만 검증됨"},
+    "j2534_kline": {"name": "J2534 패스스루 (K-Line)", "client_side": False, "status": "unverified",
+                    "note": "인터페이스만 구현, 실장비 미검증"},
+    "j2534_j1850": {"name": "J2534 패스스루 (J1850)", "client_side": False, "status": "unverified",
+                    "note": "인터페이스만 구현, 실장비 미검증"},
+}
 MAX_STEPS = 600  # 제어기 순회(최대 59개 주소 × 19 02·19 04)로 단계가 늘었다
 MAX_REPLY = 4000
 _COMMAND = re.compile(r"^(AT[A-Z0-9 ]{1,12}|([0-9A-F]{2}){1,8})$")
@@ -179,6 +201,164 @@ def _add_logic_error(result: dict, label: str, header: str | None, command: str 
 
 def _int(value: Any) -> int | None:
     return value if isinstance(value, int) else None
+
+
+def run_scan_with_transport(
+    actor: User, *, 
+    car_no: str | None, 
+    transport: str,
+    transport_config: dict | None = None,
+    source: str = DatasetSource.WEB,
+) -> Scan:
+    """전송 방식을 선택하여 스캔을 실행합니다.
+    
+    Args:
+        actor: 실행 사용자
+        car_no: 차량번호
+        transport: 전송 방식 (doip, j2534_can, ble, serial, wifi, lte)
+        transport_config: 전송 방식별 설정
+            - doip: {"host": "192.168.0.20", "port": 13400}
+            - j2534_can: {"bridge_url": "http://localhost:5000"}
+        source: 데이터 출처
+        
+    Returns:
+        생성된 Scan 객체
+    """
+    from app.modules.scanner.plan import build_plan
+    from app.modules.scanner.transport import DoIPAdapter, J2534Adapter, TransportError
+    
+    # 차량 정보 조회
+    car_lookup = lookup_car(actor, car_no, refresh=False)
+    car = car_lookup.get("car")
+    lookup_error = car_lookup.get("error")
+    
+    # 전송 방식 검증
+    if transport not in SUPPORTED_TRANSPORTS:
+        raise ServiceError(f"지원하지 않는 전송 방식: {transport}")
+    
+    transport_info = SUPPORTED_TRANSPORTS[transport]
+    
+    # 실험적/미검증 방식 경고
+    if transport_info["status"] == "unverified":
+        raise ServiceError(
+            f"{transport_info['name']}는 아직 실장비로 검증되지 않았습니다. "
+            f"{transport_info.get('note', '')} "
+            f"현재 사용할 수 없습니다."
+        )
+    
+    # 클라이언트 측 연결은 steps를 직접 받아야 함
+    if transport_info["client_side"]:
+        raise ServiceError(
+            f"{transport_info['name']}는 브라우저/앱에서 직접 연결합니다. "
+            f"기존 스캔 방식을 사용하세요."
+        )
+    
+    # 스캔 계획 생성
+    plan = build_plan(car, expand=False)  # 서버 측 전송은 expand=False
+    steps_to_execute = plan["steps"]
+    
+    # 전송 어댑터 초기화
+    adapter = None
+    steps_result = []
+    
+    try:
+        if transport == "doip":
+            # DoIP 연결
+            config = transport_config or {}
+            host = config.get("host")
+            port = config.get("port", 13400)
+            
+            if not host:
+                raise ServiceError("DoIP 게이트웨이 주소를 입력하세요.")
+            
+            adapter = DoIPAdapter()
+            adapter.connect({"host": host, "port": port, "timeout": 2.0})
+            device = f"DoIP {host}:{port}"
+            
+        elif transport.startswith("j2534"):
+            # J2534 연결
+            config = transport_config or {}
+            bridge_url = config.get("bridge_url")
+            
+            if not bridge_url:
+                raise ServiceError("J2534 브리지 URL을 입력하세요.")
+            
+            # 프로토콜 선택
+            protocol_map = {
+                "j2534_can": "CAN",
+                "j2534_kline": "KWP",
+                "j2534_j1850": "J1850VPW",
+            }
+            protocol = protocol_map.get(transport, "CAN")
+            
+            adapter = J2534Adapter()
+            adapter.connect({
+                "bridge_url": bridge_url,
+                "protocol": protocol,
+                "baudrate": 500000,
+            })
+            device = f"J2534 {protocol} ({bridge_url})"
+            
+        else:
+            raise ServiceError(f"서버 측 전송 방식이 아닙니다: {transport}")
+        
+        # 명령 실행
+        for step in steps_to_execute:
+            command = step["command"]
+            header = step.get("header")
+            timeout = step.get("timeout", 2000)
+            
+            # AT 명령은 건너뜀 (ELM327 전용)
+            if command.startswith("AT"):
+                continue
+            
+            try:
+                result = adapter.send_command(command, header=header, timeout_ms=timeout)
+                
+                steps_result.append({
+                    "id": step["id"],
+                    "command": command,
+                    "header": header,
+                    "reply": result.reply,
+                    "error": result.error,
+                    "optional": step.get("optional", False),
+                    "probe": step.get("probe", False),
+                    "bus": step.get("bus"),
+                    "tMs": result.elapsed_ms,
+                    "group": step.get("group"),
+                    "label": step.get("label"),
+                })
+                
+            except TransportError as exc:
+                steps_result.append({
+                    "id": step["id"],
+                    "command": command,
+                    "header": header,
+                    "reply": None,
+                    "error": str(exc),
+                    "optional": step.get("optional", False),
+                    "probe": step.get("probe", False),
+                    "bus": step.get("bus"),
+                    "tMs": 0,
+                    "group": step.get("group"),
+                    "label": step.get("label"),
+                })
+        
+    finally:
+        if adapter:
+            adapter.disconnect()
+    
+    # run_scan 호출
+    return run_scan(
+        actor,
+        car_no=car_no,
+        car=car,
+        steps=steps_result,
+        transport=transport.replace("_", "-"),  # j2534_can → j2534-can
+        device=device,
+        lookup_error=lookup_error,
+        source=source,
+    )
 
 
 def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, transport: str,

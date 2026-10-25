@@ -34,11 +34,83 @@ def flow_config() -> dict:
             "aiVerifyUrlTemplate": url_for("scanner.ai_verify", scan_id=0).replace("/0/", "/{id}/")}
 
 
+@bp.post("/test-transport")
+@admin_required
+def test_transport():
+    """전송 방식 연결 테스트."""
+    data = _body()
+    transport = data.get("transport")
+    config = data.get("config", {})
+    
+    if not transport:
+        return {"success": False, "message": "전송 방식을 선택하세요."}, 400
+    
+    from app.modules.scanner.transport import DoIPAdapter, J2534Adapter, TransportError
+    
+    try:
+        if transport == "doip":
+            adapter = DoIPAdapter()
+            adapter.connect(config)
+            result = adapter.test_connection()
+            adapter.disconnect()
+            return result
+            
+        elif transport.startswith("j2534"):
+            # 프로토콜 매핑
+            protocol_map = {
+                "j2534_can": "CAN",
+                "j2534_kline": "KWP",
+                "j2534_j1850": "J1850VPW",
+            }
+            config["protocol"] = protocol_map.get(transport, "CAN")
+            
+            adapter = J2534Adapter()
+            adapter.connect(config)
+            result = adapter.test_connection()
+            adapter.disconnect()
+            return result
+            
+        else:
+            return {"success": False, "message": "서버 측 테스트를 지원하지 않는 방식입니다."}, 400
+            
+    except TransportError as exc:
+        return {"success": False, "message": exc.message, "details": {}}, 400
+    except Exception:
+        current_app.logger.exception("전송 연결 테스트 실패")
+        return {"success": False, "message": "테스트 중 오류가 발생했습니다.", "details": {}}, 500
+
+
+@bp.post("/run-with-transport")
+@admin_required
+def run_with_transport():
+    """전송 방식을 선택하여 스캔을 실행합니다."""
+    data = _body()
+    car_no = data.get("carNo")
+    transport = data.get("transport")
+    transport_config = data.get("config", {})
+    
+    try:
+        scan = service.run_scan_with_transport(
+            current_user,
+            car_no=car_no,
+            transport=transport,
+            transport_config=transport_config,
+        )
+        return {"id": scan.id, "url": url_for("scanner.result", scan_id=scan.id)}, 201
+        
+    except ServiceError as error:
+        return {"message": error.message}, error.status
+    except Exception:
+        current_app.logger.exception("스캔 실행 실패")
+        return {"message": "스캔 실행 중 오류가 발생했습니다."}, 500
+
+
 @bp.get("/")
 @admin_required
 def index():
     return render_template("scanner/index.html", obd=obd_config(), config=flow_config(),
-                           car_no=(request.args.get("car_no") or "")[:20])
+                           car_no=(request.args.get("car_no") or "")[:20],
+                           transports=service.SUPPORTED_TRANSPORTS)
 
 
 @bp.get("/ethernet")
