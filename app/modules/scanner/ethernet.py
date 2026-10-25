@@ -5,6 +5,7 @@
 
 import os
 import re
+from collections.abc import Generator
 
 from app.core.errors import ServiceError
 from app.modules.scanner.transport.doip import DoIPAdapter

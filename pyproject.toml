@@ -36,3 +36,6 @@ entrypoint = "app.wsgi:app"
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
+]
