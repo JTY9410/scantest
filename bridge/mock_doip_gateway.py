@@ -44,13 +44,13 @@ class MockDoIPGateway:
         self.server_socket: socket.socket | None = None
         self.running = False
 
-        # 모의 응답
+        # 모의 응답 (이미 bytes)
         self.responses = {
             b"\x01\x00": b"\x41\x00\xBE\x1F\xB8\x13",  # PID 지원
             b"\x01\x01": b"\x41\x01\x00\x07\x65\x04",  # MIL, DTC
             b"\x01\x0C": b"\x41\x0C\x0A\xF0",  # RPM
             b"\x03": b"\x43\x01\x03\x04\x5B\xC2",  # DTC
-            b"\x22\xF1\x90": b"\x62\xF1\x90WDCZG8AH723456789".encode("ascii")[:20],  # VIN
+            b"\x22\xF1\x90": b"\x62\xF1\x90WDCZG8AH723456789"[:20],  # VIN
         }
 
     def start(self):
