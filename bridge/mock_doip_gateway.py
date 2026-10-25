@@ -43,6 +43,7 @@ class MockDoIPGateway:
         self.port = port
         self.server_socket: socket.socket | None = None
         self.running = False
+        self.routing_code = 0x10  # 라우팅 활성화 응답 코드 (0x10 = 성공)
 
         # 모의 응답 (이미 bytes)
         self.responses = {
@@ -58,19 +59,27 @@ class MockDoIPGateway:
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_socket.bind((self.host, self.port))
+        self.port = self.server_socket.getsockname()[1]  # port=0이면 OS가 고른 포트
         self.server_socket.listen(5)
         self.running = True
 
         logger.info(f"[MOCK DoIP] 게이트웨이 시작: {self.host}:{self.port}")
 
-        accept_thread = threading.Thread(target=self._accept_connections, daemon=True)
-        accept_thread.start()
+        self._accept_thread = threading.Thread(target=self._accept_connections, daemon=True)
+        self._accept_thread.start()
 
     def stop(self):
         """서버 종료."""
         self.running = False
         if self.server_socket:
+            try:
+                self.server_socket.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
             self.server_socket.close()
+        thread = getattr(self, "_accept_thread", None)
+        if thread is not None:
+            thread.join(timeout=2.0)
 
     def _accept_connections(self):
         """연결 수락."""
@@ -115,13 +124,14 @@ class MockDoIPGateway:
                 # 요청 처리
                 if payload_type == ROUTING_ACTIVATION_REQUEST:
                     # 라우팅 활성화 응답 (성공)
+                    # ISO 13400-2: 테스터 주소(2) + 게이트웨이 주소(2) + 응답 코드(1) + 예약(4)
                     response = struct.pack(
-                        ">HHIB",
+                        ">HHBI",
                         0x0E00,  # 테스터 주소
                         0x10E0,  # 게이트웨이 주소
-                        0x00000000,  # ISO
-                        0x10,  # 성공
-                    ) + b"\x00\x00\x00\x00"
+                        self.routing_code,  # 0x10 = 성공
+                        0x00000000,  # 예약(ISO)
+                    )
 
                     packet = make_packet(ROUTING_ACTIVATION_RESPONSE, response)
                     client_socket.sendall(packet)

@@ -40,6 +40,8 @@ def _clean_database(app):
                 pass  # Table doesn't exist yet
             db.session.commit()
         else:
+            # 남은 세션이 잠금을 쥐고 있으면 무기한 기다리지 말고 실패로 드러낸다
+            db.session.execute(text("SET LOCAL lock_timeout = '30s'"))
             tables = ", ".join(t.name for t in db.metadata.sorted_tables)
             db.session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
             db.session.commit()

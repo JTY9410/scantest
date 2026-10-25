@@ -8,12 +8,15 @@ J2534 DLL은 Windows에만 존재하므로, 로컬 브리지 프로세스를 통
 """
 
 import json
+import logging
 import time
 from http.client import HTTPConnection, HTTPSConnection
 from typing import Any
 from urllib.parse import urljoin, urlparse
 
-from app.modules.scanner.transport.base import TransportAdapter, TransportError, TransportResult
+from app.modules.scanner.transport.base import TransportAdapter, TransportError, TransportResult, check_target_host
+
+_log = logging.getLogger(__name__)
 
 # J2534 프로토콜 ID
 PROTOCOL_ISO15765 = 1  # CAN (ISO 15765-4)
@@ -64,12 +67,23 @@ class J2534Adapter(TransportAdapter):
         Raises:
             TransportError: 연결 실패 시
         """
-        bridge_url = (config.get("bridge_url") or "").strip()
+        if not isinstance(config, dict):
+            raise TransportError("연결 설정을 확인하세요.")
+        raw_url = config.get("bridge_url")
+        bridge_url = (raw_url if isinstance(raw_url, str) else "").strip()
         if not bridge_url:
             raise TransportError("J2534 브리지 URL을 입력하세요.")
 
-        if not bridge_url.startswith(("http://", "https://")):
+        if "://" not in bridge_url:
             bridge_url = f"http://{bridge_url}"
+        try:
+            checked = urlparse(bridge_url)
+            checked_port = checked.port
+        except ValueError:
+            raise TransportError("J2534 브리지 URL을 확인하세요.") from None
+        if checked.scheme not in ("http", "https") or not checked.hostname or checked.username or checked.password:
+            raise TransportError("J2534 브리지 URL을 확인하세요.")
+        check_target_host(checked.hostname, checked_port or (443 if checked.scheme == "https" else 80))
 
         # 프로토콜 선택
         protocol_name = (config.get("protocol") or "CAN").upper()
@@ -127,12 +141,14 @@ class J2534Adapter(TransportAdapter):
             self._connected = True
 
         except TransportError:
+            self._connected = True
+            self.disconnect()
             raise
-        except Exception as exc:
-            raise TransportError(
-                f"J2534 브리지에 연결하지 못했습니다: {exc}. "
-                f"브리지가 {bridge_url}에서 실행 중인지 확인하세요."
-            )
+        except Exception:
+            _log.warning("J2534 브리지 연결 실패", exc_info=True)
+            self._connected = True
+            self.disconnect()
+            raise TransportError("J2534 브리지에 연결하지 못했습니다. 브리지가 실행 중인지 확인하세요.") from None
 
     def disconnect(self) -> None:
         """연결을 종료합니다."""
@@ -226,13 +242,14 @@ class J2534Adapter(TransportAdapter):
 
         except TransportError:
             raise
-        except Exception as exc:
+        except Exception:
+            _log.warning("J2534 명령 전송 실패", exc_info=True)
             elapsed = (time.time() - start) * 1000
             return TransportResult(
                 command=command,
                 header=header,
                 reply=None,
-                error=str(exc),
+                error="전송 오류",
                 elapsed_ms=elapsed,
             )
 
@@ -261,8 +278,11 @@ class J2534Adapter(TransportAdapter):
         try:
             result = self._api_call("GET", "/api/devices")
             return result.get("devices", [])
-        except Exception as exc:
-            raise TransportError(f"장비 목록 조회 실패: {exc}")
+        except TransportError:
+            raise
+        except Exception:
+            _log.warning("J2534 장비 목록 조회 실패", exc_info=True)
+            raise TransportError("장비 목록 조회에 실패했습니다.") from None
 
     def test_connection(self) -> dict[str, Any]:
         """J2534 연결 테스트를 수행합니다."""
@@ -290,12 +310,9 @@ class J2534Adapter(TransportAdapter):
                 },
             }
 
-        except Exception as exc:
-            return {
-                "success": False,
-                "message": f"테스트 중 오류 발생: {str(exc)}",
-                "details": {"error": str(exc)},
-            }
+        except Exception:
+            _log.exception("J2534 연결 테스트 오류")
+            return {"success": False, "message": "테스트 중 오류가 발생했습니다.", "details": {}}
 
     def _api_call(self, method: str, path: str, data: dict | None = None) -> dict:
         """브리지 API를 호출합니다 (urllib 사용)."""
@@ -325,15 +342,20 @@ class J2534Adapter(TransportAdapter):
             result = json.loads(response_data) if response_data else {}
 
             if response.status >= 400:
-                error = result.get("error") or result.get("message", "알 수 없는 오류")
-                raise TransportError(f"브리지 API 오류: {error}")
+                _log.warning("J2534 브리지 API 오류: %s %s", response.status, path)
+                raise TransportError(f"브리지 API 오류 (HTTP {response.status})")
+            if not isinstance(result, dict):
+                raise TransportError("브리지 응답 형식이 올바르지 않습니다.")
 
             return result
 
-        except json.JSONDecodeError as exc:
-            raise TransportError(f"브리지 응답 파싱 실패: {exc}")
-        except Exception as exc:
-            raise TransportError(f"브리지 통신 실패: {exc}")
+        except TransportError:
+            raise
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            raise TransportError("브리지 응답을 해석하지 못했습니다.") from None
+        except Exception:
+            _log.warning("J2534 브리지 통신 실패", exc_info=True)
+            raise TransportError("브리지와 통신하지 못했습니다.") from None
 
     def _get_bus_type(self) -> str:
         """프로토콜에 따른 버스 타입을 반환합니다."""

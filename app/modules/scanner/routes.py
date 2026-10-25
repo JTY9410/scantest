@@ -42,18 +42,24 @@ def test_transport():
     transport = data.get("transport")
     config = data.get("config", {})
     
-    if not transport:
+    if not transport or not isinstance(transport, str):
         return {"success": False, "message": "전송 방식을 선택하세요."}, 400
+    if not isinstance(config, dict):
+        return {"success": False, "message": "연결 설정을 확인하세요."}, 400
+    info = service.SUPPORTED_TRANSPORTS.get(transport)
+    if info is None or info["client_side"] or transport not in ("doip", "j2534_can", "j2534_kline", "j2534_j1850"):
+        return {"success": False, "message": "서버 측 테스트를 지원하지 않는 방식입니다."}, 400
+    if info["status"] == "unverified":
+        return {"success": False, "message": f"{info['name']}는 아직 실장비로 검증되지 않아 사용할 수 없습니다."}, 400
     
     from app.modules.scanner.transport import DoIPAdapter, J2534Adapter, TransportError
     
+    adapter = None
     try:
         if transport == "doip":
             adapter = DoIPAdapter()
             adapter.connect(config)
-            result = adapter.test_connection()
-            adapter.disconnect()
-            return result
+            return adapter.test_connection()
             
         elif transport.startswith("j2534"):
             # 프로토콜 매핑
@@ -62,13 +68,11 @@ def test_transport():
                 "j2534_kline": "KWP",
                 "j2534_j1850": "J1850VPW",
             }
-            config["protocol"] = protocol_map.get(transport, "CAN")
+            config = {**config, "protocol": protocol_map.get(transport, "CAN")}
             
             adapter = J2534Adapter()
             adapter.connect(config)
-            result = adapter.test_connection()
-            adapter.disconnect()
-            return result
+            return adapter.test_connection()
             
         else:
             return {"success": False, "message": "서버 측 테스트를 지원하지 않는 방식입니다."}, 400
@@ -78,6 +82,9 @@ def test_transport():
     except Exception:
         current_app.logger.exception("전송 연결 테스트 실패")
         return {"success": False, "message": "테스트 중 오류가 발생했습니다.", "details": {}}, 500
+    finally:
+        if adapter is not None:
+            adapter.disconnect()
 
 
 @bp.post("/run-with-transport")

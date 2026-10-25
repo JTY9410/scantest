@@ -3,6 +3,10 @@
 모든 전송 어댑터가 구현해야 하는 추상 클래스와 공통 타입을 정의합니다.
 """
 
+import ipaddress
+import logging
+import re
+import socket
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any
@@ -15,6 +19,46 @@ class TransportError(Exception):
         self.message = message
         self.status = status
         super().__init__(message)
+
+
+_log = logging.getLogger(__name__)
+_HOST = re.compile(r"^[A-Za-z0-9.-]{1,253}$")
+_BLOCKED_NAMES = {"metadata", "metadata.google.internal", "metadata.goog", "instance-data", "instance-data.ec2.internal"}
+
+
+def _blocked_ip(ip: ipaddress._BaseAddress) -> bool:
+    """클라우드 메타데이터(링크 로컬)·멀티캐스트·미지정·예약 주소는 막는다.
+
+    차량 게이트웨이와 로컬 브리지는 사설망·루프백에 있으므로 허용한다."""
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped:
+        ip = ip.ipv4_mapped
+    if ip.is_loopback:
+        return False
+    return ip.is_link_local or ip.is_multicast or ip.is_unspecified or ip.is_reserved
+
+
+def check_target_host(host: str | None, port: int) -> str:
+    """연결 대상 주소를 검사한다(SSRF 방지). 이름은 해석된 모든 주소를 확인한다."""
+    name = (host or "").strip().rstrip(".").lower()
+    if not name or not _HOST.fullmatch(name) or name in _BLOCKED_NAMES:
+        raise TransportError("게이트웨이 주소를 확인하세요.")
+    try:
+        ips = {ipaddress.ip_address(name)}
+    except ValueError:
+        try:
+            infos = socket.getaddrinfo(name, port, proto=socket.IPPROTO_TCP)
+        except (OSError, UnicodeError):
+            raise TransportError("게이트웨이 주소를 확인하세요.") from None
+        ips = {ipaddress.ip_address(info[4][0].split("%")[0]) for info in infos}
+    if not ips or any(_blocked_ip(ip) for ip in ips):
+        raise TransportError("게이트웨이 주소를 확인하세요.")
+    return name
+
+
+def check_port(port) -> int:
+    if isinstance(port, bool) or not isinstance(port, int) or not (1 <= port <= 65535):
+        raise TransportError("포트 번호를 확인하세요.")
+    return port
 
 
 @dataclass
@@ -105,7 +149,7 @@ class TransportAdapter(ABC):
                 return {
                     "success": False,
                     "message": f"테스트 명령 실패: {result.error}",
-                    "details": {"result": result},
+                    "details": {},
                 }
 
             return {
@@ -114,9 +158,6 @@ class TransportAdapter(ABC):
                 "details": {"protocol": self.get_protocol_info(), "result": result},
             }
 
-        except Exception as exc:
-            return {
-                "success": False,
-                "message": f"테스트 중 오류 발생: {str(exc)}",
-                "details": {"error": str(exc)},
-            }
+        except Exception:
+            _log.exception("전송 연결 테스트 오류")
+            return {"success": False, "message": "테스트 중 오류가 발생했습니다.", "details": {}}

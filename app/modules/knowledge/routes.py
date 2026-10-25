@@ -1,5 +1,5 @@
 """지식베이스 화면."""
-from flask import Blueprint, Response, flash, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, Response, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
 from app.core.errors import ServiceError
@@ -19,6 +19,7 @@ def _command_alerts():
                 return 0
             return alerts.pending_count()
         except Exception:  # noqa: BLE001 — 배너 때문에 화면이 깨지면 안 된다
+            current_app.logger.warning("명령 삭제 알림 수 조회 실패", exc_info=True)
             return 0
     return {"command_alert_count": command_alert_count}
 

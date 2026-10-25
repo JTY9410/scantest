@@ -224,17 +224,18 @@ def run_scan_with_transport(
     Returns:
         생성된 Scan 객체
     """
-    from app.modules.scanner.plan import build_plan
+    from app.modules.scanner.plan import _blocked, build_plan
     from app.modules.scanner.transport import DoIPAdapter, J2534Adapter, TransportError
     
-    # 차량 정보 조회
-    car_lookup = lookup_car(actor, car_no, refresh=False)
-    car = car_lookup.get("car")
-    lookup_error = car_lookup.get("error")
-    
-    # 전송 방식 검증
+    # 전송 방식 검증 (차량 조회 전에 먼저 거른다)
+    if not isinstance(transport, str) or not transport:
+        raise ServiceError("전송 방식을 선택하세요.")
     if transport not in SUPPORTED_TRANSPORTS:
-        raise ServiceError(f"지원하지 않는 전송 방식: {transport}")
+        raise ServiceError("지원하지 않는 전송 방식입니다.")
+    if transport_config is not None and not isinstance(transport_config, dict):
+        raise ServiceError("연결 설정을 확인하세요.")
+    if not car_info.normalize_car_no(car_no):
+        raise ServiceError("차량번호를 입력해주세요.")
     
     transport_info = SUPPORTED_TRANSPORTS[transport]
     
@@ -253,6 +254,14 @@ def run_scan_with_transport(
             f"기존 스캔 방식을 사용하세요."
         )
     
+    # 차량 정보 조회. 조회 실패는 스캔을 막지 않고 lookup_error로 남긴다(브라우저 흐름과 같다).
+    car = None
+    lookup_error = None
+    try:
+        car = lookup_car(actor, car_no, refresh=False).get("car")
+    except car_info.CarInfoError as exc:
+        lookup_error = exc.message
+
     # 스캔 계획 생성
     plan = build_plan(car, expand=False)  # 서버 측 전송은 expand=False
     steps_to_execute = plan["steps"]
@@ -272,7 +281,7 @@ def run_scan_with_transport(
                 raise ServiceError("DoIP 게이트웨이 주소를 입력하세요.")
             
             adapter = DoIPAdapter()
-            adapter.connect({"host": host, "port": port, "timeout": 2.0})
+            adapter.connect({"host": host, "port": port, "timeout": config.get("timeout", 2.0)})
             device = f"DoIP {host}:{port}"
             
         elif transport.startswith("j2534"):
@@ -311,6 +320,9 @@ def run_scan_with_transport(
             # AT 명령은 건너뜀 (ELM327 전용)
             if command.startswith("AT"):
                 continue
+            # 세션·보안·쓰기·루틴·지우기 서비스는 서버 측 전송으로 보내지 않는다
+            if _blocked(command) or command.replace(" ", "").upper()[:2] in {"04", "14"}:
+                continue
             
             try:
                 result = adapter.send_command(command, header=header, timeout_ms=timeout)
@@ -344,6 +356,8 @@ def run_scan_with_transport(
                     "label": step.get("label"),
                 })
         
+    except TransportError as exc:
+        raise ServiceError(exc.message, exc.status) from None
     finally:
         if adapter:
             adapter.disconnect()
@@ -354,7 +368,7 @@ def run_scan_with_transport(
         car_no=car_no,
         car=car,
         steps=steps_result,
-        transport=transport.replace("_", "-"),  # j2534_can → j2534-can
+        transport="j2534" if transport.startswith("j2534") else transport,
         device=device,
         lookup_error=lookup_error,
         source=source,

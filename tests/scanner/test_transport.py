@@ -84,22 +84,32 @@ def test_doip_adapter_validates_port():
         adapter.connect({"host": "192.168.0.20", "port": 99999})
 
 
-# Mock gateway 통합 테스트는 test_integration_full.py 참조
-def test_doip_adapter_with_mock_gateway():
-    """DoIP 어댑터 기본 검증."""
-    from app.modules.scanner.transport.doip import DoIPAdapter
-    from app.modules.scanner.transport.base import TransportError
-    
+def test_doip_adapter_with_mock_gateway(mock_doip_gateway):
+    """모의 DoIP 게이트웨이로 라우팅 활성화와 진단 응답을 검증합니다."""
     adapter = DoIPAdapter()
-    
-    # 프로토콜 정보
-    info = adapter.get_protocol_info()
-    assert info["name"] == "DoIP (ISO 13400)"
-    assert info["bus"] == "can"
-    
-    # 잘못된 설정
-    with pytest.raises(TransportError):
-        adapter.connect({"host": "", "port": 13400, "timeout": 0.1})
+    adapter.connect({"host": "127.0.0.1", "port": mock_doip_gateway.port, "timeout": 0.5})
+    try:
+        assert adapter.is_connected()
+        info = adapter.get_protocol_info()
+        assert info["name"] == "DoIP (ISO 13400)"
+        assert info["bus"] == "can"
+
+        result = adapter.send_command("0100", timeout_ms=500)
+        assert result.error is None
+        assert result.reply == "000010E0 06 41 00 BE 1F B8 13\r>"
+        assert adapter.get_active_ecus() == [0x10E0]
+    finally:
+        adapter.disconnect()
+    assert not adapter.is_connected()
+
+
+def test_doip_routing_failure_raises(mock_doip_gateway):
+    """라우팅 활성화가 거부되면 연결을 끊고 오류를 냅니다."""
+    mock_doip_gateway.routing_code = 0x00
+    adapter = DoIPAdapter()
+    with pytest.raises(TransportError, match="라우팅 활성화 실패"):
+        adapter.connect({"host": "127.0.0.1", "port": mock_doip_gateway.port, "timeout": 0.5})
+    assert not adapter.is_connected()
 
 
 # J2534 어댑터 테스트
@@ -113,13 +123,16 @@ def test_j2534_adapter_validates_bridge_url():
         adapter.connect({"bridge_url": ""})
 
 
-def test_j2534_adapter_protocol_mapping():
-    """프로토콜 이름을 ID로 매핑합니다."""
+@pytest.mark.parametrize("name, protocol_id", [("CAN", 1), ("KWP", 2), ("K-LINE", 3), ("J1850VPW", 4)])
+def test_j2534_adapter_protocol_mapping(mock_j2534_bridge, name, protocol_id):
+    """프로토콜 이름을 J2534 프로토콜 ID로 매핑해 채널을 엽니다."""
     adapter = J2534Adapter()
-
-    # 프로토콜 매핑은 connect에서 처리되므로 직접 테스트하기 어려움
-    # 실제 사용 시 확인됨
-    assert True
+    adapter.connect({"bridge_url": mock_j2534_bridge.url, "protocol": name})
+    try:
+        assert list(mock_j2534_bridge.channels.values()) == [protocol_id]
+    finally:
+        adapter.disconnect()
+    assert mock_j2534_bridge.channels == {}
 
 
 def test_j2534_adapter_test_connection_without_connection():
@@ -231,17 +244,14 @@ def test_ethernet_vehicle_network_blocked_check(monkeypatch):
     assert vehicle_network_blocked()
 
 
-# 통합 테스트 (스킵됨 - 수동 실행)
+# 통합 테스트 (fixture가 모의 서버를 임시 포트로 띄운다)
 
 
 @pytest.mark.integration
-def test_doip_adapter_with_real_mock_gateway():
+def test_doip_adapter_with_real_mock_gateway(mock_doip_gateway):
     """실제 모의 DoIP 게이트웨이 서버와 통신 (통합 테스트)."""
-    # bridge/mock_doip_gateway.py를 별도로 실행해야 함
-    pytest.skip("수동 통합 테스트: 모의 게이트웨이를 먼저 실행하세요")
-
     adapter = DoIPAdapter()
-    adapter.connect({"host": "localhost", "port": 13400, "timeout": 5.0})
+    adapter.connect({"host": "localhost", "port": mock_doip_gateway.port, "timeout": 2.0})
 
     # 명령 전송
     result = adapter.send_command("0100")
@@ -252,14 +262,11 @@ def test_doip_adapter_with_real_mock_gateway():
 
 
 @pytest.mark.integration
-def test_j2534_adapter_with_real_mock_bridge():
+def test_j2534_adapter_with_real_mock_bridge(mock_j2534_bridge):
     """실제 모의 J2534 브리지 서버와 통신 (통합 테스트)."""
-    # bridge/mock_server.py를 별도로 실행해야 함
-    pytest.skip("수동 통합 테스트: 모의 브리지를 먼저 실행하세요")
-
     adapter = J2534Adapter()
     adapter.connect({
-        "bridge_url": "http://localhost:5000",
+        "bridge_url": mock_j2534_bridge.url,
         "protocol": "CAN",
         "baudrate": 500000,
     })

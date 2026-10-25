@@ -117,9 +117,15 @@ def pending_alerts(limit: int = 100) -> list[CommandDeletionAlert]:
 
 
 def pending_count() -> int:
+    """배너용 대기 알림 수.
+
+    화면을 그리는 도중(context processor) 불리므로 요청 세션의 트랜잭션을 열어 두지 않도록
+    짧은 별도 연결로 읽고 바로 닫는다. 요청 세션에 남은 읽기 트랜잭션이 정리(TRUNCATE·마이그레이션)를
+    무기한 막던 문제를 막는다."""
     from sqlalchemy import func
-    return db.session.scalar(select(func.count()).select_from(CommandDeletionAlert)
-                             .where(CommandDeletionAlert.status == "pending")) or 0
+    query = select(func.count()).select_from(CommandDeletionAlert).where(CommandDeletionAlert.status == "pending")
+    with db.engine.connect() as connection:
+        return connection.execute(query).scalar() or 0
 
 
 def _get_pending(alert_id: int) -> CommandDeletionAlert:

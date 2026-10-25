@@ -7,12 +7,21 @@ ISO 13400 프로토콜을 구현하여 이더넷을 통한 차량 진단을 지�
 - 논리주소 기반 ECU 탐색
 """
 
+import logging
 import os
 import socket
 import struct
 from typing import Any, Generator
 
-from app.modules.scanner.transport.base import TransportAdapter, TransportError, TransportResult
+from app.modules.scanner.transport.base import (
+    TransportAdapter,
+    TransportError,
+    TransportResult,
+    check_port,
+    check_target_host,
+)
+
+_log = logging.getLogger(__name__)
 
 # DoIP 상수
 DOIP_VERSION = 0x02
@@ -34,6 +43,9 @@ TESTER_ADDRESS = 0x0E00
 
 # 기능 주소 (브로드캐스트)
 FUNCTIONAL_ADDRESS = 0xE400
+
+# CAN 기능 주소 헤더(OBD 브로드캐스트)는 DoIP 기능 주소로 보낸다
+_FUNCTIONAL_CAN_HEADERS = {"7DF", "18DB33F1"}
 
 # DoIP NACK 코드
 NACK_CODES = {
@@ -112,15 +124,15 @@ class DoIPAdapter(TransportAdapter):
                 "차량과 같은 망의 로컬 서버에서 실행하세요."
             )
 
-        host = (config.get("host") or "").strip()
-        if not host or host == "169.254.169.254":
-            raise TransportError("게이트웨이 주소를 확인하세요.")
-
-        port = config.get("port", DOIP_PORT)
-        if not isinstance(port, int) or not (1 <= port <= 65535):
-            raise TransportError("포트 번호를 확인하세요.")
+        if not isinstance(config, dict):
+            raise TransportError("연결 설정을 확인하세요.")
+        port = check_port(config.get("port", DOIP_PORT))
+        host = check_target_host(config.get("host") if isinstance(config.get("host"), str) else None, port)
 
         timeout = config.get("timeout", 2.0)
+        if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+            timeout = 2.0
+        timeout = min(max(float(timeout), 0.1), 10.0)
 
         try:
             self._socket = socket.create_connection((host, port), timeout)
@@ -132,10 +144,16 @@ class DoIPAdapter(TransportAdapter):
             # 라우팅 활성화
             self._activate_routing()
 
-        except socket.timeout:
-            raise TransportError("게이트웨이 연결 시간 초과")
-        except OSError as exc:
-            raise TransportError(f"게이트웨이에 연결하지 못했습니다: {exc}")
+        except TransportError:
+            self.disconnect()
+            raise
+        except (socket.timeout, TimeoutError):
+            self.disconnect()
+            raise TransportError("게이트웨이 연결 시간 초과") from None
+        except OSError:
+            self.disconnect()
+            _log.warning("DoIP 게이트웨이 연결 실패", exc_info=True)
+            raise TransportError("게이트웨이에 연결하지 못했습니다.") from None
 
     def disconnect(self) -> None:
         """연결을 종료합니다."""
@@ -164,7 +182,7 @@ class DoIPAdapter(TransportAdapter):
         try:
             # 헤더 파싱 (없으면 기능 주소)
             target_address = FUNCTIONAL_ADDRESS
-            if header:
+            if header and header.upper() not in _FUNCTIONAL_CAN_HEADERS:
                 try:
                     target_address = int(header, 16)
                 except ValueError:
@@ -181,7 +199,7 @@ class DoIPAdapter(TransportAdapter):
                 ">HH", TESTER_ADDRESS, target_address
             ) + uds_data
             packet = _make_packet(DIAGNOSTIC_MESSAGE, payload)
-            self._socket.send(packet)
+            self._socket.sendall(packet)
 
             # 응답 수집 (여러 ECU가 응답할 수 있음)
             replies: list[tuple[int, bytes]] = []
@@ -201,7 +219,14 @@ class DoIPAdapter(TransportAdapter):
                             if target_address == FUNCTIONAL_ADDRESS and source not in self._active_ecus:
                                 self._active_ecus.append(source)
 
-                            # 짧은 타임아웃으로 추가 응답 대기
+                            # 응답 대기(NRC 0x78)는 최종 응답을 계속 기다린다
+                            if len(uds_response) >= 3 and uds_response[0] == 0x7F and uds_response[2] == 0x78:
+                                replies.pop()
+                                continue
+                            # 물리 주소는 한 제어기만 답하므로 바로 끝낸다
+                            if target_address != FUNCTIONAL_ADDRESS:
+                                break
+                            # 기능 주소는 짧은 타임아웃으로 추가 응답 대기
                             self._socket.settimeout(0.2)
 
                     elif response_type == DIAGNOSTIC_NEGATIVE_ACK:
@@ -233,13 +258,14 @@ class DoIPAdapter(TransportAdapter):
 
         except TransportError:
             raise
-        except Exception as exc:
+        except Exception:
+            _log.warning("DoIP 명령 전송 실패", exc_info=True)
             elapsed = (time.time() - start) * 1000
             return TransportResult(
                 command=command,
                 header=header,
                 reply=None,
-                error=str(exc),
+                error="전송 오류",
                 elapsed_ms=elapsed,
             )
 
@@ -307,8 +333,11 @@ class DoIPAdapter(TransportAdapter):
 
             udp_socket.close()
 
-        except Exception as exc:
-            raise TransportError(f"차량 탐색 실패: {exc}")
+        except TransportError:
+            raise
+        except Exception:
+            _log.warning("DoIP 차량 탐색 실패", exc_info=True)
+            raise TransportError("차량 탐색에 실패했습니다.") from None
 
         return vehicles
 
@@ -321,7 +350,7 @@ class DoIPAdapter(TransportAdapter):
         # Activation Type: 0x00 (Default), 0x01 (WWH-OBD)
         payload = struct.pack(">HI", TESTER_ADDRESS, 0x00000000)
         packet = _make_packet(ROUTING_ACTIVATION_REQUEST, payload)
-        self._socket.send(packet)
+        self._socket.sendall(packet)
 
         # 응답 대기
         response_type, response_payload = self._recv_packet()
@@ -450,7 +479,7 @@ class DoIPAdapter(TransportAdapter):
                 return {
                     "success": False,
                     "message": f"테스트 명령 실패: {result.error}",
-                    "details": {"result": result.__dict__},
+                    "details": {},
                 }
 
             return {
@@ -462,9 +491,6 @@ class DoIPAdapter(TransportAdapter):
                 },
             }
 
-        except Exception as exc:
-            return {
-                "success": False,
-                "message": f"테스트 중 오류 발생: {str(exc)}",
-                "details": {"error": str(exc)},
-            }
+        except Exception:
+            _log.exception("DoIP 연결 테스트 오류")
+            return {"success": False, "message": "테스트 중 오류가 발생했습니다.", "details": {}}
