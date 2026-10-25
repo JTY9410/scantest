@@ -140,7 +140,13 @@ def parse_j2534(text: str) -> list[dict]:
         if _blocked(command):
             raise ServiceError("세션 변경·보안·쓰기·지우기 명령은 받지 않습니다.")
         reply_text = " ".join(parts[2:]).upper()
-        reply = reply_text + "\r\r>" if _ELM.match(reply_text) else _elm(int(header, 16), bytes.fromhex(reply_text))
+        # ELM format이면 그대로, 아니면 hex bytes로 변환
+        if _ELM.match(reply_text):
+            reply = reply_text + "\r\r>"
+        else:
+            # ISO-TP 응답을 ELM format으로 변환
+            reply_bytes = bytes.fromhex(reply_text)
+            reply = " ".join(f"{b:02X}" for b in reply_bytes) + "\r\r>"
         steps.append(_done(len(steps) + 1, command, int(header, 16), command, "j2534", reply, None))
     if not steps:
         raise ServiceError("단계 기록이 없습니다.")
