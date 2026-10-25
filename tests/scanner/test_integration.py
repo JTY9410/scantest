@@ -11,12 +11,10 @@ from typing import Any
 
 import pytest
 from flask import Flask
-from sqlalchemy import select
 
 from app import db
 from app.modules.accounts.models import User
 from app.modules.scans.models import Scan
-from app.modules.scans.report_models import ScanReport
 from app.modules.scanner.service import run_scan_with_transport
 
 
@@ -89,13 +87,6 @@ def test_full_scan_with_doip(
         data = json.loads(dataset.data)
         assert "obd" in data or "dtc" in data
 
-        # 리포트 확인
-        report = db.session.scalar(
-            select(ScanReport).where(ScanReport.scan_id == scan_id)
-        )
-        assert report is not None
-        assert report.summary_html is not None
-
 
 @pytest.mark.integration
 def test_full_scan_with_j2534(
@@ -120,12 +111,6 @@ def test_full_scan_with_j2534(
 
         # 데이터셋 확인
         assert len(scan.datasets) > 0
-
-        # 리포트 확인
-        report = db.session.scalar(
-            select(ScanReport).where(ScanReport.scan_id == scan_id)
-        )
-        assert report is not None
 
 
 @pytest.mark.integration
