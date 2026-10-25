@@ -1,15 +1,13 @@
 """이더넷 진단(DoIP·J2534) 읽기.
 
-CAN 스캔 계획과 따로다. 테스터 0E00, 기능 주소 E400만 먼저 쓰고,
-응답한 논리 주소에만 같은 읽기를 이어 간다. 세션·보안·쓰기·루틴·지우기는 보내지 않는다.
+이 모듈은 하위 호환을 위해 유지되며, 실제 구현은 transport/doip.py를 사용합니다.
 """
 
 import os
 import re
-import socket
-from collections.abc import Callable
 
 from app.core.errors import ServiceError
+from app.modules.scanner.transport.doip import DoIPAdapter
 
 TESTER = 0x0E00
 FUNCTIONAL = 0xE400
@@ -60,39 +58,52 @@ def check_gateway(host: str | None, port: int | None) -> tuple[str, int]:
     return name, number
 
 
-def iter_doip(host: str, port: int, connect: Connect | None = None, timeout: float = 2.0):
-    """라우팅 활성화 뒤 읽기 단계를 진행한다. 연결 실패 시 단계를 만들지 않는다."""
-    opener = connect or (lambda name, number, wait: socket.create_connection((name, number), wait))
+def iter_doip(host: str, port: int, connect=None, timeout: float = 2.0):
+    """라우팅 활성화 뒤 읽기 단계를 진행한다. 
+    
+    transport/doip.py를 사용하여 구현됩니다.
+    """
+    adapter = DoIPAdapter()
+    
     try:
-        sock = opener(host, port, timeout)
-    except OSError as exc:
-        raise ServiceError("게이트웨이에 연결하지 못했습니다.") from exc
-    steps: list[dict] = []
-    ok = fail = 0
-    try:
-        sock.settimeout(timeout)
-        _activate(sock)
+        # 연결
+        adapter.connect({"host": host, "port": port, "timeout": timeout})
+        
+        steps: list[dict] = []
+        ok = fail = 0
         responders: list[int] = []
         targets = [FUNCTIONAL]
+        
         for index, (command, label, group) in enumerate(_READS, 1):
             if not targets:
                 break
+                
             for target in list(targets):
-                replies = _request(sock, target, bytes.fromhex(command))
-                if not replies:
+                # 명령 전송
+                header = f"{target:08X}"
+                result = adapter.send_command(command, header=header, timeout_ms=int(timeout * 1000))
+                
+                if result.error or not result.reply:
                     fail += 1
-                    steps.append(_done(index, command, target, label, group, "NO DATA\r\r>", "timeout"))
-                for source, payload in replies:
-                    positive = bool(payload) and payload[0] == bytes.fromhex(command)[0] + 0x40
-                    if positive and source not in responders:
-                        responders.append(source)
-                    if positive:
+                    steps.append(_done(index, command, target, label, group, "NO DATA\r\r>", result.error or "timeout"))
+                else:
+                    # 응답 파싱
+                    from app.modules.scanner.obd import messages
+                    found, _ = messages(result.reply, "can")
+                    
+                    if found:
+                        for source in found.keys():
+                            if source not in responders:
+                                responders.append(source)
                         ok += 1
+                        steps.append(_done(index, command, target, label, group, result.reply, None))
                     else:
                         fail += 1
-                    steps.append(_done(index, command, source, label, group, _elm(source, payload), None))
-                yield {"type": "progress", "label": label, "header": f"{target:08X}", "command": command,
+                        steps.append(_done(index, command, target, label, group, "NO DATA\r\r>", "no_data"))
+                
+                yield {"type": "progress", "label": label, "header": header, "command": command,
                        "ok": ok, "fail": fail, "total": len(_READS)}
+            
             if targets == [FUNCTIONAL]:
                 targets = responders
                 if not targets:
@@ -101,9 +112,11 @@ def iter_doip(host: str, port: int, connect: Connect | None = None, timeout: flo
                         steps.append(_done(rest_index, rest_command, FUNCTIONAL, rest_label, rest_group,
                                            "NO DATA\r\r>", "timeout"))
                     break
+        
         yield {"type": "steps", "steps": steps}
+        
     finally:
-        sock.close()
+        adapter.disconnect()
 
 
 def parse_j2534(text: str) -> list[dict]:
@@ -151,67 +164,3 @@ def _done(index, command, source, label, group, reply, error) -> dict:
     step["error"] = error
     return step
 
-
-def _packet(kind: int, payload: bytes) -> bytes:
-    return _VERSION + kind.to_bytes(2, "big") + len(payload).to_bytes(4, "big") + payload
-
-
-def _recv_exact(sock, size: int) -> bytes:
-    buf = b""
-    while len(buf) < size:
-        chunk = sock.recv(size - len(buf))
-        if not chunk:
-            raise ServiceError("게이트웨이 연결이 끊겼습니다.")
-        buf += chunk
-    return buf
-
-
-def _read_packet(sock) -> tuple[int, bytes]:
-    head = _recv_exact(sock, 8)
-    if (head[0] ^ head[1]) != 0xFF:
-        raise ServiceError("DoIP 헤더가 아닙니다.")
-    length = int.from_bytes(head[4:8], "big")
-    if length > 4096:
-        raise ServiceError("DoIP 응답이 너무 깁니다.")
-    return int.from_bytes(head[2:4], "big"), _recv_exact(sock, length) if length else b""
-
-
-def _activate(sock) -> None:
-    sock.sendall(_packet(0x0005, TESTER.to_bytes(2, "big") + b"\x00\x00\x00\x00\x00"))
-    kind, payload = _read_packet(sock)
-    if kind != 0x0006 or len(payload) < 5 or payload[4] != 0x10:
-        raise ServiceError("DoIP 라우팅 활성화에 실패했습니다.")
-
-
-def _request(sock, target: int, uds: bytes) -> list[tuple[int, bytes]]:
-    sock.sendall(_packet(0x8001, TESTER.to_bytes(2, "big") + target.to_bytes(2, "big") + uds))
-    found = []
-    for _ in range(8):
-        try:
-            kind, payload = _read_packet(sock)
-        except (TimeoutError, socket.timeout):
-            break
-        if kind == 0x8001 and len(payload) >= 4:
-            found.append((int.from_bytes(payload[:2], "big"), payload[4:]))
-            sock.settimeout(0.2)
-        elif kind == 0x8003:
-            break
-    return found
-
-
-def _elm(source: int, payload: bytes) -> str:
-    """재조립된 UDS를 해석기가 읽는 ELM 한 줄로 바꾼다."""
-    if not payload:
-        return "NO DATA\r\r>"
-    if len(payload) <= 7:
-        frames = [bytes([len(payload)]) + payload]
-    else:
-        frames = [bytes([0x10 | (len(payload) >> 8), len(payload) & 0xFF]) + payload[:6]]
-        rest, seq = payload[6:], 1
-        while rest:
-            chunk, rest = rest[:7], rest[7:]
-            frames.append(bytes([0x20 | seq]) + chunk)
-            seq = (seq + 1) % 16
-    can_id = f"{source:08X}"
-    lines = [can_id + " " + " ".join(f"{byte:02X}" for byte in frame) for frame in frames]
-    return "\r".join(lines) + "\r>"
