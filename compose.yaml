@@ -1,5 +1,5 @@
 # 로컬 개발용. 실행: docker compose up -d  →  http://localhost:18080/admin/
-name: wecarscan_dh
+name: scantest
 
 services:
   web:
@@ -43,5 +43,8 @@ services:
     restart: unless-stopped
 
 volumes:
+  # 프로젝트 이름 변경(wecarscan_dh -> scantest) 후에도 기존 데이터 볼륨을 그대로 쓴다.
   pgdata:
+    name: wecarscan_dh_pgdata
   node_modules:
+    name: wecarscan_dh_node_modules

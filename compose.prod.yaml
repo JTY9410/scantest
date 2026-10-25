@@ -5,7 +5,7 @@ name: wecarscan_prod
 
 services:
   web:
-    image: wecarmobility/wecarscan_dh:${IMAGE_TAG:-latest}
+    image: wecarmobility/scantest:${IMAGE_TAG:-latest}
     env_file: .env.production
     environment:
       APP_ENV: production

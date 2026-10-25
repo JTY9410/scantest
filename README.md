@@ -74,11 +74,11 @@ docker compose run --rm --no-deps web python -m pytest -q
 ```bash
 SHA=$(git rev-parse --short HEAD)
 docker build --target prod --build-arg APP_VERSION=2.0.0+$SHA \
-  -t wecarmobility/wecarscan_dh:latest -t wecarmobility/wecarscan_dh:$SHA .
-docker push wecarmobility/wecarscan_dh:latest && docker push wecarmobility/wecarscan_dh:$SHA
+  -t wecarmobility/scantest:latest -t wecarmobility/scantest:$SHA .
+docker push wecarmobility/scantest:latest && docker push wecarmobility/scantest:$SHA
 ```
 
-서버에서는 `.env.production`을 두고 `compose.prod.yaml`로 실행합니다(파일 상단 주석 참고). 이미지는 비루트 사용자로 gunicorn을 실행하고, `/up`으로 상태를 확인합니다. GitHub Actions(`.github/workflows/docker-publish.yml`)도 `main`에 올릴 때 같은 이미지를 만들어 GHCR(`ghcr.io/jty9410/wecarscan_dh`)에 올리고, 저장소 비밀값 `DOCKERHUB_USERNAME`·`DOCKERHUB_TOKEN`이 있으면 Docker Hub에도 올립니다.
+서버에서는 `.env.production`을 두고 `compose.prod.yaml`로 실행합니다(파일 상단 주석 참고). 이미지는 비루트 사용자로 gunicorn을 실행하고, `/up`으로 상태를 확인합니다. GitHub Actions(`.github/workflows/docker-publish.yml`)도 `main`에 올릴 때 같은 이미지를 만들어 GHCR(`ghcr.io/jty9410/scantest`)에 올리고, 저장소 비밀값 `DOCKERHUB_USERNAME`·`DOCKERHUB_TOKEN`이 있으면 Docker Hub에도 올립니다.
 
 ## 기능 흐름
 

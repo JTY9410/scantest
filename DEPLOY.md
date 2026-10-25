@@ -99,18 +99,18 @@ flask create-admin --tid wecar --name "관리자 이름"
 ```bash
 SHA=$(git rev-parse --short HEAD)
 docker build --target prod --build-arg APP_VERSION=2.0.0+$SHA \
-  -t wecarmobility/wecarscan_dh:latest \
-  -t wecarmobility/wecarscan_dh:$SHA .
+  -t wecarmobility/scantest:latest \
+  -t wecarmobility/scantest:$SHA .
 ```
 
 ### 2. Docker Hub/GHCR에 푸시
 ```bash
-docker push wecarmobility/wecarscan_dh:latest
-docker push wecarmobility/wecarscan_dh:$SHA
+docker push wecarmobility/scantest:latest
+docker push wecarmobility/scantest:$SHA
 
 # 또는 GHCR
-docker tag wecarmobility/wecarscan_dh:latest ghcr.io/jty9410/wecarscan_dh:latest
-docker push ghcr.io/jty9410/wecarscan_dh:latest
+docker tag wecarmobility/scantest:latest ghcr.io/jty9410/scantest:latest
+docker push ghcr.io/jty9410/scantest:latest
 ```
 
 ### 3. 운영 서버에서 실행
@@ -261,5 +261,5 @@ flask db upgrade
 ## 연락처
 
 배포 중 문제가 있으면:
-- GitHub Issues: https://github.com/JTY9410/wecarscan_dh/issues
+- GitHub Issues: https://github.com/JTY9410/scantest/issues
 - 개발팀 이메일: [연락처]

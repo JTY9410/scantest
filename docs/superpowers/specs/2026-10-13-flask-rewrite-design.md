@@ -112,7 +112,7 @@ migrations/ tests/ docs/flows/ docs/adr/
 
 - `Dockerfile`: node 단계(Tailwind 빌드) → python 3.12-slim 단계, 비루트 `app` 사용자, gunicorn. 이미지에 `.env` 미포함. 시작 시 자동 마이그레이션 안 함.
 - `compose.yaml`(개발): web(소스 마운트, flask debug), assets(Tailwind watch), postgres. 포트 18080.
-- `compose.prod.yaml`(운영): 이미지 `wecarmobility/wecarscan_dh`, postgres, redis(속도 제한 저장소).
+- `compose.prod.yaml`(운영): 이미지 `wecarmobility/scantest`, postgres, redis(속도 제한 저장소).
 
 ## 10. 검증
 

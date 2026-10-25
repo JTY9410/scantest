@@ -10,8 +10,8 @@ on:
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: wecarmobility/wecarscan_dh
-  GHCR_IMAGE: ghcr.io/jty9410/wecarscan_dh
+  IMAGE_NAME: wecarmobility/scantest
+  GHCR_IMAGE: ghcr.io/jty9410/scantest
 
 jobs:
   build-and-push:

@@ -4,7 +4,7 @@
 
 ### 1. GitHub
 - ✅ 코드가 `cursor/complete-wecar-scan-features-0b37` 브랜치에 푸시됨
-- ✅ PR #2: https://github.com/JTY9410/wecarscan_dh/pull/2
+- ✅ PR #2: https://github.com/JTY9410/scantest/pull/2
 
 ### 2. 필요한 계정
 - Vercel 계정 (https://vercel.com)
@@ -127,7 +127,7 @@ python -m flask shell
 ### 1. Vercel 프로젝트 생성
 1. https://vercel.com 로그인
 2. "Add New..." → "Project" 클릭
-3. GitHub 저장소 선택: `JTY9410/wecarscan_dh`
+3. GitHub 저장소 선택: `JTY9410/scantest`
 4. 브랜치 선택: `cursor/complete-wecar-scan-features-0b37` 또는 `main` (PR 병합 후)
 
 ### 2. 환경변수 설정
