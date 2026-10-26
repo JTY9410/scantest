@@ -3,8 +3,21 @@
 // 기억하고(기억 지우기 가능) 서버 계정에도 남긴다. 끊기면 다시 붙는다.
 // 화면 스크립트(obd-ble.js, obd-dashboard.js, obd-scan.js)는 window.WecarObd.bindPanel()이 돌려준 연결을 쓴다.
 // 필요한 스크립트: obd-plan.js, obd-driver.js
+
+// 연결 패널 버튼 상태(순수 함수, tests/js에서 검사). 자동 감지는 이미 허락받은 진단기만 다시 붙이므로
+// 기억한 진단기가 없으면 '진단기 연결하기'(사용자가 누르는 버튼 → 브라우저 기기 선택 창)를 안내한다.
+function obdPanelState({ remembered = 0, ble = false, serial = false, secure = true } = {}) {
+  let reason = "";
+  if (!secure) reason = "보안 연결(HTTPS)이 아니라서 진단기 연결하기를 쓸 수 없습니다. https 주소로 접속하세요.";
+  else if (!ble && !serial) reason = "이 브라우저는 블루투스·시리얼 연결을 지원하지 않습니다. 안드로이드·PC의 Chrome을 쓰세요.";
+  else if (!ble) reason = "이 브라우저는 블루투스(BLE)를 지원하지 않습니다. '블루투스 클래식·USB'를 쓰세요.";
+  return { firstTime: remembered === 0 && secure && (ble || serial), findDisabled: !secure || !ble, reason,
+    firstMessage: "이전에 연결한 진단기가 없습니다. 진단기 연결하기를 눌러 검색하세요." };
+}
+if (typeof module !== "undefined" && module.exports) module.exports = { obdPanelState };
 (() => {
   "use strict";
+  if (typeof window === "undefined") return;
 
   const D = window.WecarObdDriver;
   const P = window.WecarObdPlan;
@@ -498,7 +511,7 @@
           const recent = Memory.list()[0];
           this._emit(this.state === "waiting" ? "waiting" : "idle", recent
             ? `시동을 켜고 '${recent.name}'을(를) OBD2 단자에 꽂아 두세요. 연결되면 자동으로 인식합니다.`
-            : "시동을 켜고 진단기를 OBD2 단자에 꽂아 두세요. 한 번 연결한 뒤에는 자동으로 인식합니다.");
+            : "이전에 연결한 진단기가 없습니다. 진단기 연결하기를 눌러 검색하세요.");
         }
       } catch {
         // 다음 주기에 다시 시도
@@ -879,6 +892,17 @@
       const origin = insecureBox.querySelector("[data-obd-insecure-origin]");
       if (origin) origin.textContent = window.location.origin;
     }
+    const firstBox = q("[data-obd-first]");
+    const reasonBox = q("[data-obd-find-reason]");
+    const panelState = () => obdPanelState({ remembered: link.devices().length, ble: !!link.ble?.supported,
+      serial: !!link.serial?.supported, secure: !insecure });
+    function renderFirst() {
+      const st = panelState();
+      if (firstBox) firstBox.hidden = !st.firstTime || link.ready;
+      if (reasonBox) { reasonBox.textContent = st.reason; reasonBox.hidden = !st.reason; }
+      if (st.reason) findBtn.title = st.reason;
+    }
+    renderFirst();
     if (!link.supported) {
       if (!(insecure && insecureBox)) q("[data-obd-unsupported]").hidden = false;
       findBtn.disabled = true;
@@ -920,10 +944,11 @@
     if (recent) {
       status.textContent = `최근 연결한 진단기: ${recent.name}. 시동을 켜고 OBD2 단자에 꽂으면 자동으로 인식합니다.`;
     } else {
-      status.textContent = "시동을 켜고 진단기를 OBD2 단자에 꽂아 두세요. 한 번 연결한 뒤에는 자동으로 인식합니다.";
+      status.textContent = "이전에 연결한 진단기가 없습니다. 진단기 연결하기를 눌러 검색하세요.";
     }
     renderDevices();
     link.addEventListener("devices", renderDevices);
+    link.addEventListener("devices", renderFirst);
     select.addEventListener("change", () => {
       link.profile = config.profiles.find((p) => String(p.id) === select.value) || null;
       if (link.ready) status.textContent = "고른 진단기 종류는 다음 연결부터 적용됩니다.";
@@ -937,6 +962,7 @@
       if (serialBtn) serialBtn.disabled = locked || !link.serial.supported;
       offBtn.disabled = detail.state === "idle" || detail.state === "waiting" || link.busy;
       info.hidden = detail.state !== "ready";
+      renderFirst();
       if (detail.state === "ready") {
         q("[data-obd-name]").textContent = link.info.name || "-";
         const transport = q("[data-obd-transport]");

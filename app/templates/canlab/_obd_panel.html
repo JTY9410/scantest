@@ -18,12 +18,15 @@
       </select>
     </div>
     <div class="flex flex-wrap gap-2">
-      <button class="btn btn-primary" type="button" data-obd-find>진단기 연결(BLE)</button>
+      <button class="btn btn-primary" type="button" data-obd-find>진단기 연결하기</button>
       <button class="btn btn-secondary" type="button" data-obd-find-serial>블루투스 클래식·USB</button>
       <button class="btn btn-secondary" type="button" data-obd-find-all>모든 기기 보기</button>
       <button class="btn btn-secondary" type="button" data-obd-disconnect disabled>연결 끊기</button>
     </div>
   </div>
+  <p class="flash flash-warning mt-3" data-obd-first hidden><span aria-hidden="true" class="font-bold">i</span>
+    <span>이전에 연결한 진단기가 없습니다. <strong>진단기 연결하기</strong>를 눌러 검색하세요. 목록에 안 보이면 '모든 기기 보기'를 누르세요.</span></p>
+  <p class="mt-2 text-sm text-muted" data-obd-find-reason hidden></p>
   <p class="mt-3 font-semibold" role="status" aria-live="polite" data-obd-status>시동을 켜고 진단기를 OBD2 단자에 꽂아 두세요. 한 번 연결한 뒤에는 자동으로 인식합니다.</p>
   <dl class="dl mt-3" data-obd-info hidden>
     <dt>진단기</dt><dd data-obd-name>-</dd>
@@ -39,7 +42,7 @@
   <details class="mt-3 text-sm text-muted">
     <summary class="cursor-pointer font-medium text-fg">다른 진단기(블루투스 클래식, 원시 CAN, WiFi, LTE)</summary>
     <ul class="mt-2 grid list-disc gap-1 pl-5">
-      <li>BLE(저전력 블루투스) 진단기: vLinker MC·MS·FS, OBDLink CX, Veepeak, Carista, iCar 등은 '진단기 연결(BLE)'로 찾습니다.</li>
+      <li>BLE(저전력 블루투스) 진단기: vLinker MC·MS·FS, OBDLink CX, Veepeak, Carista, iCar 등은 '진단기 연결하기'로 찾습니다.</li>
       <li>블루투스 클래식(SPP)·USB 진단기: ELM327 v1.5·v2.1, OBDLink MX+ 등은 컴퓨터에 먼저 페어링한 뒤 '블루투스 클래식·USB'를 누르세요(Chrome·Edge의 Web Serial).</li>
       <li>ELM327뿐 아니라 STN 칩 진단기(OBDLink)와 slcan 방식 원시 CAN 어댑터(CANable, WiCAN, ESP32·nRF BLE-CAN)도 명령 체계를 스스로 알아내 씁니다. 원시 CAN 어댑터는 CAN 차량만 지원합니다.</li>
       <li>WiFi 진단기는 브라우저에서 직접 연결할 수 없습니다. 위카 앱의 WiFi 연결을 쓰세요.</li>

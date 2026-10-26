@@ -987,3 +987,12 @@ def test_compare_requires_scan_and_truths(admin_client):
     })
     assert empty.status_code == 400
     assert "스캔 통신기록" in empty.get_data(as_text=True) or "고르거나" in empty.get_data(as_text=True)
+
+
+def test_obd_panel_has_connect_button_and_first_time_hint(app, admin_client, trained):
+    html = admin_client.get("/admin/canlab/live").get_data(as_text=True)
+    assert "data-obd-find>진단기 연결하기</button>" in html
+    assert "자동 감지(권장)" in html and "모든 기기 보기" in html and "data-obd-find-serial" in html
+    assert "data-obd-first hidden" in html and "이전에 연결한 진단기가 없습니다." in html
+    assert "data-obd-find-reason" in html and "data-obd-insecure" in html
+    assert html.index("data-obd-find>") < html.index("data-obd-first")
