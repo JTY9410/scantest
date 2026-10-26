@@ -30,10 +30,12 @@ Docker Desktop이 필요합니다.
 cp .env.example .env           # 비밀값 3개와 DB 비밀번호를 채운다(파일 안 안내 참고)
 docker compose up -d --build   # web(18080), assets(CSS 감시), db
 docker compose exec web flask db upgrade
-docker compose exec web flask create-admin --tid wecar --name 관리자   # 비밀번호는 프롬프트로 입력
+docker compose exec web flask create-admin --tid wecar --name 관리자   # 비밀번호는 프롬프트 또는 ADMIN_PASSWORD
+# 이미 계정이 있는데 .env 의 ADMIN_PASSWORD 로 로그인이 안 되면:
+docker compose exec web flask reset-admin-password --tid wecar
 ```
 
-브라우저에서 <http://localhost:18080/admin/> 로 접속합니다. 관리자 계정은 위 명령으로 한 번만 만들며, 코드나 이미지에 비밀번호를 넣지 않습니다.
+브라우저에서 <http://localhost:18080/admin/> 로 접속합니다. 관리자 계정은 `create-admin`으로 한 번만 만들며, 코드나 이미지에 비밀번호를 넣지 않습니다.
 
 CSS를 고치면 `assets` 컨테이너가 `app/static/dist/app.css`를 다시 만듭니다. 컨테이너 없이 빌드하려면 `npm ci && npm run build:css`.
 

@@ -200,3 +200,19 @@ def test_create_admin_reads_tid_from_env(app, client):
 
     assert result.exit_code == 0, result.output
     assert admin_login(client, "wecar", ADMIN_PASSWORD).status_code == 302
+
+
+def test_reset_admin_password_command(app, client):
+    runner = app.test_cli_runner()
+    assert runner.invoke(
+        args=["create-admin", "--tid", "wecar"], env={"ADMIN_PASSWORD": ADMIN_PASSWORD}
+    ).exit_code == 0
+
+    new_password = "reset-password-9"
+    result = runner.invoke(
+        args=["reset-admin-password", "--tid", "wecar"],
+        env={"ADMIN_PASSWORD": new_password},
+    )
+    assert result.exit_code == 0, result.output
+    assert "갱신" in result.output
+    assert admin_login(client, "wecar", new_password).status_code == 302

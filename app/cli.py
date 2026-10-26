@@ -31,6 +31,32 @@ def register_cli(app: Flask) -> None:
         db.session.commit()
         click.echo(f"관리자 {tid} 계정을 만들었습니다. 첫 로그인 후 비밀번호를 바꾸세요.")
 
+    @app.cli.command("reset-admin-password")
+    @click.option("--tid", envvar="ADMIN_TID", required=True, help="관리자 로그인 아이디(또는 ADMIN_TID)")
+    def reset_admin_password(tid: str) -> None:
+        """기존 관리자 비밀번호를 ADMIN_PASSWORD(또는 입력)로 맞춘다. 로컬 Docker 로그인 복구용."""
+        user = db.session.scalar(select(User).where(User.tid == tid, User.deleted_at.is_(None)))
+        if user is None:
+            raise click.ClickException(f"관리자 아이디를 찾을 수 없습니다: {tid}")
+        if user.type != UserType.ADMIN:
+            raise click.ClickException(f"{tid} 는 관리자 계정이 아닙니다.")
+        password = os.environ.get("ADMIN_PASSWORD") or click.prompt(
+            "새 비밀번호", hide_input=True, confirmation_prompt=True
+        )
+        if len(password) < 8:
+            raise click.ClickException("비밀번호는 8자 이상이어야 합니다.")
+        user.password = hash_password(password)
+        audit.record(
+            "관리자 비밀번호 재설정",
+            "User",
+            user.id,
+            user_id=user.id,
+            changes={"tid": tid},
+            message="reset-admin-password",
+        )
+        db.session.commit()
+        click.echo(f"관리자 {tid} 비밀번호를 갱신했습니다. 로그인 후 필요하면 다시 바꾸세요.")
+
     canlab = AppGroup("canlab", help="CAN 분석 데이터 관리")
 
     @canlab.command("reset")
