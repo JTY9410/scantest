@@ -115,7 +115,10 @@ def _register_security(app: Flask) -> None:
         headers.setdefault("X-Frame-Options", "DENY")
         headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
         headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-        if app.config["APP_ENV"] == "production":
+        # HTTP(로컬 Docker) 응답에 HSTS를 붙이면 브라우저가 https://localhost 로 올려 접속이 깨진다.
+        if app.config["APP_ENV"] == "production" and (
+            request.is_secure or app.config.get("SESSION_COOKIE_SECURE")
+        ):
             headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         if request.path.startswith("/admin"):
             headers.setdefault("Cache-Control", "no-store")

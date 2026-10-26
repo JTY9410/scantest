@@ -12,4 +12,6 @@ services:
       APP_ENV: production
       # 로컬 http(localhost:18080) 접속용. 외부 공개 시 HTTPS 프록시 뒤에서 true 로 바꾼다.
       SESSION_COOKIE_SECURE: "false"
+      # url_for·리다이렉트가 https://localhost 로 나가지 않게 한다.
+      PREFERRED_URL_SCHEME: http
     volumes: !reset []

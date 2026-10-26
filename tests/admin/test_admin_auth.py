@@ -27,6 +27,21 @@ def test_login_page_sends_security_headers(client):
     assert response.headers["Cache-Control"] == "no-store"
 
 
+def test_production_skips_hsts_on_insecure_http(app, client):
+    """로컬 Docker처럼 HTTP+비보안 쿠키면 HSTS를 보내지 않는다."""
+    app.config["APP_ENV"] = "production"
+    app.config["SESSION_COOKIE_SECURE"] = False
+    response = client.get("/admin/login")
+    assert "Strict-Transport-Security" not in response.headers
+
+
+def test_production_sends_hsts_when_secure_cookie_enabled(app, client):
+    app.config["APP_ENV"] = "production"
+    app.config["SESSION_COOKIE_SECURE"] = True
+    response = client.get("/admin/login")
+    assert response.headers["Strict-Transport-Security"].startswith("max-age=")
+
+
 def test_login_requires_csrf_token(client, make_user):
     make_user("wecar", type="admin", password=ADMIN_PASSWORD)
 

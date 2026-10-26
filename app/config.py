@@ -129,7 +129,8 @@ class TestingConfig(Config):
 class ProductionConfig(Config):
     APP_ENV = "production"
     DEBUG = False
-    PREFERRED_URL_SCHEME = "https"
+    # 로컬 Docker(HTTP)는 compose 에서 PREFERRED_URL_SCHEME=http 로 덮어쓴다.
+    PREFERRED_URL_SCHEME = os.environ.get("PREFERRED_URL_SCHEME", "https")
     # Vercel은 HTTPS·Secure 쿠키만 쓴다. Referer를 막는 브라우저·웹뷰에서
     # Flask-WTF SSL_STRICT가 로그인 POST를 400으로 깨지 않게 토큰 검사만 한다.
     WTF_CSRF_SSL_STRICT = False
