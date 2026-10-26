@@ -142,3 +142,21 @@ def test_install_hint_flag_only_on_first_page_after_login(admin_client):
 
     assert 'data-first-login="true"' in first
     assert 'data-first-login="false"' in second
+
+
+def test_live_capture_explains_https_requirement_for_bluetooth(sample_data, admin_client):
+    # 휴대폰에서 http://사설IP로 열면 Chrome이 Web Bluetooth를 숨긴다. "브라우저 미지원" 대신 HTTPS 안내가 있어야 한다.
+    response = admin_client.get("/admin/canlab/live")
+    html = response.get_data(as_text=True)
+    assert "data-obd-insecure" in html
+    assert "https://scantest-eta.vercel.app" in html
+    policy = response.headers.get("Permissions-Policy", "")
+    assert "bluetooth=()" not in policy and "serial=()" not in policy
+
+
+def test_obd_link_shows_https_notice_when_not_secure_context():
+    from pathlib import Path
+
+    source = Path("app/static/js/components/obd-link.js").read_text(encoding="utf-8")
+    assert "window.isSecureContext === false" in source
+    assert "[data-obd-insecure]" in source

@@ -5,6 +5,10 @@
   <input type="hidden" data-obd-csrf value="{{ csrf_token() }}">
   <p class="flash flash-warning" data-obd-unsupported hidden><span aria-hidden="true" class="font-bold">!</span>
     <span>이 브라우저는 블루투스·시리얼 연결을 지원하지 않습니다. 안드로이드·PC의 Chrome 또는 Edge를 쓰거나, 아이폰은 위카 앱으로 수집하세요.</span></p>
+  <p class="flash flash-warning" data-obd-insecure hidden><span aria-hidden="true" class="font-bold">!</span>
+    <span>지금 주소(<code data-obd-insecure-origin></code>)는 보안 연결(HTTPS)이 아니라서 Chrome이 블루투스 연결을 막습니다.
+      휴대폰에서는 <a class="underline" href="https://scantest-eta.vercel.app/admin/">https://scantest-eta.vercel.app</a> 처럼 https 주소로 접속하세요.
+      같은 와이파이의 http://192.168.x.x 주소로는 연결되지 않습니다.</span></p>
   <div class="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-end">
     <div class="field">
       <label class="field-label" for="obd-profile">진단기 종류</label>

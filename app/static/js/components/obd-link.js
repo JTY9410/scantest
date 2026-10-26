@@ -870,8 +870,17 @@
     const offBtn = q("[data-obd-disconnect]");
     const select = q("[data-obd-profile]");
     const memory = q("[data-obd-devices]");
+    // Web Bluetooth·Web Serial은 보안 연결(HTTPS·localhost)에서만 열린다. http://사설IP로 열면 Chrome도 없는 것처럼 보이므로
+    // "브라우저 미지원" 대신 HTTPS로 접속하라고 알린다.
+    const insecure = window.isSecureContext === false;
+    const insecureBox = q("[data-obd-insecure]");
+    if (insecure && insecureBox) {
+      insecureBox.hidden = false;
+      const origin = insecureBox.querySelector("[data-obd-insecure-origin]");
+      if (origin) origin.textContent = window.location.origin;
+    }
     if (!link.supported) {
-      q("[data-obd-unsupported]").hidden = false;
+      if (!(insecure && insecureBox)) q("[data-obd-unsupported]").hidden = false;
       findBtn.disabled = true;
       allBtn.disabled = true;
       if (serialBtn) serialBtn.disabled = true;
