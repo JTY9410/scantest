@@ -14,7 +14,27 @@ function obdPanelState({ remembered = 0, ble = false, serial = false, secure = t
   return { firstTime: remembered === 0 && secure && (ble || serial), findDisabled: !secure || !ble, reason,
     firstMessage: "이전에 연결한 진단기가 없습니다. 진단기 연결하기를 눌러 검색하세요." };
 }
-if (typeof module !== "undefined" && module.exports) module.exports = { obdPanelState };
+
+// searching은 requestDevice 페어링 창이 떠 있는 동안이다. 이 때 클릭 버튼을 disabled 하면
+// 휴대폰 Chrome이 사용자 제스처를 잃아 선택 창이 안 뜨므로 잠그지 않는다.
+function obdControlsLocked({ state = "idle", busy = false } = {}) {
+  return busy || state === "connecting" || state === "ready";
+}
+
+// Web Bluetooth requestDevice 옵션. 빈 namePrefix는 TypeError를 내므로 제거하고,
+// 서비스는 optionalServices에 두며 필터에는 대표 UUID 하나만 넣어 기기 목록을 넓힌다.
+function bleChooserOptions({ all = false, prefixes = [], services = [] } = {}) {
+  const optionalServices = [...new Set(services.filter((s) => s !== undefined && s !== null && s !== ""))];
+  if (all) return { acceptAllDevices: true, optionalServices };
+  const nameFilters = [...new Set(prefixes.map((p) => String(p || "").trim()).filter(Boolean))]
+    .map((namePrefix) => ({ namePrefix }));
+  const serviceFilters = optionalServices.slice(0, 1).map((s) => ({ services: [s] }));
+  return { filters: [...nameFilters, ...serviceFilters], optionalServices };
+}
+
+if (typeof module !== "undefined" && module.exports) {
+  module.exports = { obdPanelState, obdControlsLocked, bleChooserOptions };
+}
 (() => {
   "use strict";
   if (typeof window === "undefined") return;
@@ -146,11 +166,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = { obdPanel
     }
 
     async choose({ all, services, prefixes }) {
-      const options = all
-        ? { acceptAllDevices: true, optionalServices: services }
-        : { filters: [...prefixes.map((namePrefix) => ({ namePrefix })), ...services.map((s) => ({ services: [s] }))],
-            optionalServices: services };
-      return navigator.bluetooth.requestDevice(options);
+      return navigator.bluetooth.requestDevice(bleChooserOptions({ all, services, prefixes }));
     }
 
     // 다른 기기로 바꾸면 이전 기기의 끊김 처리기를 떼어 새 기기의 채널을 건드리지 않게 한다.
@@ -664,13 +680,13 @@ if (typeof module !== "undefined" && module.exports) module.exports = { obdPanel
 
     async find({ all = false } = {}) {
       if (!this.ble.supported) throw new Error("이 브라우저는 Web Bluetooth를 지원하지 않습니다.");
-      const services = [...new Set([...this.profiles.map((p) => p.service).filter(Boolean), ...KNOWN_SERVICES]
-        .map(uuid))];
-      const prefixes = [...new Set([...NAME_PREFIXES, ...this.profiles.map((p) => p.namePrefix).filter(Boolean)])];
       const before = this.state;
-      this._emit("searching", "진단기를 고르세요…");
+      // requestDevice는 클릭 제스처 직후·버튼 disabled 전에 호출해야 휴대폰에서 페어링 창이 뜬다.
       let device;
       try {
+        const services = [...new Set([...this.profiles.map((p) => p.service).filter(Boolean), ...KNOWN_SERVICES]
+          .map((s) => { try { return uuid(s); } catch { return null; } }).filter(Boolean))];
+        const prefixes = [...new Set([...NAME_PREFIXES, ...this.profiles.map((p) => p.namePrefix).filter(Boolean)])];
         device = await this.ble.choose({ all, services, prefixes });
       } catch (error) {
         this._emit(this.driver ? before : "idle",
@@ -683,7 +699,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = { obdPanel
     async findSerial() {
       if (!this.serial.supported) throw new Error("이 브라우저는 Web Serial을 지원하지 않습니다.");
       const before = this.state;
-      this._emit("searching", "진단기 포트를 고르세요(블루투스는 먼저 페어링)…");
+      // requestPort도 사용자 제스처가 살아 있을 때 바로 호출한다.
       let port;
       try {
         port = await this.serial.choose();
@@ -955,8 +971,7 @@ if (typeof module !== "undefined" && module.exports) module.exports = { obdPanel
     });
     link.addEventListener("status", ({ detail }) => {
       status.textContent = detail.message;
-      const busy = detail.state === "searching" || detail.state === "connecting";
-      const locked = busy || detail.state === "ready" || link.busy;
+      const locked = obdControlsLocked({ state: detail.state, busy: link.busy });
       findBtn.disabled = locked || !link.ble.supported;
       allBtn.disabled = findBtn.disabled;
       if (serialBtn) serialBtn.disabled = locked || !link.serial.supported;
