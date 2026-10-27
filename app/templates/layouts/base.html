@@ -6,10 +6,12 @@
   <meta name="theme-color" content="#0b0b0c">
   <meta name="robots" content="noindex, nofollow">
   <title>{% block title %}{% endblock %} · WecarScan 관리자</title>
-  <link rel="manifest" href="{{ url_for('static', filename='manifest.webmanifest') }}">
+  <link rel="manifest" href="{{ url_for('public.web_manifest') }}">
   <link rel="icon" type="image/png" href="{{ url_for('static', filename='brand/wecar-favicon.png') }}">
   <link rel="apple-touch-icon" href="{{ url_for('static', filename='brand/apple-touch-icon.png') }}">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="WecarScan">
   <link rel="stylesheet" href="{{ url_for('static', filename='dist/app.css', v=asset_version) }}">
   <script src="{{ url_for('static', filename='js/app.js', v=asset_version) }}" defer></script>

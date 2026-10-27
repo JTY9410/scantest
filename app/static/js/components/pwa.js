@@ -1,7 +1,6 @@
-// PWA: service worker 등록과 사용자가 선택하는 설치 안내.
-// - 설치는 사용자가 버튼을 눌렀을 때만 브라우저 프롬프트를 띄운다.
-// - '나중에'를 고르면 기억하고, 메뉴의 '앱 설치 안내'에서 다시 연다.
-// - 카카오톡·네이버 등 인앱 브라우저는 기본 브라우저로 열기와 URL 복사를 안내한다.
+// PWA: service worker 등록과 설치 안내.
+// OS가 로그인만으로 자동 설치하진 않는다. 설치 가능해지면 안내를 바로 띄우고,
+// 사용자가 '설치하기'를 누르면 브라우저 설치 창(바탕화면·홈 화면)을 연다.
 (() => {
   "use strict";
 
@@ -11,18 +10,23 @@
   const ua = navigator.userAgent || "";
   let deferredPrompt = null;
 
-  if ("serviceWorker" in navigator && window.isSecureContext) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/service-worker.js", { scope: "/admin/" }).catch(() => {});
-    });
+  function registerWorker() {
+    if (!("serviceWorker" in navigator) || !window.isSecureContext) return;
+    navigator.serviceWorker.register("/service-worker.js", { scope: "/admin/" }).catch(() => {});
   }
+
+  if (document.readyState === "complete") registerWorker();
+  else window.addEventListener("load", registerWorker);
 
   if (!hint) return;
 
   const isStandalone =
-    window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+    window.matchMedia("(display-mode: standalone)").matches ||
+    window.matchMedia("(display-mode: window-controls-overlay)").matches ||
+    window.navigator.standalone === true;
   const isIOS = /iPad|iPhone|iPod/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1);
   const isAndroid = /Android/i.test(ua);
+  const isDesktop = !isIOS && !isAndroid && !/Mobile/i.test(ua);
   const isInApp = /KAKAOTALK|NAVER\(inapp|Line\/|Instagram|FBAN|FBAV|DaumApps|everytimeApp|; wv\)/i.test(ua);
 
   function storage(fn) {
@@ -46,10 +50,18 @@
     if (!force) {
       if (v === "installed" || v === "unsupported") return;
       if (storage(() => localStorage.getItem(DISMISS_KEY))) return;
-      if (storage(() => sessionStorage.getItem(PENDING_KEY)) !== "1") return;
+      // Chrome/Edge 설치 가능 시점·로그인 직후 안내는 PENDING 없이도 바로 표시
+      const pending = storage(() => sessionStorage.getItem(PENDING_KEY)) === "1";
+      if (v !== "prompt" && !pending) return;
     }
     hint.dataset.variant = v;
     hint.dataset.state = "visible";
+    if (isDesktop) hint.dataset.surface = "desktop";
+    else if (isIOS || isAndroid) hint.dataset.surface = "mobile";
+    else hint.dataset.surface = "";
+    if (v === "prompt") {
+      hint.querySelector("[data-install-accept]")?.focus({ preventScroll: true });
+    }
   }
 
   function hide(remember) {
@@ -58,12 +70,16 @@
     if (remember) storage(() => localStorage.setItem(DISMISS_KEY, String(Date.now())));
   }
 
-  // 로그인 직후 첫 화면에서만 서버가 data-first-login 을 단다.
-  if (hint.dataset.firstLogin === "true") storage(() => sessionStorage.setItem(PENDING_KEY, "1"));
+  // 로그인 직후 첫 화면: 설치 안내를 이번 세션에서 연다.
+  if (hint.dataset.firstLogin === "true") {
+    storage(() => sessionStorage.setItem(PENDING_KEY, "1"));
+    storage(() => localStorage.removeItem(DISMISS_KEY));
+  }
 
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
     deferredPrompt = event;
+    // 설치 가능해지는 순간 안내를 띄운다(거절·나중에 기억은 유지).
     show(false);
   });
 
@@ -108,11 +124,12 @@
   document.querySelectorAll("[data-install-reopen]").forEach((btn) =>
     btn.addEventListener("click", () => {
       storage(() => localStorage.removeItem(DISMISS_KEY));
+      storage(() => sessionStorage.setItem(PENDING_KEY, "1"));
       show(true);
       hint.focus();
     }),
   );
 
-  // 이미 설치 프롬프트 없이도 안내가 가능한 경우(iOS, 인앱)
+  // iOS·인앱·이미 프롬프트가 있는 경우 즉시 안내
   show(false);
 })();

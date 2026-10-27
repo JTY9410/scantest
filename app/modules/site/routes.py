@@ -32,5 +32,11 @@ def service_worker():
 
 @bp.get("/manifest.webmanifest")
 def web_manifest():
-    """일부 브라우저·설치 경로가 /static 없이 루트 manifest를 요청한다."""
-    return redirect(url_for("static", filename="manifest.webmanifest"), code=302)
+    """일부 브라우저·설치 경로가 /static 없이 루트 manifest를 요청한다. 302 없이 바로 제공한다."""
+    path = Path(current_app.static_folder, "manifest.webmanifest")
+    response = current_app.response_class(
+        path.read_text(encoding="utf-8"),
+        mimetype="application/manifest+json",
+    )
+    response.headers["Cache-Control"] = "no-cache"
+    return response

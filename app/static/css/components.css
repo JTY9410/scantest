@@ -571,6 +571,14 @@
   .install-hint[data-variant="installed"] [data-variant~="installed"] {
     display: revert;
   }
+  .install-hint [data-surface] {
+    display: none;
+  }
+  .install-hint[data-surface="desktop"] [data-surface="desktop"],
+  .install-hint[data-surface="mobile"] [data-surface="mobile"],
+  .install-hint:not([data-surface="desktop"]):not([data-surface="mobile"]) [data-surface=""] {
+    display: revert;
+  }
 
   /* 공통 푸터 */
   .site-footer {

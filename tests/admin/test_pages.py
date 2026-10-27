@@ -132,6 +132,15 @@ def test_public_endpoints(client):
     assert manifest.get_json()["scope"] == "/admin/"
     assert "max-age=31536000" not in manifest.headers.get("Cache-Control", "")
 
+    root_manifest = client.get("/manifest.webmanifest")
+    assert root_manifest.status_code == 200
+    assert root_manifest.mimetype.startswith("application/manifest+json") or "json" in root_manifest.mimetype
+    body = root_manifest.get_json()
+    assert body["scope"] == "/admin/"
+    assert body["display"] == "standalone"
+    assert body["start_url"].startswith("/admin/")
+    assert "max-age=31536000" not in root_manifest.headers.get("Cache-Control", "")
+
     versioned = client.get("/static/js/app.js?v=abc")
     assert "max-age=31536000" in versioned.headers["Cache-Control"]
 
