@@ -9,5 +9,10 @@ OUTPUT_FILE="$ROOT_DIR/data/seed/supabase_baseline.dump"
 
 mkdir -p "$ROOT_DIR/data/seed"
 
-pg_dump "$SUPABASE_DATABASE_URL" -Fc -f "$OUTPUT_FILE"
+pg_dump "$SUPABASE_DATABASE_URL" \
+  -Fc \
+  --schema=public \
+  --no-owner \
+  --no-acl \
+  -f "$OUTPUT_FILE"
 echo "Wrote $OUTPUT_FILE"

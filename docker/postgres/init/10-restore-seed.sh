@@ -9,6 +9,7 @@ if [ -s "$SEED_FILE" ]; then
     --verbose \
     --exit-on-error \
     --no-owner \
+    --no-acl \
     --role="$POSTGRES_USER" \
     -d "$POSTGRES_DB" \
     "$SEED_FILE"

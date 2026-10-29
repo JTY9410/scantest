@@ -24,12 +24,16 @@ class PostgresSeedInitTest(unittest.TestCase):
         self.assertIn("/seed/supabase_baseline.dump", restore_contents)
         self.assertIn("pg_restore", restore_contents)
         self.assertIn("--no-owner", restore_contents)
+        self.assertIn("--no-acl", restore_contents)
         self.assertIn('--role="$POSTGRES_USER"', restore_contents)
 
         export_contents = export_script.read_text()
         self.assertIn("SUPABASE_DATABASE_URL", export_contents)
         self.assertIn("pg_dump", export_contents)
         self.assertIn("-Fc", export_contents)
+        self.assertIn("--schema=public", export_contents)
+        self.assertIn("--no-owner", export_contents)
+        self.assertIn("--no-acl", export_contents)
         self.assertIn("data/seed/supabase_baseline.dump", export_contents)
 
     def test_compose_mounts_init_directory_and_seed_readonly(self):
