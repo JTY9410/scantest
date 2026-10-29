@@ -19,9 +19,9 @@ def _int(name: str, default: int) -> int:
 
 
 def database_url() -> str | None:
-    """DATABASE_URL이 없으면 Vercel Supabase 연동이 넣어 주는 POSTGRES_URL을 쓴다.
-    psycopg가 거부하는 supa 쿼리 값은 지우고 드라이버를 psycopg로 지정한다."""
-    url = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
+    """DATABASE_URL만 사용한다. postgres:// 스킴이면 psycopg 드라이버로 바꾸고,
+    psycopg가 거부하는 supa 쿼리 파라미터는 제거한다."""
+    url = os.environ.get("DATABASE_URL")
     if not url or not url.startswith("postgres://"):
         return url
     parts = urlsplit(url)

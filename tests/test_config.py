@@ -11,15 +11,24 @@ def test_database_url_prefers_explicit_setting(monkeypatch):
 
 
 def test_database_url_converts_vercel_supabase_url(monkeypatch):
-    monkeypatch.delenv("DATABASE_URL", raising=False)
     monkeypatch.setenv(
-        "POSTGRES_URL",
+        "DATABASE_URL",
         "postgres://postgres.ref:p%40ss@pooler.supabase.com:6543/postgres?sslmode=require&supa=base-pooler.x",
     )
 
     assert database_url() == (
         "postgresql+psycopg://postgres.ref:p%40ss@pooler.supabase.com:6543/postgres?sslmode=require"
     )
+
+
+def test_database_url_ignores_postgres_url_without_database_url(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv(
+        "POSTGRES_URL",
+        "postgres://other@host/other",
+    )
+
+    assert database_url() is None
 
 
 def test_database_url_missing(monkeypatch):
