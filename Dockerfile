@@ -18,6 +18,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     FLASK_APP=app.wsgi
 WORKDIR /srv
 RUN groupadd --system app && useradd --system --gid app --home-dir /srv --no-create-home app
+COPY --chmod=755 docker/web-entrypoint.sh /srv/docker/web-entrypoint.sh
 COPY requirements.lock ./
 RUN pip install -r requirements.lock
 
@@ -27,9 +28,10 @@ COPY requirements-dev.lock ./
 RUN pip install -r requirements-dev.lock
 USER app
 EXPOSE 8000
+ENTRYPOINT ["/srv/docker/web-entrypoint.sh"]
 CMD ["flask", "run", "--host", "0.0.0.0", "--port", "8000", "--debug"]
 
-# 4) 운영용: 소스와 빌드된 CSS만 담고 비밀값은 넣지 않는다. 시작 시 DB 이전을 자동 실행하지 않는다.
+# 4) 운영용: 소스와 빌드된 CSS만 담고 비밀값은 넣지 않는다. AUTO_DB_UPGRADE 예외는 ADR 0002를 따른다.
 FROM base AS prod
 ARG APP_VERSION=2.0.0
 ENV APP_ENV=production \
@@ -42,4 +44,5 @@ USER app
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
   CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/up', timeout=4)"]
+ENTRYPOINT ["/srv/docker/web-entrypoint.sh"]
 CMD ["gunicorn", "-c", "gunicorn.conf.py", "app.wsgi:app"]

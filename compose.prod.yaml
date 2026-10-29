@@ -1,6 +1,6 @@
 # 운영 예시. 비밀값은 서버의 .env.production(저장소에 올리지 않음) 또는 배포 도구의 비밀 저장소로 주입한다.
 #   docker compose -f compose.prod.yaml --env-file .env.production up -d
-#   DB 이전은 수동: docker compose -f compose.prod.yaml run --rm web flask db upgrade
+#   AUTO_DB_UPGRADE=1이면 web 기동 전 flask db upgrade를 실행한다.
 name: wecarscan_prod
 
 services:
@@ -10,6 +10,7 @@ services:
     environment:
       APP_ENV: production
       RATELIMIT_STORAGE_URI: redis://redis:6379/0
+      AUTO_DB_UPGRADE: "1"
     ports:
       - "${WEB_PORT:-8000}:8000"
     depends_on:

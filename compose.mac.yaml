@@ -1,7 +1,7 @@
 # Mac 상시 실행용(운영 방식). 개발용 compose.yaml 의 db·데이터는 그대로 쓰고,
 # web 만 prod 이미지(gunicorn, 디버거 없음)로 바꾼다.
 #   docker compose -f compose.yaml -f compose.mac.yaml up -d --build web
-#   DB 이전: docker compose -f compose.yaml -f compose.mac.yaml run --rm web flask db upgrade
+#   AUTO_DB_UPGRADE=1이면 web 기동 전 flask db upgrade를 실행한다.
 # 개발 모드로 되돌리기: docker compose up -d --build web
 services:
   web:
@@ -14,4 +14,5 @@ services:
       SESSION_COOKIE_SECURE: "false"
       # url_for·리다이렉트가 https://localhost 로 나가지 않게 한다.
       PREFERRED_URL_SCHEME: http
+      AUTO_DB_UPGRADE: "1"
     volumes: !reset []
