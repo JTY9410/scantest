@@ -50,6 +50,8 @@ CSS를 고치면 `assets` 컨테이너가 `app/static/dist/app.css`를 다시 �
 | `DATABASE_URL`, `TEST_DATABASE_URL` | 운영·테스트 DB |
 | `RATELIMIT_STORAGE_URI` | 로그인 속도 제한 저장소. 운영은 Redis |
 | `SESSION_COOKIE_SECURE`, `PROXY_FIX_HOPS` | HTTPS 쿠키, 프록시 뒤 실제 IP |
+| `PUBLIC_BASE_URL` | OBD HTTPS 안내에 표시할 공개 HTTPS 주소. 비우면 현재 사이트 주소 기준으로 안내 |
+| `AUTO_DB_UPGRADE` | Mac/prod Compose에서 web 기동 전 `flask db upgrade` 실행 |
 
 `.env`, `.env.production`은 저장소에 올리지 않습니다.
 
@@ -61,7 +63,7 @@ docker compose exec web flask db migrate -m "설명"   # 스크립트 생성
 docker compose exec web flask db upgrade
 ```
 
-운영 컨테이너는 시작할 때 이전을 자동 실행하지 않습니다. 배포 전에 수동으로 `flask db upgrade`를 실행합니다.
+Mac/prod Compose 운영은 `AUTO_DB_UPGRADE=1`로 web 기동 전 `flask db upgrade`를 실행합니다. 새 마이그레이션을 만들 때는 위 순서대로 스크립트를 생성하고 반드시 검토합니다.
 
 ## 테스트
 
@@ -80,7 +82,11 @@ docker build --target prod --build-arg APP_VERSION=2.0.0+$SHA \
 docker push wecarmobility/scantest:latest && docker push wecarmobility/scantest:$SHA
 ```
 
-서버에서는 `.env.production`을 두고 `compose.prod.yaml`로 실행합니다(파일 상단 주석 참고). 이미지는 비루트 사용자로 gunicorn을 실행하고, `/up`으로 상태를 확인합니다. GitHub Actions(`.github/workflows/docker-publish.yml`)도 `main`에 올릴 때 같은 이미지를 만들어 GHCR(`ghcr.io/jty9410/scantest`)에 올리고, 저장소 비밀값 `DOCKERHUB_USERNAME`·`DOCKERHUB_TOKEN`이 있으면 Docker Hub에도 올립니다.
+공식 운영 경로는 Mac 서버의 Docker Compose PostgreSQL입니다. 서버에서는 `.env.production`을 두고 `compose.prod.yaml`로 실행합니다(파일 상단 주석 참고). 이미지는 비루트 사용자로 gunicorn을 실행하고, `/up`으로 상태를 확인합니다. GitHub Actions(`.github/workflows/docker-publish.yml`)도 `main`에 올릴 때 같은 이미지를 만들어 GHCR(`ghcr.io/jty9410/scantest`)에 올리고, 저장소 비밀값 `DOCKERHUB_USERNAME`·`DOCKERHUB_TOKEN`이 있으면 Docker Hub에도 올립니다.
+
+### 중단된 운영 경로
+
+Supabase와 Vercel은 이 프로젝트의 공식 운영 경로에서 제외되었습니다. 관련 파일과 과거 절차는 이력 확인용으로만 남기며, 새 배포·운영 안내는 Mac Docker Compose와 저장소 시드 기반 PostgreSQL을 기준으로 작성합니다.
 
 ## 기능 흐름
 
@@ -108,5 +114,4 @@ docker push wecarmobility/scantest:latest && docker push wecarmobility/scantest:
 
 ```bash
 docker compose -f compose.yaml -f compose.mac.yaml up -d --build web
-docker compose -f compose.yaml -f compose.mac.yaml run --rm web flask db upgrade   # 이전이 있을 때
 ```

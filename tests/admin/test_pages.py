@@ -158,9 +158,19 @@ def test_live_capture_explains_https_requirement_for_bluetooth(sample_data, admi
     response = admin_client.get("/admin/canlab/live")
     html = response.get_data(as_text=True)
     assert "data-obd-insecure" in html
-    assert "https://scantest-eta.vercel.app" in html
+    assert "https://scantest-eta.vercel.app" not in html
+    assert "이 사이트의 https 주소" in html
     policy = response.headers.get("Permissions-Policy", "")
     assert "bluetooth=()" not in policy and "serial=()" not in policy
+
+
+def test_live_capture_uses_public_base_url_for_https_notice(app, sample_data, admin_client):
+    app.config["PUBLIC_BASE_URL"] = "https://scan.example.com"
+
+    html = admin_client.get("/admin/canlab/live").get_data(as_text=True)
+
+    assert 'href="https://scan.example.com/admin/"' in html
+    assert "https://scantest-eta.vercel.app" not in html
 
 
 def test_obd_link_shows_https_notice_when_not_secure_context():

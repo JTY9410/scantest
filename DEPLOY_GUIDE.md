@@ -1,5 +1,26 @@
 # WECAR Scan 배포 가이드
 
+공식 운영 경로는 **Mac 서버 Docker Compose + Compose PostgreSQL**입니다. Vercel 앱과 Supabase DB 운영은 이 프로젝트에서 중단되었으며, 이 문서의 Vercel/Supabase 절차는 과거 배포 이력 확인용 보관 섹션입니다.
+
+## 공식 운영: Mac Docker Compose
+
+```bash
+cp .env.example .env.production
+# SECRET_KEY, JWT_SECRET, ENCRYPTION_KEY, POSTGRES_PASSWORD, DATABASE_URL 등을 채운다.
+# 공개 HTTPS 주소가 있으면 PUBLIC_BASE_URL=https://scan.example.com 을 설정한다.
+
+docker compose -f compose.prod.yaml --env-file .env.production up -d
+docker compose -f compose.prod.yaml ps
+curl http://localhost:${WEB_PORT:-8000}/up
+```
+
+- `DATABASE_URL`은 Compose `db` 서비스를 사용합니다. Supabase URL은 운영 DB로 쓰지 않습니다.
+- `AUTO_DB_UPGRADE=1`로 web 기동 전 `flask db upgrade`가 실행됩니다.
+- `data/seed/supabase_baseline.dump`가 있으면 빈 PostgreSQL 볼륨 최초 기동 시에만 복원합니다. 기존 볼륨은 재시드하지 않습니다.
+- OBD HTTPS 안내는 `PUBLIC_BASE_URL`이 있으면 그 주소를 보여주고, 없으면 현재 사이트의 HTTPS 주소를 쓰도록 안내합니다.
+
+## 중단된 Vercel/Supabase 절차(보관)
+
 ## 사전 준비
 
 ### 1. GitHub
@@ -64,7 +85,7 @@ python -m pytest -v
 
 ---
 
-## Supabase 설정
+## Supabase 설정(중단됨, 보관)
 
 ### 1. 프로젝트 생성
 1. https://supabase.com 로그인
@@ -122,7 +143,7 @@ python -m flask shell
 
 ---
 
-## Vercel 배포
+## Vercel 배포(중단됨, 보관)
 
 ### 1. Vercel 프로젝트 생성
 1. https://vercel.com 로그인

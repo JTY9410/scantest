@@ -1,6 +1,6 @@
 {% extends "layouts/admin.html" %}
 {% from "components/ui.html" import page_header, ai_status_badge, empty %}
-{% from "canlab/_obd_panel.html" import obd_panel %}
+{% from "canlab/_obd_panel.html" import obd_panel with context %}
 {% from "scanner/_flow.html" import scan_flow %}
 {% block title %}대시보드{% endblock %}
 {% block head %}

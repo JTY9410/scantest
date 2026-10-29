@@ -195,4 +195,5 @@ def _register_template_helpers(app: Flask) -> None:
             "app_version": app.config["APP_VERSION"],
             "asset_version": asset_version(app),
             "first_login": session.pop("show_install_hint", False),
+            "public_base_url": (app.config.get("PUBLIC_BASE_URL") or "").rstrip("/"),
         }

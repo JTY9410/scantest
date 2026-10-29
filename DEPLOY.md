@@ -1,6 +1,25 @@
 # 배포 가이드
 
-scantest 프로그램을 Vercel과 Supabase에 배포하는 절차입니다.
+scantest의 공식 운영 경로는 **Mac 서버 Docker Compose + Compose PostgreSQL**입니다. Vercel 앱과 Supabase DB 운영은 이 프로젝트에서 중단되었습니다.
+
+## 공식 운영 경로: Mac Docker Compose
+
+1. 서버에 `.env.production`을 만들고 `.env.example`의 필수값을 채웁니다.
+2. `DATABASE_URL`은 Compose `db` 서비스를 가리키는 `postgresql+psycopg://...@db:5432/wecarscan` 형식을 씁니다.
+3. 공개 HTTPS 도메인이 있으면 `PUBLIC_BASE_URL=https://scan.example.com`처럼 설정합니다. 비우면 OBD 패널은 현재 사이트의 HTTPS 주소를 쓰라고 안내합니다.
+4. 운영 컨테이너는 아래처럼 실행합니다.
+
+```bash
+docker compose -f compose.prod.yaml --env-file .env.production up -d
+docker compose -f compose.prod.yaml ps
+curl http://localhost:${WEB_PORT:-8000}/up
+```
+
+`compose.prod.yaml`은 `AUTO_DB_UPGRADE=1`로 web 기동 전 `flask db upgrade`를 실행합니다. 빈 PostgreSQL 볼륨은 `data/seed/supabase_baseline.dump`가 있을 때 최초 1회만 복원하고, 기존 볼륨을 덮어쓰지 않습니다.
+
+## 중단된 운영 경로(보관)
+
+아래 Vercel/Supabase 절차는 과거 이력 확인용입니다. 새 배포, 장애 대응, 운영 문서에는 사용하지 않습니다.
 
 ## 사전 준비
 
@@ -35,7 +54,7 @@ RATELIMIT_STORAGE_URI=<Redis URL>  # 로그인 속도 제한
 OPENAI_API_KEY=<API 키>  # AI 기능
 ```
 
-## Vercel 배포
+## Vercel 배포(중단됨, 보관)
 
 ### 1. Vercel CLI 설치 (로컬)
 ```bash
@@ -127,7 +146,7 @@ docker compose -f compose.prod.yaml exec web flask db upgrade
 docker compose -f compose.prod.yaml exec web flask create-admin --tid wecar --name "관리자"
 ```
 
-## Supabase 설정
+## Supabase 설정(중단됨, 보관)
 
 ### 1. Row Level Security (RLS)
 마이그레이션에 포함되어 있지만, 수동 확인:

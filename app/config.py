@@ -56,6 +56,7 @@ class Config:
     CAR_INFO_API_URL = os.environ.get("CAR_INFO_API_URL")
     CAR_INFO_API_KEY = os.environ.get("CAR_INFO_API_KEY")
     CAR_INFO_TIMEOUT_SECONDS = 15
+    PUBLIC_BASE_URL = os.environ.get("PUBLIC_BASE_URL") or None
 
     # 설정하면 SMS를 보내지 않고 이 값을 인증번호로 쓴다. 운영에서는 비워 둔다.
     SMS_DEV_CODE = os.environ.get("SMS_DEV_CODE") or None

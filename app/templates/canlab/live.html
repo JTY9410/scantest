@@ -1,7 +1,7 @@
 {% extends "layouts/admin.html" %}
 {% from "components/ui.html" import page_header, empty %}
 {% from "components/comm_problems.html" import comm_problems %}
-{% from "canlab/_obd_panel.html" import obd_panel %}
+{% from "canlab/_obd_panel.html" import obd_panel with context %}
 {% block title %}블루투스 수집{% endblock %}
 {% block head %}
 <script src="{{ url_for('static', filename='js/components/obd-plan.js', v=asset_version) }}" defer></script>

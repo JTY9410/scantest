@@ -1,6 +1,6 @@
 {% extends "layouts/admin.html" %}
 {% from "components/ui.html" import page_header %}
-{% from "canlab/_obd_panel.html" import obd_panel %}
+{% from "canlab/_obd_panel.html" import obd_panel with context %}
 {% from "scanner/_flow.html" import scan_flow %}
 {% block title %}스캔하기{% endblock %}
 {% block head %}
