@@ -14,4 +14,5 @@ if [ -s "$SEED_FILE" ]; then
     "$SEED_FILE"
 else
   echo "WARNING: PostgreSQL seed $SEED_FILE is missing or empty; starting with an empty development database." >&2
+  exit 0
 fi

@@ -165,9 +165,13 @@ def test_live_capture_explains_https_requirement_for_bluetooth(sample_data, admi
 
 
 def test_live_capture_uses_public_base_url_for_https_notice(app, sample_data, admin_client):
+    original_base_url = app.config.get("PUBLIC_BASE_URL")
     app.config["PUBLIC_BASE_URL"] = "https://scan.example.com"
 
-    html = admin_client.get("/admin/canlab/live").get_data(as_text=True)
+    try:
+        html = admin_client.get("/admin/canlab/live").get_data(as_text=True)
+    finally:
+        app.config["PUBLIC_BASE_URL"] = original_base_url
 
     assert 'href="https://scan.example.com/admin/"' in html
     assert "https://scantest-eta.vercel.app" not in html
