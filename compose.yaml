@@ -34,7 +34,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 를 .env 에 설정하세요}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./docker/postgres/init-test-db.sh:/docker-entrypoint-initdb.d/init-test-db.sh:ro
+      - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
+      - ./data/seed:/seed:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s

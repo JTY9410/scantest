@@ -26,7 +26,9 @@ htmlcov/
 /instance/
 
 # 실제 차량 데이터(TRC·결과지 PDF, VIN 등 포함)
-/data/
+/data/*
+!/data/seed/
+!/data/seed/**
 /*.trc
 /*.pdf
 
