@@ -1,4 +1,10 @@
-# 로컬 개발용. 실행: docker compose up -d  →  http://localhost:18080/admin/
+# 로컬 개발·Mac 서버 공통. 서버는 이 파일 + docker-compose.override.yml(서버 전용, 커밋 안 함) + .env 로 실행.
+# 시크릿은 서버 .env 에만 둔다. Vercel·Supabase 는 쓰지 않는다.
+#
+#   cp .env.example .env
+#   docker compose up -d --build
+#
+# env_file 이 없어도 compose 가 실패하지 않는다(required: false).
 name: scantest
 
 services:
@@ -6,11 +12,15 @@ services:
     build:
       context: .
       target: dev
-    env_file: .env
+    env_file:
+      - path: .env
+        required: false
     environment:
       APP_ENV: development
+      PROXY_FIX_HOPS: ${PROXY_FIX_HOPS:-1}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
     ports:
-      - "18080:8000"
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-18080}:8000"
     volumes:
       - .:/srv
     depends_on:
@@ -33,6 +43,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-wecarscan}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 를 .env 에 설정하세요}
     volumes:
+      # 볼륨 이름·Postgres 메이저(16)를 바꾸면 기존 데이터를 못 읽는다. 변경 시 README의 덤프→복원 절차를 따른다.
       - pgdata:/var/lib/postgresql/data
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
       - ./data/seed:/seed:ro

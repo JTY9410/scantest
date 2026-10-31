@@ -1,18 +1,30 @@
-# 운영 예시. 비밀값은 서버의 .env.production(저장소에 올리지 않음) 또는 배포 도구의 비밀 저장소로 주입한다.
-#   docker compose -f compose.prod.yaml --env-file .env.production up -d
-#   AUTO_DB_UPGRADE=1이면 web 기동 전 flask db upgrade를 실행한다.
+# Mac 서버 운영용. 시크릿은 서버 .env 에만 두고 레포에 올리지 않는다.
+#   docker compose -f compose.prod.yaml up -d
+# 서버는 보통: compose.prod.yaml + docker-compose.override.yml(서버 전용) + .env
+# AUTO_DB_UPGRADE=1 이면 web 기동 전 flask db upgrade 를 1회 실행한다.
 name: wecarscan_prod
 
 services:
   web:
     image: wecarmobility/scantest:${IMAGE_TAG:-latest}
-    env_file: .env.production
+    build:
+      context: .
+      target: prod
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.production
+        required: false
     environment:
       APP_ENV: production
-      RATELIMIT_STORAGE_URI: redis://redis:6379/0
-      AUTO_DB_UPGRADE: "1"
+      RATELIMIT_STORAGE_URI: ${RATELIMIT_STORAGE_URI:-redis://redis:6379/0}
+      AUTO_DB_UPGRADE: ${AUTO_DB_UPGRADE:-1}
+      PROXY_FIX_HOPS: ${PROXY_FIX_HOPS:-1}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-true}
+      PREFERRED_URL_SCHEME: ${PREFERRED_URL_SCHEME:-https}
     ports:
-      - "${WEB_PORT:-8000}:8000"
+      - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8000}:8000"
     depends_on:
       db:
         condition: service_healthy
@@ -27,8 +39,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-wecarscan}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD 가 필요합니다}
     volumes:
+      # 볼륨 이름·Postgres 메이저(16) 변경 금지(기존 데이터). 바꿀 때는 README 덤프→복원.
       - pgdata:/var/lib/postgresql/data
-      # init 스크립트는 빈 볼륨 최초 기동 때 시드를 복원하고 ${POSTGRES_DB}_test도 만든다.
+      # init: 빈 볼륨 최초 기동 때 시드 복원 + ${POSTGRES_DB}_test 생성
       - ./docker/postgres/init:/docker-entrypoint-initdb.d:ro
       - ./data/seed:/seed:ro
     healthcheck:
@@ -44,3 +57,4 @@ services:
 
 volumes:
   pgdata:
+    name: wecarscan_dh_pgdata

@@ -1,8 +1,7 @@
-# Mac 상시 실행용(운영 방식). 개발용 compose.yaml 의 db·데이터는 그대로 쓰고,
-# web 만 prod 이미지(gunicorn, 디버거 없음)로 바꾼다.
+# 로컬 Mac에서 prod 이미지(gunicorn)로 web 만 띄울 때.
 #   docker compose -f compose.yaml -f compose.mac.yaml up -d --build web
-#   AUTO_DB_UPGRADE=1이면 web 기동 전 flask db upgrade를 실행한다.
-# 개발 모드로 되돌리기: docker compose up -d --build web
+# 서버(nginx HTTPS)는 compose.prod.yaml + override + .env 를 쓰고, 이 파일의
+# SESSION_COOKIE_SECURE=false 는 로컬 HTTP 전용이다.
 services:
   web:
     build:
@@ -10,9 +9,9 @@ services:
       target: prod
     environment:
       APP_ENV: production
-      # 로컬 http(localhost:18080) 접속용. 외부 공개 시 HTTPS 프록시 뒤에서 true 로 바꾼다.
-      SESSION_COOKIE_SECURE: "false"
-      # url_for·리다이렉트가 https://localhost 로 나가지 않게 한다.
-      PREFERRED_URL_SCHEME: http
-      AUTO_DB_UPGRADE: "1"
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+      PREFERRED_URL_SCHEME: ${PREFERRED_URL_SCHEME:-http}
+      AUTO_DB_UPGRADE: ${AUTO_DB_UPGRADE:-1}
+      PROXY_FIX_HOPS: ${PROXY_FIX_HOPS:-1}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
     volumes: !reset []

@@ -1,6 +1,6 @@
 from sqlalchemy.pool import NullPool
 
-from app.config import database_url, engine_options
+from app.config import database_url, engine_options, proxy_fix_hops
 
 
 def test_database_url_prefers_explicit_setting(monkeypatch):
@@ -48,3 +48,27 @@ def test_serverless_engine_uses_no_pool_and_no_prepared_statements(monkeypatch):
     monkeypatch.setenv("DATABASE_POOL", "none")
 
     assert engine_options() == {"poolclass": NullPool, "connect_args": {"prepare_threshold": None}}
+
+
+def test_proxy_fix_hops_defaults_to_one(monkeypatch):
+    monkeypatch.delenv("PROXY_FIX_HOPS", raising=False)
+    monkeypatch.delenv("TRUST_PROXY", raising=False)
+    assert proxy_fix_hops() == 1
+
+
+def test_proxy_fix_hops_prefers_explicit_proxy_fix_hops(monkeypatch):
+    monkeypatch.setenv("PROXY_FIX_HOPS", "2")
+    monkeypatch.setenv("TRUST_PROXY", "0")
+    assert proxy_fix_hops() == 2
+
+
+def test_trust_proxy_alias_disables_proxy_fix(monkeypatch):
+    monkeypatch.delenv("PROXY_FIX_HOPS", raising=False)
+    monkeypatch.setenv("TRUST_PROXY", "0")
+    assert proxy_fix_hops() == 0
+
+
+def test_trust_proxy_alias_enables_one_hop(monkeypatch):
+    monkeypatch.delenv("PROXY_FIX_HOPS", raising=False)
+    monkeypatch.setenv("TRUST_PROXY", "1")
+    assert proxy_fix_hops() == 1

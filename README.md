@@ -73,20 +73,56 @@ docker compose run --rm --no-deps web python -m pytest -q
 
 테스트는 `TEST_DATABASE_URL`(기본 `wecarscan_test`, db 컨테이너가 처음 뜰 때 생성)을 씁니다. CSRF와 속도 제한을 켠 상태로 검사합니다.
 
-## 배포
+## 배포 (Mac 서버 · 공식)
+
+구조: **nginx(https) → 127.0.0.1:포트 → 컨테이너**. Vercel·Supabase는 쓰지 않습니다.  
+`main` push → 서버 웹훅이 pull·재기동. 서버는 레포의 `compose.prod.yaml`(또는 `compose.yaml`) + **서버 전용** `docker-compose.override.yml`(커밋 금지) + **서버 `.env`** 로 실행합니다. 시크릿은 서버 `.env`에만 둡니다.
 
 ```bash
-SHA=$(git rev-parse --short HEAD)
-docker build --target prod --build-arg APP_VERSION=2.0.0+$SHA \
-  -t wecarmobility/scantest:latest -t wecarmobility/scantest:$SHA .
-docker push wecarmobility/scantest:latest && docker push wecarmobility/scantest:$SHA
+cp .env.example .env          # 서버에서만 비밀값 채움
+# 선택: cp docker-compose.override.example.yml docker-compose.override.yml
+docker compose -f compose.prod.yaml up -d --build
+curl -sS http://127.0.0.1:8000/up
 ```
 
-공식 운영 경로는 Mac 서버의 Docker Compose PostgreSQL입니다. 서버에서는 `.env.production`을 두고 `compose.prod.yaml`로 실행합니다(파일 상단 주석 참고). 이미지는 비루트 사용자로 gunicorn을 실행하고, `/up`으로 상태를 확인합니다. GitHub Actions(`.github/workflows/docker-publish.yml`)도 `main`에 올릴 때 같은 이미지를 만들어 GHCR(`ghcr.io/jty9410/scantest`)에 올리고, 저장소 비밀값 `DOCKERHUB_USERNAME`·`DOCKERHUB_TOKEN`이 있으면 Docker Hub에도 올립니다.
+- 포트: `${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8000}:8000`
+- 프록시 1단: `TRUST_PROXY=1` 또는 `PROXY_FIX_HOPS=1`, `SESSION_COOKIE_SECURE=true`, `PUBLIC_BASE_URL=https://…`
+- `AUTO_DB_UPGRADE=1`이면 web 기동 전 `flask db upgrade` 1회
+- 이미지: GHCR `ghcr.io/jty9410/scantest` (Actions가 `main` 푸시 시 빌드)
+
+### Postgres 볼륨·메이저 버전
+
+볼륨 이름 `wecarscan_dh_pgdata`와 이미지 `postgres:16-alpine`을 바꾸면 **기존 데이터를 읽지 못할 수 있습니다.** 변경이 필요하면:
+
+1. `pg_dump`로 백업  
+2. 새 볼륨/메이저로 compose 기동  
+3. `pg_restore` 후 `flask db upgrade`  
+4. 앱 `/up`·로그인 확인  
+
+복원 실패 시 데이터가 반만 들어간 채로 healthy가 될 수 있으니, 빈 볼륨으로 `docker compose down -v` 후 재시도할지 운영에서 결정합니다(파괴적).
+
+### Supabase → 내장 DB 이전
+
+서버에서 일회성으로:
+
+```bash
+export SUPABASE_DATABASE_URL='…'   # Session pooler URI, 별도 채널
+export TARGET_DATABASE_URL='…'     # Compose Postgres
+./scripts/migrate_from_supabase.sh
+```
+
+**컷오버:** 스크립트 실행 직전부터 Supabase 쓰기를 중단하고 그 시각을 기록합니다. 이후 Supabase에 쓰면 데이터가 어긋납니다.  
+dump에는 개인정보가 들어갈 수 있어 **레포에 커밋하지 않습니다.**
+
+빈 볼륨 최초 기동 시 시드 복원은 `data/seed/` + `docker/postgres/init/` 흐름입니다(`data/seed/README.md`).
+
+### 스케줄러·메모리
+
+이 저장소에는 vehicle-data-hub 일일 수집·wecar_pm sync 같은 상시 스케줄러가 없습니다. gunicorn 워커·동시 스캔만 유의하면 됩니다. 대량 배치 작업이 생기면 서버 메모리에 맞춰 수동으로 켜고, 예상 행 수·피크 메모리를 이 절에 추가합니다.
 
 ### 중단된 운영 경로
 
-Supabase와 Vercel은 이 프로젝트의 공식 운영 경로에서 제외되었습니다. 관련 파일과 과거 절차는 이력 확인용으로만 남기며, 새 배포·운영 안내는 Mac Docker Compose와 저장소 시드 기반 PostgreSQL을 기준으로 작성합니다.
+Supabase·Vercel 앱 배포는 공식 경로에서 제외되었습니다.
 
 ## 기능 흐름
 

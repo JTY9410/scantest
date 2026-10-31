@@ -1,0 +1,14 @@
+# 서버에만 두는 예시. 복사해서 docker-compose.override.yml 로 쓰고 레포에 커밋하지 않는다.
+# nginx(https) → 127.0.0.1:포트. 시크릿은 .env 에만.
+#
+#   cp docker-compose.override.example.yml docker-compose.override.yml
+#
+# services:
+#   web:
+#     ports:
+#       - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-8000}:8000"
+#     environment:
+#       TRUST_PROXY: "1"
+#       PROXY_FIX_HOPS: "1"
+#       SESSION_COOKIE_SECURE: "true"
+#       PUBLIC_BASE_URL: "https://scan.example.com"

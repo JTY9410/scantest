@@ -1,7 +1,9 @@
-# 비밀값
+# 비밀값·서버 전용 override(레포에 올리지 않음)
 .env
 .env.*
 !.env.example
+docker-compose.override.yml
+!docker-compose.override.example.yml
 
 # Python
 venv/

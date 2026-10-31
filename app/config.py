@@ -30,11 +30,24 @@ def database_url() -> str | None:
 
 
 def engine_options() -> dict:
-    """DATABASE_POOL=none: 서버리스(Vercel) + Supabase 트랜잭션 풀러용.
-    함수 인스턴스가 연결을 붙잡지 않고, 풀러가 지원하지 않는 prepared statement를 끈다."""
+    """DATABASE_POOL=none: 풀 없이 연결(레거시 서버리스용). Mac Compose 운영은 기본 pool_pre_ping."""
     if os.environ.get("DATABASE_POOL") == "none":
         return {"poolclass": NullPool, "connect_args": {"prepare_threshold": None}}
     return {"pool_pre_ping": True}
+
+
+def proxy_fix_hops() -> int:
+    """nginx 등 프록시 뒤에서 X-Forwarded-* 를 신뢰할 홉 수.
+    PROXY_FIX_HOPS가 있으면 그걸 쓰고, 없으면 TRUST_PROXY(0/1) 별칭을 따른다. 기본 1."""
+    raw_hops = os.environ.get("PROXY_FIX_HOPS")
+    if raw_hops is not None and str(raw_hops).strip() != "":
+        return int(raw_hops)
+    trust = (os.environ.get("TRUST_PROXY") or "1").strip().lower()
+    if trust in {"0", "false", "no", "off"}:
+        return 0
+    if trust in {"1", "true", "yes", "on"}:
+        return 1
+    return int(trust)
 
 
 class Config:
@@ -95,8 +108,8 @@ class Config:
     PAGE_SIZE_MAX = 100
     ADMIN_PAGE_SIZE = 20
 
-    # 프록시 뒤에서 X-Forwarded-* 를 신뢰할 단계 수
-    PROXY_FIX_HOPS = _int("PROXY_FIX_HOPS", 1)
+    # 프록시 뒤에서 X-Forwarded-* 를 신뢰할 단계 수 (TRUST_PROXY=0/1 별칭 지원)
+    PROXY_FIX_HOPS = proxy_fix_hops()
 
     REQUIRED_SETTINGS = ("SECRET_KEY", "SQLALCHEMY_DATABASE_URI", "JWT_SECRET")
 
