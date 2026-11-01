@@ -13,6 +13,7 @@ from app.modules.scanner import analysis, clear_service, service
 from app.modules.scanner import ai_verify as ai_verify_service
 from app.modules.scanner.obd import SYSTEMS
 from app.modules.scanner import ethernet
+from app.modules.scanner.learn import learned_requests
 from app.modules.scanner.plan import build_plan
 from app.modules.scans import car_info
 from app.modules.scans.car_info import CarInfoError
@@ -227,10 +228,14 @@ def run():
 def result(scan_id: int):
     scan = get_visible_scan(current_user, scan_id)
     result = service.scan_result(scan)
+    car = result.get("car") if isinstance(result.get("car"), dict) else None
+    dtcs = result.get("dtcs") if isinstance(result.get("dtcs"), list) else []
+    unnamed = sum(1 for item in dtcs if isinstance(item, dict) and not item.get("desc"))
     return render_template("scanner/result.html", scan=scan, result=result, summary=analysis.summarize(result),
                            systems=SYSTEMS, transports=service.TRANSPORTS,
                            step_groups=analysis.group_steps(result.get("steps")),
-                           ai_verify=result.get("ai_verify") if isinstance(result.get("ai_verify"), dict) else None)
+                           ai_verify=result.get("ai_verify") if isinstance(result.get("ai_verify"), dict) else None,
+                           learned=learned_requests(car), unnamed_dtc=unnamed)
 
 
 @bp.post("/<int:scan_id>/ai-verify")
