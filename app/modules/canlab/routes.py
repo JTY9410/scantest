@@ -354,7 +354,7 @@ def _rule_matches(key: str, rows: list, needle: str) -> bool:
     if needle in key.casefold() or needle in label:
         return True
     for rule in rows:
-        text = f"{rule.formula or ''} {rule.request_id or ''} {rule.did or ''}".casefold()
+        text = f"{rule.formula or ''} {rule.request_id or ''} {rule.did or ''} 22{rule.did or ''}".casefold()
         if needle in text:
             return True
     return False

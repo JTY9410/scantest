@@ -691,6 +691,9 @@ def test_live_page_connects_without_profiles(app, admin_client, trained):
     assert config["profiles"] == [] and config["fromRules"] is True
     assert {"header": "7E4", "command": "220101"} in config["requests"]
     assert {"header": "7E4", "command": "1902FF"} in config["requests"]
+    assert 'href="/admin/canlab/rules?q=220101"' in html and "통신 데이터셋" in html
+    rules = admin_client.get("/admin/canlab/rules?q=220101").get_data(as_text=True)
+    assert "디코드 공식" in rules
     assert config["saveUrl"] == "/admin/canlab/live" and config["previewUrl"] == "/admin/canlab/live/preview"
     assert config["devices"] == [] and config["devicesUrl"] == "/admin/obd/my-devices"
     assert "js/components/obd-plan.js" in html and "js/components/obd-driver.js" in html

@@ -22,6 +22,10 @@
 
 <section class="card card-body mt-6" aria-labelledby="capture-title" id="ble-capture">
   <h2 id="capture-title" class="text-lg font-bold">수집</h2>
+  <p class="mt-1 text-sm text-muted">명령은
+    {% if obd.fromRules %}<a class="underline" href="{{ url_for('canlab.rules') }}">적용 중 디코딩 규칙</a>
+    {% else %}<a class="underline" href="{{ url_for('obd.index') }}">OBD2 프로필</a>{% endif %}에서 옵니다.
+    저장하면 <a class="underline" href="{{ url_for('canlab.datasets') }}">통신 데이터셋</a>에 남고, 역분석으로 규칙을 만들면 다음 <a class="underline" href="{{ url_for('scanner.index') }}">스캔</a>에 쓰입니다.</p>
   {% if not obd.requests %}
   {{ empty("보낼 조회 명령이 없습니다.", "역산 분석으로 규칙을 적용하거나, OBD2 연결 화면의 BLE 프로필에 요청 헤더와 조회 명령을 넣으세요.") }}
   {% else %}
@@ -39,7 +43,9 @@
     <div class="field md:col-span-2">
       <span class="field-label">보낼 명령 ({{ obd.requests|length }}개, {{ "적용 중 규칙 기준" if obd.fromRules else "프로필 조회 명령" }})</span>
       <ul class="mono text-sm">
-        {% for r in obd.requests %}<li>{{ r.header }} · {{ r.command }}</li>{% endfor %}
+        {% for r in obd.requests %}
+        <li>{% if obd.fromRules %}<a class="underline" href="{{ url_for('canlab.rules', q=r.command) }}">{{ r.header }} · {{ r.command }}</a>{% else %}<a class="underline" href="{{ url_for('obd.index') }}">{{ r.header }} · {{ r.command }}</a>{% endif %}</li>
+        {% endfor %}
       </ul>
     </div>
     <div class="flex flex-wrap gap-2 md:col-span-2">
