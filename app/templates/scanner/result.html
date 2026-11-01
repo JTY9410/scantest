@@ -41,6 +41,10 @@
   <h2 id="next-scan-title" class="text-lg font-bold">다음 스캔에 적용</h2>
   <p class="mt-1 text-sm text-muted">성공한 읽기만 이 제조사·차종 기록으로 남고, 다음 계획의 「이전 스캔에서 응답한 명령」으로 붙습니다. 지우기 명령은 학습하지 않습니다.</p>
   <ul class="mt-3 grid gap-1 text-sm">
+    <li>이번 스캔 계획 <span class="font-semibold tabular-nums">{{ result.steps|length }}</span>단계
+      · 이전 스캔 명령 {{ result.steps|selectattr("group", "equalto", "learned")|list|length }}
+      · 검증된 명령 {{ result.steps|selectattr("group", "equalto", "knowledge")|list|length }}
+      · 적용 규칙 {{ result.steps|selectattr("group", "equalto", "rule")|list|length }}</li>
     <li>다시 쓸 명령 <span class="font-semibold tabular-nums">{{ learned|length }}</span>개
       {% if learned %} · 예: <span class="font-mono">{{ learned[0].command }}</span>{% endif %}
       · <a class="underline" href="{{ url_for('monitoring.scan_commands', maker=car.diag_company or '') }}">응답한 명령 목록</a></li>

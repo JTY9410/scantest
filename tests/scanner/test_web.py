@@ -25,6 +25,7 @@ def test_scan_page_menu_and_dashboard_button(admin_client):
     assert html.index("스캔하기</span>") < html.index("운영 데이터")
     assert html.index("진단 작업 흐름") < html.index("진단기 연결") < html.index("data-scan-flow")
     assert "지식 고장코드" in html and "이더넷 진단" in html and "AI 연결" in html
+    assert "data-scan-mix" in html
     assert "차량정보 조회 인증키가 없어" not in html
     dashboard = admin_client.get("/admin/").get_data(as_text=True)
     # 대시보드 스캔하기는 같은 페이지의 연결을 쓰는 카드 안 흐름이다(이동하면 블루투스 연결이 끊긴다).
@@ -97,6 +98,7 @@ def test_run_then_result_page_shows_wescan_format(admin_client):
     html = admin_client.get(saved["url"]).get_data(as_text=True)
     assert "위스캔 결과" in html and "P0133" in html and "진단 요약" in html
     assert "다음 스캔에 적용" in html and "지식 고장코드" in html
+    assert "이번 스캔 계획" in html and "검증된 명령" in html and "적용 규칙" in html
     assert "오류 기록" in html and "시간 초과" in html and "ISO 15765-4 CAN" in html
     assert "분석 요약" in html and "배출 점검(레디니스)" in html and "불꽃 점화" in html
     show = admin_client.get(f"/admin/scans/{saved['id']}").get_data(as_text=True)

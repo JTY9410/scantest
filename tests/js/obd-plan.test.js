@@ -85,6 +85,18 @@ test("requests: PID 묶음·MID·19 04 펼치기", () => {
   assert.deepEqual(snap.items.map((i) => i.command), ["1904013300FF", "1904C12300FF"]);
 });
 
+test("planMixText: 학습·검증 명령·적용 규칙 개수", () => {
+  const text = P.planMixText([
+    { group: "pid", command: "0100" },
+    { group: "learned", command: "22F190" },
+    { group: "knowledge", command: "22F187" },
+    { group: "rule", command: "010C" },
+    null,
+  ]);
+  assert.equal(text, "계획 5단계 · 이전 스캔 명령 1 · 검증된 명령 1 · 적용 규칙 1");
+  assert.equal(P.planMixText(null), "계획 0단계 · 이전 스캔 명령 0 · 검증된 명령 0 · 적용 규칙 0");
+});
+
 test("headerCommands: 요청 주소와 수신 필터", () => {
   assert.deepEqual(P.headerCommands("7E0", "can11"), ["ATSH7E0", "ATCRA7E8"]);
   assert.deepEqual(P.headerCommands("7DF", "can11"), ["ATSH7DF", "ATCRA"]);

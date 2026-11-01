@@ -246,6 +246,12 @@
     return [`ATSH${header}`, broadcast || bus === "serial" ? "ATCRA" : `ATCRA${reply}`];
   }
 
+  function planMixText(steps) {
+    const list = Array.isArray(steps) ? steps : [];
+    const count = (group) => list.filter((step) => step && step.group === group).length;
+    return `계획 ${list.length}단계 · 이전 스캔 명령 ${count("learned")} · 검증된 명령 ${count("knowledge")} · 적용 규칙 ${count("rule")}`;
+  }
+
   return { BROADCAST, BATCH, REPLY_OVERRIDE, clearAnswered, spaced, frames, messages, bitmap, dtcCount, confirmedDtcs, busOf, recovery, newContext,
-    headerFor, skipReason, requests, observe, headerCommands };
+    headerFor, skipReason, requests, observe, headerCommands, planMixText };
 });

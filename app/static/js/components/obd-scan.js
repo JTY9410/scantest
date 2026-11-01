@@ -34,6 +34,7 @@
     const progress = q("[data-scan-progress]");
     const bar = q("[data-scan-bar]");
     const scanStatus = q("[data-scan-status]");
+    const mixLine = q("[data-scan-mix]");
     const counts = q("[data-scan-counts]");
     const retryBtn = q("[data-scan-retry]");
     const logList = q("[data-scan-log]");
@@ -342,6 +343,10 @@
         scanStatus.textContent = "스캔 계획을 받는 중…";
         // 고장코드 지우기는 저장한 스캔의 결과 화면에서 따로 한다(읽기 스캔은 지우지 않음).
         const plan = await post(config.planUrl, { car: state.car });
+        if (mixLine && P.planMixText) {
+          mixLine.hidden = false;
+          mixLine.textContent = P.planMixText(plan.steps);
+        }
         await runPlan(plan.steps, results);
       } catch (error) {
         clientError = `${results.length ? `${results.length}번째 단계 뒤 ` : ""}스캔이 중단되었습니다: ${error.message}`;

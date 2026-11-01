@@ -47,6 +47,7 @@
   <div class="grid gap-2" data-scan-progress hidden>
     <progress class="h-2 w-full" max="100" value="0" data-scan-bar aria-label="스캔 진행률"></progress>
     <p class="font-semibold" role="status" aria-live="polite" data-scan-status></p>
+    <p class="text-sm text-muted" data-scan-mix hidden></p>
     <p class="text-sm text-muted tabular-nums" data-scan-counts></p>
     {{ comm_problems("스캔 통신 문제") }}
     <button class="btn btn-secondary justify-self-start" type="button" data-scan-retry hidden>저장 다시 시도</button>
