@@ -52,6 +52,15 @@ class Transaction:
         return self.response is not None and self.negative_code is None
 
     @property
+    def expects_response(self) -> bool:
+        """ISO 14229 suppressPosRsp(하위기능 bit7)이 켜지면 응답이 없는 것이 정상이다(3E 80, 10 81 등)."""
+        if len(self.request) < 2:
+            return True
+        if self.service in (0x3E, 0x10, 0x11, 0x28, 0x85) and self.request[1] & 0x80:
+            return False
+        return True
+
+    @property
     def data(self) -> bytes:
         """긍정 응답에서 서비스 ID와 DID 에코를 뺀 데이터."""
         if not self.positive:
@@ -135,16 +144,23 @@ def parse_dtcs(tx: Transaction) -> list[dict]:
     """19 02(상태 마스크로 DTC 읽기) 응답의 DTC 목록."""
     if tx.service != 0x19 or not tx.positive or len(tx.response) < 3 or tx.response[1] != 0x02:
         return []
+    from app.modules.canlab.engine.features import flag
+    from app.modules.scanner.dtc_ftb import fault_type_label
+    show_ftb = flag("SCAN_DTC_FTB_LABELS")
     records = tx.response[3:]
     dtcs = []
     for offset in range(0, len(records) - 3, 4):
         b1, b2, b3, status = records[offset : offset + 4]
-        dtcs.append({
+        row = {
             "code": format_dtc(b1, b2, b3),
             "status": status,
             "confirmed": bool(status & 0x08),
             "active": bool(status & 0x01),
-        })
+        }
+        if show_ftb and (label := fault_type_label(b3)):
+            row["fault_type"] = label
+            row["fault_type_source"] = "표준 기준"
+        dtcs.append(row)
     return dtcs
 
 

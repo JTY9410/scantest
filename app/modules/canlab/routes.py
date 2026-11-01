@@ -349,6 +349,26 @@ def rules():
     return _render_rules()
 
 
+@bp.get("/rules/export.dbc")
+@admin_required
+def export_dbc():
+    """활성 디코딩 규칙을 DBC 파일로 내려받는다(CANLAB_DBC_EXPORT)."""
+    maker = (request.args.get("maker") or "").strip() or None
+    model = (request.args.get("model") or "").strip() or None
+    car = service.scope_car(maker, model)
+    try:
+        body = service.export_dbc(car)
+    except ServiceError as error:
+        return _render_rules(_flash_error(error))
+    name = "scantest_rules.dbc"
+    if maker:
+        name = f"scantest_{maker}_{model or 'all'}.dbc".replace(" ", "_")
+    return Response(
+        body, mimetype="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
 def _rule_matches(key: str, rows: list, needle: str) -> bool:
     signal = signals.BY_KEY.get(key)
     label = signal.label.casefold() if signal else ""

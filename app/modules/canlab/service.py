@@ -1819,3 +1819,94 @@ def overview() -> dict:
         "signals": len(signals.SIGNALS), "ai_ready": ai.available_connection() is not None,
         "kb_commands": kb_commands, "kb_formulas": kb_formulas, "kb_dtcs": kb_dtcs,
     }
+
+
+
+def export_dbc(car: dict | None = None) -> str:
+    """활성 DecodeRule을 DBC 텍스트로 보낸다. CANLAB_DBC_EXPORT가 꺼져 있으면 오류.
+
+    UDS DID 응답은 브로드캐스트 CAN이 아니므로 BO_ 이름은 UDS_요청ID_DID 형식이고
+    CM_에 요청 경로를 적는다. float32는 SIG_VALTYPE_ 1로 표시한다.
+    """
+    from app.modules.canlab.engine.features import flag
+    if not flag("CANLAB_DBC_EXPORT"):
+        raise ServiceError("DBC 내보내기가 꺼져 있습니다(CANLAB_DBC_EXPORT).")
+    rules = rules_for(car)
+    if not rules:
+        raise ServiceError("내보낼 활성 디코딩 규칙이 없습니다.")
+    lines = [
+        'VERSION ""',
+        "",
+        "NS_ :",
+        "    NS_DESC_",
+        "    CM_",
+        "    BA_DEF_",
+        "    BA_",
+        "    VAL_",
+        "    VAL_TABLE_",
+        "    SIG_VALTYPE_",
+        "",
+        "BS_:",
+        "",
+        "BU_: VECTOR_XXX",
+        "",
+    ]
+    groups: dict[tuple[int, int], list] = {}
+    for key, rule in rules.items():
+        layout = _layout(rule)
+        groups.setdefault((layout.request_id, layout.did), []).append((key, layout, rule))
+    for (request_id, did), items in sorted(groups.items()):
+        name = f"UDS_{request_id:03X}_{did:04X}"
+        length = max(lay.start + (lay.width or 1) for _, lay, _ in items)
+        length = max(8, length)
+        lines.append(f"BO_ {request_id} {name}: {length} VECTOR_XXX")
+        for key, layout, rule in items:
+            lines.append(" SG_ " + _dbc_signal(key, layout))
+        lines.append("")
+        comment = (
+            f'CM_ BO_ {request_id} "UDS request ATSH{request_id:03X} -> 22 {did:04X}; '
+            f'payload after positive 62 {did:04X}. Not broadcast CAN.";'
+        )
+        lines.append(comment)
+        for key, layout, rule in items:
+            if layout.encoding == "float32":
+                lines.append(f"SIG_VALTYPE_ {request_id} {_dbc_sig_name(key)} 1;")
+        lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def _dbc_sig_name(signal_key: str) -> str:
+    import re
+    name = re.sub(r"[^0-9A-Za-z_]", "_", signal_key)
+    if not name or name[0].isdigit():
+        name = "S_" + name
+    return name[:32]
+
+
+def _dbc_signal(signal_key: str, layout) -> str:
+    """SG_ 한 줄. bit 필드는 Motorola(@0)/Intel(@1) 시작비트 규칙을 근사한다."""
+    name = _dbc_sig_name(signal_key)
+    unit = ""
+    signal = signals.BY_KEY.get(signal_key)
+    if signal and signal.unit:
+        unit = signal.unit.replace('"', "'")
+    if layout.bit_length:
+        length = layout.bit_length
+        endian_at = 0
+        start_bit = layout.start * 8 + layout.bit_offset
+    else:
+        length = layout.width * 8
+        if layout.endian == "little":
+            endian_at = 1
+            start_bit = layout.start * 8
+        else:
+            endian_at = 0
+            start_bit = layout.start * 8 + (layout.width * 8 - 1)
+    sign = "-" if layout.signed else "+"
+    factor, offset = layout.scale, layout.offset
+    minimum = signal.minimum if signal else 0
+    maximum = signal.maximum if signal else 0
+    return (
+        f"{name} : {start_bit}|{length}@{endian_at}{sign} "
+        f"({factor:g},{offset:g}) [{minimum:g}|{maximum:g}] \"{unit}\" VECTOR_XXX"
+    )

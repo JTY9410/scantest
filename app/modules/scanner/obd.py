@@ -462,13 +462,20 @@ def uds_dtcs(payload: bytes) -> list[dict]:
     """19 02(상태 마스크)·19 15(영구) 응답: 3바이트 DTC + 상태 바이트. 상태 bit0=현재, bit3=확정."""
     if len(payload) < 3 or payload[1] not in (0x02, 0x15):
         return []
+    from app.modules.canlab.engine.features import flag
+    from app.modules.scanner.dtc_ftb import fault_type_label
+    show_ftb = flag("SCAN_DTC_FTB_LABELS")
     records = payload[3:]
     result = []
     for i in range(0, len(records) - 3, 4):
         b1, b2, b3, status = records[i : i + 4]
-        result.append({"code": format_dtc(b1, b2, b3), "status": status,
-                       "confirmed": bool(status & 0x08), "active": bool(status & 0x01),
-                       "status_bits": dtc_status_labels(status)})
+        row = {"code": format_dtc(b1, b2, b3), "status": status,
+               "confirmed": bool(status & 0x08), "active": bool(status & 0x01),
+               "status_bits": dtc_status_labels(status)}
+        if show_ftb and (label := fault_type_label(b3)):
+            row["fault_type"] = label
+            row["fault_type_source"] = "표준 기준"
+        result.append(row)
     return result
 
 

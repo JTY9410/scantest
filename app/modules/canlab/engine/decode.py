@@ -87,10 +87,20 @@ def diagnose(trace: Trace) -> dict:
     checked = [key for key, entry in ecus.items()
                if any(tx.service == 0x19 and tx.positive and f"{tx.request_id:03X}" == key
                       for tx in trace.transactions)]
-    return {
+    result = {
         "vin": uds.mask_vin(uds.find_vin(trace.transactions)),
         "ecus": list(ecus.values()),
         "dtcs": dtcs,
         "dtc_checked_ecus": checked,
         "transaction_count": len(trace.transactions),
+        "silent_ok": sum(
+            1 for tx in trace.transactions
+            if not tx.expects_response and tx.response is None and tx.negative_code is None
+        ),
     }
+    try:
+        from app.modules.scanner.security.status import analyze_security_trace
+        result["security"] = analyze_security_trace(trace.transactions)
+    except Exception:
+        pass
+    return result

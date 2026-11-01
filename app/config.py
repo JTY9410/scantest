@@ -78,6 +78,15 @@ class Config:
     # 실험 상태의 명령어/수식 사용 허용 (기본값: False, 운영에서는 끈다)
     SCANNER_ALLOW_EXPERIMENTAL = _bool("SCANNER_ALLOW_EXPERIMENTAL", False)
 
+    # 신규적용 v3 기능 플래그(기본 비활성). 끄면 기존과 동일한 출력.
+    SCAN_DTC_FTB_LABELS = _bool("SCAN_DTC_FTB_LABELS", False)
+    CANLAB_ENDIAN_EVIDENCE = _bool("CANLAB_ENDIAN_EVIDENCE", False)
+    CANLAB_COUNTER_WARN = _bool("CANLAB_COUNTER_WARN", False)
+    CANLAB_DBC_EXPORT = _bool("CANLAB_DBC_EXPORT", False)
+    # 보안 잠금: STATUS=감지·표시·모의, UNLOCK=실송신(기본 끔, 정당한 자료 있을 때만).
+    SCAN_SECURITY_STATUS = _bool("SCAN_SECURITY_STATUS", False)
+    SCAN_SECURITY_UNLOCK = _bool("SCAN_SECURITY_UNLOCK", False)
+
     # 검증 명령 삭제 여부 알림(docs/command-alerts.md). 실제 스캔 응답이 아래 기준을 넘으면
     # 관리자에게 "삭제/유지"를 묻는 알림을 만든다. 자동 삭제는 하지 않는다.
     #  - 연속 실패 COMMAND_ALERT_CONSECUTIVE 회 이상, 또는
