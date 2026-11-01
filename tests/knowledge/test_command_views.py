@@ -48,6 +48,7 @@ def test_commands_page_shows_collected_data(admin_client, app):
     response = admin_client.get("/admin/knowledge/commands")
     page = response.get_data(as_text=True)
     assert response.status_code == 200
+    assert "이더넷(DoIP) 읽기" in page and "1902FF" in page and "0000E400" in page
     assert "010C" in page and "수집:" in page and "((A * 256) + B) / 4" in page
     assert "진단 명령" in page and "지식 고장코드" in page
     assert "전체 현황" in page and "table-scroll" in page

@@ -6,6 +6,7 @@ from app.core.errors import ServiceError
 from app.core.pagination import clamp_page, clamp_per_page
 from app.modules.auth.access import admin_required
 from app.modules.knowledge import alerts, importer, service
+from app.modules.scanner.ethernet import read_plan
 
 bp = Blueprint("knowledge", __name__, url_prefix="/admin/knowledge")
 
@@ -42,7 +43,8 @@ def commands():
     items = service.command_views(status=None if status == "all" else status, maker=maker)
     return render_template(
         "knowledge/commands.html", items=items, status=status, maker=maker or "",
-        totals=service.status_totals("command", maker), deletion_alerts=alerts.pending_alerts())
+        totals=service.status_totals("command", maker), deletion_alerts=alerts.pending_alerts(),
+        doip_reads=read_plan())
 
 
 @bp.get("/formulas")

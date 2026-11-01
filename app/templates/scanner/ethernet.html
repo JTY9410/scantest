@@ -4,6 +4,7 @@
 
 {% block content %}
 {{ page_header("다중 전송 방식 진단", "DoIP, J2534 등 다양한 방식으로 차량 진단이 가능합니다. 읽기만 진행하며 세션 변경·쓰기·지우기는 보내지 않습니다.", back=(url_for('scanner.index'), "스캔하기")) }}
+<p class="mb-4 text-sm text-muted">DoIP가 읽는 명령과 해석은 <a class="underline" href="{{ url_for('knowledge.commands') }}">진단 명령</a>의 이더넷 읽기 표와 같습니다.</p>
 
 {# 연결 방식 선택 #}
 <section class="card card-body grid gap-4" aria-labelledby="transport-title">
