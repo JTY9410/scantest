@@ -24,7 +24,7 @@
         <td data-primary>{{ c.maker }}</td>
         <td data-label="모델">{{ c.model or "제조사 공통" }}</td>
         <td data-label="주소" class="mono">{{ c.header or "기본" }}</td>
-        <td data-label="명령" class="mono">{{ c.command }}</td>
+        <td data-label="명령" class="mono"><a class="underline" href="{{ url_for('knowledge.commands', status='all', maker=c.maker, q=c.command) }}">{{ c.command }}</a></td>
         <td data-label="횟수" class="num">{{ c.hits }}</td>
         <td data-label="최근">{{ c.last_seen|kst }}</td>
       </tr>

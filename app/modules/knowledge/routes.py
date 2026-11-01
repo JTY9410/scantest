@@ -43,9 +43,10 @@ def commands():
     """List knowledge commands."""
     status = request.args.get("status", "all")
     maker = request.args.get("maker", "").strip()[:50] or None
-    items = service.command_views(status=None if status == "all" else status, maker=maker)
+    q = (request.args.get("q") or "").strip()[:80]
+    items = service.command_views(status=None if status == "all" else status, maker=maker, q=q or None)
     return render_template(
-        "knowledge/commands.html", items=items, status=status, maker=maker or "",
+        "knowledge/commands.html", items=items, status=status, maker=maker or "", q=q,
         totals=service.status_totals("command", maker), deletion_alerts=alerts.pending_alerts(),
         doip_reads=read_plan(), learned=list_learned(maker or ""))
 

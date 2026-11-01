@@ -387,6 +387,7 @@
         <td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}{% if v.outlier %} {{ badge("이상값", "warning") }}{% endif %}</td>
         <td data-label="근거">{{ badge("참고 해석(미검증)", "warning") if v.reference else badge("적용 규칙", "success") }}
           {% if v.origin or v.source %}<span class="text-sm text-muted">{{ v.origin or "" }} {{ v.source or "" }}</span>{% endif %}
+          {% if not v.reference %}<a class="ml-1 text-sm underline print:hidden" href="{{ url_for('canlab.rules', _anchor='rule-' ~ key) }}">이 신호 규칙</a>{% endif %}
           {{ formula_link(v.label, car.diag_company) }}</td>
       </tr>
       {% endfor %}

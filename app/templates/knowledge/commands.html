@@ -114,11 +114,15 @@
   <p class="mt-1 text-sm text-muted">등록된 진단 명령 {{ totals.all }}건 · 검증됨 {{ totals.verified }} · 실험 {{ totals.get('experimental', 0) }} · 초안 {{ totals.draft }} · 폐기됨 {{ totals.deprecated }}</p>
   <div class="mt-3 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label="상태">
     {% for value, label, count in [("all", "전체", totals.all), ("verified", "검증됨", totals.verified), ("experimental", "실험", totals.get('experimental', 0)), ("draft", "초안", totals.draft), ("deprecated", "폐기됨", totals.deprecated)] %}
-    <a class="btn {{ 'btn-primary' if status == value else 'btn-secondary' }} shrink-0" href="{{ url_for('knowledge.commands', status=value, maker=maker) }}">{{ label }} {{ count }}</a>
+    <a class="btn {{ 'btn-primary' if status == value else 'btn-secondary' }} shrink-0" href="{{ url_for('knowledge.commands', status=value, maker=maker, q=q) }}">{{ label }} {{ count }}</a>
     {% endfor %}
   </div>
   <form method="get" class="mt-4 flex gap-4 items-end">
     <input type="hidden" name="status" value="{{ status }}">
+    <div class="field flex-1">
+      <label for="command-q" class="field-label">명령·이름</label>
+      <input id="command-q" name="q" type="search" value="{{ q }}" class="input" maxlength="80" placeholder="010C, 회전수">
+    </div>
     <div class="field flex-1">
       <label for="maker" class="field-label">제조사</label>
       <input id="maker" name="maker" type="search" value="{{ maker }}" class="input" placeholder="예: 현대">

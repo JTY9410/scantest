@@ -110,6 +110,17 @@ def test_dtc_lookup(app):
         assert "Misfire" in p0300.description
 
 
+def test_commands_page_filters_by_command(admin_client, app):
+    with app.app_context():
+        db.session.add(KnowledgeCommand(
+            command="22ABCD", label="고유명령", source="test", status="draft"))
+        db.session.add(KnowledgeCommand(
+            command="010C", label="회전수필터", source="test", status="verified"))
+        db.session.commit()
+    page = admin_client.get("/admin/knowledge/commands?status=all&q=22ABCD").get_data(as_text=True)
+    assert "22ABCD" in page and "회전수필터" not in page
+
+
 def test_formulas_page_filters_by_text(admin_client, app):
     with app.app_context():
         db.session.add(KnowledgeFormula(

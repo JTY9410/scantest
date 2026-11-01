@@ -160,6 +160,7 @@ def test_commands_page_filters_by_maker(admin_client, app, admin):
         db.session.commit()
     html = admin_client.get("/admin/scans/commands?maker=현대").get_data(as_text=True)
     assert "010C" in html and "코나 일렉트릭" in html
+    assert "q=010C" in html and "/admin/knowledge/commands" in html
     assert "아직 기억한 명령이 없습니다" not in html
     empty = admin_client.get("/admin/scans/commands?maker=없는회사").get_data(as_text=True)
     assert "아직 기억한 명령이 없습니다" in empty

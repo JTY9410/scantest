@@ -32,22 +32,29 @@ def linear_formula(raw_a: float, value_a: float, raw_b: float, value_b: float) -
     return text
 
 
-def list_commands(*, status: str | None = "verified", maker: str | None = None, limit: int = 100):
-    """명령 목록. 상태를 비우면 검증과 초안을 함께 보여 준다."""
+def list_commands(*, status: str | None = "verified", maker: str | None = None, q: str | None = None,
+                  limit: int = 100):
+    """명령 목록. 상태를 비우면 검증과 초안을 함께 보여 준다. q는 명령·주소·이름."""
     stmt = select(KnowledgeCommand).order_by(KnowledgeCommand.command)
     if status:
         stmt = stmt.where(KnowledgeCommand.status == status)
     if maker:
         stmt = stmt.where(or_(KnowledgeCommand.maker.in_(maker_aliases(maker)), KnowledgeCommand.maker.is_(None)))
+    if q:
+        like = f"%{q[:80]}%"
+        stmt = stmt.where(or_(
+            KnowledgeCommand.command.ilike(like), KnowledgeCommand.header.ilike(like),
+            KnowledgeCommand.label.ilike(like), KnowledgeCommand.detail_name.ilike(like)))
     stmt = stmt.limit(limit)
     return db.session.scalars(stmt).all()
 
 
-def command_views(*, status: str | None = None, maker: str | None = None, limit: int = 500):
+def command_views(*, status: str | None = None, maker: str | None = None, q: str | None = None,
+                  limit: int = 500):
     """명령과, 그 명령이 읽는 데이터(수식)를 명령 다음에 붙인다."""
     formulas = db.session.scalars(select(KnowledgeFormula)).all()
     views = []
-    for row in list_commands(status=status, maker=maker, limit=limit):
+    for row in list_commands(status=status, maker=maker, q=q, limit=limit):
         command = (row.command or "").upper()
         pid = command[2:] if command.startswith("01") and len(command) == 4 else ""
         data = [item for item in formulas if _formula_for(item, row, command, pid)]
