@@ -9,6 +9,10 @@
 {{ "{:,}".format(value) if value is number else value }}
 {%- endmacro %}
 
+{% macro formula_link(label, maker) -%}
+<a class="ml-1 text-sm font-normal underline print:hidden" href="{{ url_for('knowledge.formulas', status='all', q=label, maker=maker or '') }}">디코드 공식</a>
+{%- endmacro %}
+
 {% macro status_badge(status, label) -%}
 {{ badge(label, {"ok": "success", "unsupported": "", "skipped": "", "pending": "warning"}.get(status, "danger")) }}
 {%- endmacro %}
@@ -344,7 +348,7 @@
     <thead><tr><th scope="col">항목</th><th scope="col" class="num">값</th></tr></thead>
     <tbody>
       {% for v in result.freeze_frame["values"] %}
-      <tr><td data-primary class="font-semibold">{{ v.label }}</td><td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}</td></tr>
+      <tr><td data-primary class="font-semibold">{{ v.label }} {{ formula_link(v.label, car.diag_company) }}</td><td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -383,7 +387,7 @@
         <td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}{% if v.outlier %} {{ badge("이상값", "warning") }}{% endif %}</td>
         <td data-label="근거">{{ badge("참고 해석(미검증)", "warning") if v.reference else badge("적용 규칙", "success") }}
           {% if v.origin or v.source %}<span class="text-sm text-muted">{{ v.origin or "" }} {{ v.source or "" }}</span>{% endif %}
-          <a class="ml-1 text-sm underline print:hidden" href="{{ url_for('knowledge.formulas', status='all', q=v.label, maker=car.diag_company or '') }}">디코드 공식</a></td>
+          {{ formula_link(v.label, car.diag_company) }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -404,7 +408,7 @@
       <thead><tr><th scope="col">항목</th><th scope="col" class="num">값</th></tr></thead>
       <tbody>
         {% for v in result.get("values") %}
-        <tr><td data-primary class="font-semibold">{{ v.label }}</td><td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}</td></tr>
+        <tr><td data-primary class="font-semibold">{{ v.label }} {{ formula_link(v.label, car.diag_company) }}</td><td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -416,7 +420,7 @@
     <table class="rtable mt-3">
       <tbody>
         {% for v in group["values"] %}
-        <tr><td data-primary class="font-semibold">{{ v.label }}</td><td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}</td></tr>
+        <tr><td data-primary class="font-semibold">{{ v.label }} {{ formula_link(v.label, car.diag_company) }}</td><td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

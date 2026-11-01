@@ -54,7 +54,7 @@ PAGES = [
     ("/admin/scan/", "차량번호 조회하기"),
     ("/admin/canlab/datasets", "전체 데이터"),
     ("/admin/canlab/live", "블루투스 수집"),
-    ("/admin/knowledge/", "지식 현황"),
+    ("/admin/knowledge/", "스캔에 적용되는 순서"),
     ("/admin/knowledge/formulas", "디코드 공식"),
     ("/admin/knowledge/terms", "용어"),
     ("/admin/knowledge/import", "통신 로그 가져오기"),
