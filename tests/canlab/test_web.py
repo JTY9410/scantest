@@ -193,6 +193,13 @@ def test_upload_summarises_trace_and_masks_vin(app, admin_client):
         assert db.session.scalar(select(Activity.relation_type).where(Activity.relation == "CanDataset")) == "CAN 데이터 등록"
 
 
+def test_trace_dataset_links_compare_and_rules(admin_client):
+    dataset_id = _dataset_id(_upload(admin_client, bms_session(count=1).encode(), "live.trc", "live_capture"))
+    html = admin_client.get(f"/admin/canlab/datasets/{dataset_id}").get_data(as_text=True)
+    assert f"/admin/canlab/compare?dataset_id={dataset_id}" in html
+    assert "/admin/canlab/rules?q=0101" in html
+
+
 def test_upload_rejects_duplicates_wrong_files_and_oversize(app, admin_client, monkeypatch):
     content = bms_session(count=1).encode()
     _upload(admin_client, content, "a.trc", "gscan_trc")

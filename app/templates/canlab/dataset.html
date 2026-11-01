@@ -7,6 +7,7 @@
 {% call page_header("#" ~ dataset.id ~ " " ~ dataset.filename, dataset.kind_label ~ " · " ~ dataset.vehicle, back=(url_for('canlab.datasets'), "데이터 목록")) %}
   {% if dataset.is_trace %}
   <a class="btn btn-primary" href="{{ url_for('canlab.reports', dataset_id=dataset.id) }}">운영 결과지 만들기</a>
+  <a class="btn btn-secondary" href="{{ url_for('canlab.compare', dataset_id=dataset.id) }}">스캔·위스캔 비교</a>
   {% endif %}
 {% endcall %}
 
@@ -28,6 +29,9 @@
       <dt>고장코드</dt><dd>{{ s.dtc_count }}개</dd>
       {% endif %}
     </dl>
+    {% if dataset.is_trace %}
+    <p class="mt-3 text-sm text-muted">DID는 디코딩 규칙으로 이어집니다. 비교에서 후보를 만들면 다음 스캔에 적용됩니다.</p>
+    {% endif %}
   </section>
 
   {% if dataset.is_trace %}
@@ -40,7 +44,7 @@
         <tr>
           <td data-primary class="font-semibold">{{ ecu.label }}</td>
           <td data-label="요청→응답" class="mono">{{ ecu.request_id }} → {{ ecu.response_id }}</td>
-          <td data-label="데이터(DID)" class="mono text-sm">{{ ecu.dids|join(", ") or "-" }}</td>
+          <td data-label="데이터(DID)" class="mono text-sm">{% for did in ecu.dids %}<a class="underline" href="{{ url_for('canlab.rules', q=did) }}">{{ did }}</a>{% if not loop.last %}, {% endif %}{% else %}-{% endfor %}</td>
           <td data-label="거부 응답" class="text-sm">{% for n in ecu.negative[:3] %}{{ n.did }} {{ n.meaning }}{% if not loop.last %}, {% endif %}{% else %}-{% endfor %}</td>
         </tr>
         {% endfor %}
