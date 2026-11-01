@@ -13,6 +13,7 @@
 {% block content %}
 {% include "canlab/_tabs.html" %}
 {{ page_header("블루투스 수집", "BLE OBD2 진단기(ELM327 호환)에 브라우저로 바로 연결해 차량 CAN 응답을 기록합니다.") }}
+{% include "scanner/_path.html" %}
 
 <section class="card card-body" aria-labelledby="connect-title">
   <h2 id="connect-title" class="text-lg font-bold">진단기 연결</h2>

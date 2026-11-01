@@ -4,6 +4,7 @@
 
 {% block content %}
 {{ page_header("지식베이스: 고장코드(DTC)", "차량 고장코드 의미 목록입니다.") }}
+{% include "scanner/_path.html" %}
 
 <div class="mb-4 flex flex-wrap gap-3">
   <form method="post" action="{{ url_for('knowledge.collect') }}">

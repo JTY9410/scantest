@@ -4,6 +4,7 @@
 
 {% block content %}
 {{ page_header("통신 로그 가져오기", "위스캔·ELM327·G-Scan 로그를 알려진 명령과 비교해 새 항목을 찾습니다.") }}
+{% include "scanner/_path.html" %}
 
 <section class="card card-body">
   <form method="post" class="space-y-4">

@@ -198,6 +198,7 @@ def test_trace_dataset_links_compare_and_rules(admin_client):
     html = admin_client.get(f"/admin/canlab/datasets/{dataset_id}").get_data(as_text=True)
     assert f"/admin/canlab/compare?dataset_id={dataset_id}" in html
     assert "/admin/canlab/rules?q=0101" in html
+    assert "다음 스캔에 쓰입니다" in html
 
 
 def test_upload_rejects_duplicates_wrong_files_and_oversize(app, admin_client, monkeypatch):
@@ -362,6 +363,7 @@ def test_text_pdf_values_are_confirmed_before_analysis(app, admin_client):
     assert response.status_code == 302 and "/admin/canlab/analysis/pending/" in response.headers["Location"]
     pending = response.headers["Location"]
     html = admin_client.get(pending).get_data(as_text=True)
+    assert "다음 스캔에 쓰입니다" in html
     assert "최종값 확인" in html and "확정하고 분석" in html and "reverse.trc" in html
     with app.app_context():
         rows = db.session.scalars(select(GroundTruthValue).order_by(GroundTruthValue.id)).all()
@@ -682,7 +684,8 @@ def test_live_capture_can_create_report_directly(app, admin_client, trained):
     assert response.status_code == 201
     report_url = response.get_json()["report_url"]
     assert re.fullmatch(r"/admin/canlab/reports/\d+", report_url)
-    assert "37.5%" in admin_client.get(report_url).get_data(as_text=True)
+    report_html = admin_client.get(report_url).get_data(as_text=True)
+    assert "37.5%" in report_html and "다음 스캔에 쓰입니다" in report_html
 
 
 def _obd_config(html: str) -> dict:

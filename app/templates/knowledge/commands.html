@@ -4,6 +4,7 @@
 
 {% block content %}
 {{ page_header("지식베이스: 진단 명령어", "차량 진단에 사용되는 UDS/OBD-II 명령어 목록입니다. 스캔에서 응답한 읽기는 초안으로 쌓입니다.") }}
+{% include "scanner/_path.html" %}
 
 <section class="card card-body mb-6" aria-labelledby="doip-reads-title">
   <h2 id="doip-reads-title" class="text-lg font-bold">이더넷(DoIP) 읽기</h2>

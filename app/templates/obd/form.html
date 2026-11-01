@@ -5,6 +5,7 @@
 
 {% block content %}
 {{ page_header(title, profile.name if profile else None, back=(url_for('obd.index'), "OBD2 연결")) }}
+{% include "scanner/_path.html" %}
 
 <form method="post" class="grid max-w-3xl gap-6" novalidate>
   {{ form.hidden_tag() }}

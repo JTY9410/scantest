@@ -5,6 +5,7 @@
 {% block content %}
 {{ page_header("참고자료 DB", "인터넷의 공개 CAN 통신 자료를 모아 역산 분석의 해석과 후보 점수에 씁니다. 승인한 자료만 분석에 쓰고, 차종·제조사가 맞는 자료만 그 차량 분석에 씁니다.",
                back=(url_for('canlab.rules'), "디코딩 규칙")) }}
+{% include "scanner/_path.html" %}
 {% include "canlab/_tabs.html" %}
 
 <div class="grid gap-6 xl:grid-cols-2">

@@ -62,7 +62,29 @@ PAGES = [
 ]
 
 
-PATH_PAGES = ("/admin/", "/admin/canlab/compare", "/admin/obd/", "/admin/knowledge/terms", "/admin/scans")
+PATH_PAGES = (
+    "/admin/",
+    "/admin/canlab/",
+    "/admin/canlab/compare",
+    "/admin/canlab/datasets",
+    "/admin/canlab/live",
+    "/admin/canlab/analysis",
+    "/admin/canlab/rules",
+    "/admin/canlab/references",
+    "/admin/canlab/reports",
+    "/admin/obd/",
+    "/admin/obd/new",
+    "/admin/knowledge/",
+    "/admin/knowledge/commands",
+    "/admin/knowledge/formulas",
+    "/admin/knowledge/dtcs",
+    "/admin/knowledge/terms",
+    "/admin/knowledge/import",
+    "/admin/scans",
+    "/admin/scans/commands",
+    "/admin/scan/",
+    "/admin/scan/ethernet",
+)
 
 
 @pytest.mark.parametrize("url", PATH_PAGES)
@@ -86,6 +108,7 @@ def test_admin_pages_render(sample_data, admin_client, url, expected):
 def test_scan_detail_and_activity_json_keep_korean(sample_data, admin_client):
     detail = admin_client.get(f"/admin/scans/{sample_data['scan_id']}").get_data(as_text=True)
     assert "P0A80" in detail and "12,345 km" in detail
+    assert "다음 스캔에 쓰입니다" in detail
 
     activities = admin_client.get("/admin/activities").get_data(as_text=True)
     assert "&#34;메모&#34;: &#34;한글&#34;" in activities or '"메모": "한글"' in activities

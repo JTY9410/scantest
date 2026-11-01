@@ -10,6 +10,7 @@
 {% call page_header("디코딩 규칙", "분석으로 정한 명령·수식을 차종 → 제조사 → 공통 순서로 적용합니다. 스캔할 때 차량에 맞는 범위의 규칙을 먼저 쓰고, 없으면 넓은 범위의 규칙을 씁니다. 모든 변경은 이력에 남고 범위 단위로 되돌릴 수 있습니다.") %}
   <a class="btn btn-secondary" href="{{ url_for('canlab.reference_list') }}">참고자료 DB</a>
 {% endcall %}
+{% include "scanner/_path.html" %}
 {% include "canlab/_tabs.html" %}
 
 <section class="card mb-6 overflow-hidden" aria-labelledby="drafts-title">

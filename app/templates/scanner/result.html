@@ -40,6 +40,7 @@
   {% endif %}
   <a class="btn btn-primary print:hidden" href="{{ url_for('scanner.index', car_no=scan.car_no) }}">다시 스캔</a>
 {% endcall %}
+{% include "scanner/_path.html" %}
 
 <section class="card card-body mb-6 print:hidden" aria-labelledby="next-scan-title">
   <h2 id="next-scan-title" class="text-lg font-bold">다음 스캔에 적용</h2>

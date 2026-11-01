@@ -4,6 +4,7 @@
 
 {% block content %}
 {{ page_header("CAN 역분석", "차종별로 리버스데이터와 위스캔 데이터를 비교해 위스캔 결과를 내는 명령·수식을 찾고, 관리자가 확인한 디코딩 규칙을 그 차종(필요하면 같은 제조사)의 스캔에 적용합니다.") }}
+{% include "scanner/_path.html" %}
 {% include "canlab/_tabs.html" %}
 
 <section class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="현황">

@@ -5,6 +5,7 @@
 
 {% block content %}
 {{ page_header("데이터입력분석", "차량번호로 차종을 정하고 위스캔 통신기록·최종값과 리버스데이터를 올리면, 리버스 명령·결과를 해석하고 위스캔 통신기록과 대조한 뒤 위스캔 최종값과 일치하는 명령·수식을 찾습니다. 규칙은 '디코딩 규칙'에서 관리자가 적용할 때만 바뀝니다.") }}
+{% include "scanner/_path.html" %}
 {% include "canlab/_tabs.html" %}
 
 <form method="post" enctype="multipart/form-data" class="grid gap-6" novalidate

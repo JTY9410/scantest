@@ -10,6 +10,7 @@
   <a class="btn btn-secondary" href="{{ url_for('canlab.compare', dataset_id=dataset.id) }}">스캔·위스캔 비교</a>
   {% endif %}
 {% endcall %}
+{% include "scanner/_path.html" %}
 
 <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
   <section class="card card-body" aria-labelledby="info-title">

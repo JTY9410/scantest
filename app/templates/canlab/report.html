@@ -24,6 +24,7 @@
     <button class="btn btn-primary" type="submit" {% if not ai_ready %}disabled title="설정 &gt; AI 연결에서 'CAN 분석' 용도를 켜세요."{% endif %}>{{ "AI 보고서 다시 쓰기" if report.ai_summary else "AI 보고서 만들기" }}</button>
   </form>
 {% endcall %}
+{% include "scanner/_path.html" %}
 
 {% if not report["values"] %}
 <div class="flash flash-warning mb-6"><span aria-hidden="true" class="font-bold">!</span>

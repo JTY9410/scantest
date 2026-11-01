@@ -4,6 +4,7 @@
 
 {% block content %}
 {{ page_header("전체 데이터", "등록된 모든 통신 기록·결과지입니다. 파일은 4MB 이하, 같은 파일은 한 번만 등록됩니다.") }}
+{% include "scanner/_path.html" %}
 {% include "canlab/_tabs.html" %}
 
 <section class="card card-body mb-6" aria-labelledby="upload-title">

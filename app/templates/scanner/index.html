@@ -12,6 +12,7 @@
 
 {% block content %}
 {{ page_header("스캔하기", "진단기를 연결하고 '스캔하기'를 누르면 차량번호 조회, 차량 스캔, 분석 결과까지 차례로 진행하고 결과와 PDF를 저장합니다.") }}
+{% include "scanner/_path.html" %}
 
 <nav class="card card-body mb-4" aria-label="진단 작업 흐름">
   <h2 class="text-lg font-bold">진단 작업 흐름</h2>

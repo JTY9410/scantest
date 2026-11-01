@@ -7,6 +7,7 @@
 {% set car = dataset.summary.car or {} %}
 {{ page_header("최종값 확인", (car.car_no ~ " · " if car.car_no else "") ~ dataset.scope_label ~ " · 위스캔 #" ~ dataset.id ~ " " ~ dataset.filename,
                back=(url_for('canlab.analysis'), "데이터입력분석")) }}
+{% include "scanner/_path.html" %}
 {% include "canlab/_tabs.html" %}
 
 <section class="card overflow-hidden" aria-labelledby="truths-title">

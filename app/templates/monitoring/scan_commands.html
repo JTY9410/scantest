@@ -5,6 +5,7 @@
 {% block content %}
 {{ page_header("응답한 스캔 명령", "제조사·차종에서 실제로 응답한 읽기 명령입니다. 다음 스캔 계획에 다시 넣습니다.",
                back=(url_for('monitoring.scans'), "스캔 기록")) }}
+{% include "scanner/_path.html" %}
 
 <form method="get" class="card card-body mb-4 flex flex-wrap items-end gap-3" role="search">
   <div class="field">
