@@ -32,7 +32,7 @@ class WebAutoDbUpgradeTest(unittest.TestCase):
         for compose_file in ("compose.mac.yaml", "compose.prod.yaml"):
             contents = (ROOT / compose_file).read_text()
 
-            self.assertIn("AUTO_DB_UPGRADE: \"1\"", contents)
+            self.assertIn("AUTO_DB_UPGRADE: ${AUTO_DB_UPGRADE:-1}", contents)
 
     def test_auto_db_upgrade_adr_exists(self):
         adr = ROOT / "docs/adr/0002-auto-db-upgrade-on-boot.md"

@@ -11,7 +11,7 @@
 ## 결정
 
 - `AUTO_DB_UPGRADE=1`일 때만 web 엔트리포인트가 애플리케이션 실행 전에 `flask db upgrade`를 실행한다.
-- Mac/prod Compose 파일은 최초 기동 편의를 위해 `AUTO_DB_UPGRADE: "1"`을 기본값으로 둔다.
+- Mac/prod Compose 파일은 최초 기동 편의를 위해 `AUTO_DB_UPGRADE: ${AUTO_DB_UPGRADE:-1}`로 기본값을 1로 둔다. 서버 `.env`에서 0으로 두면 기동 시 이전을 하지 않는다.
 - `flask db upgrade` 실패 시 컨테이너 시작을 중단해 잘못된 스키마로 서비스를 열지 않는다.
 - 엔트리포인트는 비루트 `app` 사용자로 실행되며, 앱 의존성과 `flask` 명령은 이미지 빌드 단계의 `pip install` 결과를 사용한다.
 
