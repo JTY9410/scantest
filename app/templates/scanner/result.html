@@ -115,7 +115,7 @@
     <h2 id="ai-verify-title" class="text-lg font-bold">오류·무응답 AI 검증</h2>
     <button type="button" class="btn btn-secondary" data-ai-verify-run>검증 실행</button>
   </div>
-  <p class="mt-1 text-sm text-muted">실패·시간 초과 단계를 규칙 또는 AI로 요약합니다. OEM 전용 코드 의미는 추측하지 않습니다.</p>
+  <p class="mt-1 text-sm text-muted">실패·시간 초과 단계를 규칙 또는 AI로 요약합니다. 문장 생성은 <a class="underline" href="{{ url_for('admin.ai_index') }}">AI 연결</a>이 켜져 있을 때 합니다. OEM 전용 코드 의미는 추측하지 않습니다.</p>
   <div class="mt-3" data-ai-verify-body>
     {% if ai_verify %}
     <p class="font-semibold">{{ ai_verify.summary }}</p>
@@ -476,6 +476,10 @@
   {% endif %}
 </section>
 
+{% set step_sources = {
+  "device": "단말기", "pid": "실시간", "vehicle": "차량정보", "dtc": "고장코드", "freeze": "고장 당시",
+  "monitor": "배출 점검", "uds": "제어기", "maker": "제조사", "obd": "이더넷 읽기", "info": "이더넷 읽기",
+} %}
 <section class="mt-6 grid gap-3" aria-label="전체 단계">
   <h2 class="text-lg font-bold">전체 단계 {{ result.steps|length }}개</h2>
   {% for group in step_groups %}
@@ -483,11 +487,17 @@
     <summary class="card-body cursor-pointer font-bold">{{ group.header }} · {{ group.steps|length }}단계
       {% if group.fails %}{{ badge("실패 " ~ group.fails, "danger") }}{% else %}{{ badge("실패 없음", "success") }}{% endif %}</summary>
     <table class="rtable">
-      <thead><tr><th scope="col">시각</th><th scope="col">명령</th><th scope="col">상태</th><th scope="col">응답 요약</th></tr></thead>
+      <thead><tr><th scope="col">시각</th><th scope="col">출처</th><th scope="col">명령</th><th scope="col">상태</th><th scope="col">응답 요약</th></tr></thead>
       <tbody>
         {% for s in group.steps %}
         <tr>
           <td data-primary class="tabular-nums">{% if s.t_ms is number %}{{ s.t_ms }} ms{% else %}-{% endif %}</td>
+          <td data-label="출처" class="text-sm">
+            {% if s.group == "knowledge" %}<a class="underline" href="{{ url_for('knowledge.commands', status='all', q=s.command, maker=car.diag_company or '') }}">검증 명령</a>
+            {% elif s.group == "learned" %}<a class="underline" href="{{ url_for('monitoring.scan_commands', maker=car.diag_company or '') }}">이전 스캔</a>
+            {% elif s.group == "rule" %}<a class="underline" href="{{ url_for('canlab.rules') }}">적용 규칙</a>
+            {% else %}{{ step_sources.get(s.group, s.group or "-") }}{% endif %}
+          </td>
           <td data-label="명령"><span class="font-semibold">{{ s.label }}</span> <span class="mono text-sm">{{ s.command or "-" }}</span></td>
           <td data-label="상태">{{ status_badge(s.status, s.status_label) }}</td>
           <td data-label="응답 요약" class="text-sm">{{ s.message }}</td>

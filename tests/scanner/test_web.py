@@ -99,6 +99,7 @@ def test_run_then_result_page_shows_wescan_format(admin_client):
     assert "위스캔 결과" in html and "P0133" in html and "진단 요약" in html
     assert "다음 스캔에 적용" in html and "지식 고장코드" in html
     assert "이번 스캔 계획" in html and "검증된 명령" in html and "적용 규칙" in html
+    assert "출처" in html and "단말기" in html and 'href="/admin/ai"' in html
     assert "지식에서 이 코드" in html and "code=P0133" in html
     assert "오류 기록" in html and "시간 초과" in html and "ISO 15765-4 CAN" in html
     assert "분석 요약" in html and "배출 점검(레디니스)" in html and "불꽃 점화" in html
