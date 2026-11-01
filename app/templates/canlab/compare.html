@@ -4,6 +4,7 @@
 
 {% block content %}
 {{ page_header("스캔·위스캔 비교", "스캔 통신기록을 적용 중 규칙으로 읽고 위스캔 결과치와 비교합니다. 차이로 수식 후보(DRAFT)를 만들며, 규칙은 '디코딩 규칙'에서 관리자가 적용할 때만 바뀝니다. 데이터입력분석(위스캔 통신 vs 리버스)과 역할이 다릅니다.") }}
+{% include "scanner/_path.html" %}
 {% include "canlab/_tabs.html" %}
 
 <form method="post" enctype="multipart/form-data" class="grid gap-6" novalidate>

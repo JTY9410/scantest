@@ -23,6 +23,7 @@
 {% call page_header("대시보드", current_user.name ~ "님, 오늘의 현황입니다.") %}
   <a class="btn btn-primary" href="#obd-quick" data-scan-jump>스캔하기</a>
 {% endcall %}
+{% include "scanner/_path.html" %}
 
 <section aria-label="주요 지표" class="grid grid-cols-1 gap-4 min-[420px]:grid-cols-2 xl:grid-cols-4">
   {{ stat("이용 중인 회원", stats.members, url_for('members.index'), "테스터 " ~ "{:,}".format(stats.testers) ~ " · 소유자 " ~ "{:,}".format(stats.owners)) }}

@@ -3,9 +3,10 @@
 {% block title %}OBD2 연결{% endblock %}
 
 {% block content %}
-{% call page_header("OBD2 연결", "모바일 앱이 블루투스 OBD2 진단기에 연결할 때 받아 쓰는 설정입니다.") %}
+{% call page_header("OBD2 연결", "모바일 앱이 블루투스 OBD2 진단기에 연결할 때 받아 쓰는 설정입니다. 적용 중 규칙이 없으면 블루투스 수집이 이 프로필의 조회 명령을 보냅니다.") %}
   <a class="btn btn-primary" href="{{ url_for('obd.form') }}">프로필 등록</a>
 {% endcall %}
+{% include "scanner/_path.html" %}
 
 <section class="card overflow-hidden" aria-label="OBD2 프로필 목록">
   {% if profiles %}

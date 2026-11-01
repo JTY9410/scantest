@@ -4,7 +4,8 @@
 {% block title %}스캔 기록{% endblock %}
 
 {% block content %}
-{{ page_header("스캔 기록", "앱에서 올라온 차량 진단 결과입니다. 이 화면에서는 조회만 할 수 있습니다.") }}
+{{ page_header("스캔 기록", "웹 스캔과 앱에서 올라온 진단 결과입니다. 차량을 누르면 기록으로 가고, 웹 스캔은 위스캔 결과로 이어집니다.") }}
+{% include "scanner/_path.html" %}
 
 {% call filter_bar("monitoring.scans", params, "차량번호, VIN, 차대번호, 모델", member) %}
   <div class="field">

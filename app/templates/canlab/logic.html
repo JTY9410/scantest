@@ -19,6 +19,7 @@
                logic.scope_label ~ "에 적용합니다. 변경 전(" ~ base ~ ")과 변경 후(" ~ source ~ ")를 비교합니다.",
                back=(url_for('canlab.run', run_id=logic.diff.run_id), "역산 결과 #" ~ logic.diff.run_id) if logic.diff.run_id else (url_for('canlab.rules'), "디코딩 규칙")) }}
 {% include "canlab/_tabs.html" %}
+{% include "scanner/_path.html" %}
 
 {% set items = logic.diff["items"] %}
 {% set counts = {"added": 0, "changed": 0, "removed": 0, "same": 0} %}

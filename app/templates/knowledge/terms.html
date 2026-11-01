@@ -4,6 +4,7 @@
 
 {% block content %}
 {{ page_header("지식베이스: 용어", "OBD, CAN, 차량 이더넷(DoIP)에서 쓰는 용어입니다. DoIP 프레임은 이 진단기로 보내지 않습니다.", back=(url_for('knowledge.overview'), "지식 현황")) }}
+{% include "scanner/_path.html" %}
 
 <section class="card card-body mb-6">
   <h2 class="text-lg font-bold">용어 추가</h2>

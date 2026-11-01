@@ -1,0 +1,9 @@
+<nav class="mb-4 text-sm text-muted" aria-label="진단 적용 경로">
+  <a class="underline" href="{{ url_for('canlab.live') }}">수집</a>
+  · <a class="underline" href="{{ url_for('canlab.datasets') }}">통신 기록</a>
+  · <a class="underline" href="{{ url_for('canlab.compare') }}">비교</a>
+  · <a class="underline" href="{{ url_for('canlab.rules') }}">디코딩 규칙</a>
+  · <a class="underline" href="{{ url_for('scanner.index') }}">다음 스캔</a>
+  · <a class="underline" href="{{ url_for('knowledge.overview') }}">지식 현황</a>
+  <span class="mt-1 block">규칙을 적용하면 다음 스캔에 쓰입니다.</span>
+</nav>

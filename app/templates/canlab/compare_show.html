@@ -11,6 +11,7 @@
 {{ page_header("비교 #" ~ compare.id,
                compare.scope_label ~ " · " ~ (compare.created_at|kst),
                back=(url_for('canlab.compare'), "스캔·위스캔 비교")) }}
+{% include "scanner/_path.html" %}
 {% include "canlab/_tabs.html" %}
 
 <section class="card card-body mb-6" aria-labelledby="summary-title">

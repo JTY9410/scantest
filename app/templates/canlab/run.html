@@ -156,6 +156,7 @@
 <section class="card card-body mt-6" aria-labelledby="apply-title">
   <h2 id="apply-title" class="text-lg font-bold">디코딩 규칙 정하기</h2>
   <p class="mt-1 text-sm text-muted">{{ run.scope_label }}에 지금 쓰는 디코딩 규칙(변경 전)과 이 분석 결과(변경 후)를 항목별로 비교하고, 같은 차종의 과거 데이터로 다시 읽어 본 결과를 함께 보여 줍니다. 적용 여부는 '디코딩 규칙'에서 관리자가 정합니다.</p>
+  {% include "scanner/_path.html" %}
   <form method="post" action="{{ url_for('canlab.apply_run', run_id=run.id) }}" class="mt-4">
     {{ action.csrf_token }}
     <button class="btn btn-primary" type="submit">디코딩 규칙 후보 만들기</button>

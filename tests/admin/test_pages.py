@@ -62,6 +62,16 @@ PAGES = [
 ]
 
 
+PATH_PAGES = ("/admin/", "/admin/canlab/compare", "/admin/obd/", "/admin/knowledge/terms", "/admin/scans")
+
+
+@pytest.mark.parametrize("url", PATH_PAGES)
+def test_diag_path_is_on_remaining_screens(sample_data, admin_client, url):
+    html = admin_client.get(url).get_data(as_text=True)
+    assert "다음 스캔에 쓰입니다" in html, url
+    assert 'href="/admin/canlab/rules"' in html
+
+
 @pytest.mark.parametrize(("url", "expected"), PAGES)
 def test_admin_pages_render(sample_data, admin_client, url, expected):
     response = admin_client.get(url)
