@@ -36,7 +36,7 @@
         <td data-label="제조사">{{ row.maker }}</td>
         <td data-label="차종">{{ row.model or "공통" }}</td>
         <td data-label="주소" class="font-mono">{{ row.header or "-" }}</td>
-        <td data-label="명령" class="font-mono">{{ row.command }}</td>
+        <td data-label="명령" class="font-mono"><a class="underline" href="{{ url_for('knowledge.formulas', status='all', q=row.command, maker=row.maker) }}">{{ row.command }}</a></td>
         <td data-label="횟수" class="tabular-nums">{{ row.hits }}</td>
       </tr>
     {% endfor %}

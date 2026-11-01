@@ -123,12 +123,20 @@
 </section>
 
 <h2 class="mb-2 text-lg font-bold">신호별 규칙 버전</h2>
+<form method="get" class="mb-4 flex flex-wrap items-end gap-3" role="search">
+  <div class="field">
+    <label for="rule-q" class="field-label">신호·수식</label>
+    <input id="rule-q" name="q" type="search" value="{{ q }}" class="input" maxlength="80" placeholder="SOC, 22 0101">
+  </div>
+  <button class="btn btn-primary" type="submit">검색</button>
+</form>
 {% if groups %}
 <div class="grid gap-4">
   {% for key, rules in groups.items() %}
   {% set signal = signals.get(key) %}
   <section class="card overflow-hidden" aria-labelledby="rule-{{ key }}">
-    <h3 id="rule-{{ key }}" class="card-body pb-0 font-bold">{{ signal.label if signal else key }}{% if signal and signal.unit %} <span class="text-sm font-normal text-muted">({{ signal.unit }})</span>{% endif %}</h3>
+    <h3 id="rule-{{ key }}" class="card-body pb-0 font-bold">{{ signal.label if signal else key }}{% if signal and signal.unit %} <span class="text-sm font-normal text-muted">({{ signal.unit }})</span>{% endif %}
+      <a class="ml-2 text-sm font-normal underline" href="{{ url_for('knowledge.formulas', status='all', q=signal.label if signal else key) }}">디코드 공식</a></h3>
     <table class="rtable mt-3">
       <thead><tr><th scope="col">범위·버전</th><th scope="col">수식</th><th scope="col">출처</th><th scope="col" class="num">신뢰도</th><th scope="col">상태</th><th scope="col"><span class="sr-only">관리</span></th></tr></thead>
       <tbody>

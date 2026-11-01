@@ -130,6 +130,7 @@ def test_formulas_page_filters_by_text(admin_client, app):
         db.session.commit()
     page = admin_client.get("/admin/knowledge/formulas?status=all&q=배터리").get_data(as_text=True)
     assert "배터리 잔량" in page and "냉각수온" not in page
+    assert "/admin/canlab/rules?q=" in page
 
 
 def test_dtcs_page_is_paginated(admin_client, app):

@@ -66,7 +66,7 @@
         {% if status == 'experimental' %}<td><input type="checkbox" class="item-checkbox" name="ids" value="{{ item.id }}" form="bulkPromoteForm" onchange="updateSelectedCount()"></td>{% endif %}
         <td data-primary class="mono text-sm">{{ item.command or "-" }}</td>
         <td class="mono text-sm">{{ item.header or "-" }}</td>
-        <td>{{ item.label }}</td>
+        <td>{{ item.label }} <a class="ml-1 text-sm underline" href="{{ url_for('canlab.rules', q=item.label) }}">디코딩 규칙</a></td>
         <td class="mono text-sm">{{ item.formula[:50] }}{% if item.formula|length > 50 %}...{% endif %}</td>
         <td>{{ item.unit or "-" }}</td>
         <td>{{ item.maker or "전체" }}</td>

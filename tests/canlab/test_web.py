@@ -719,6 +719,11 @@ def test_dashboard_has_bluetooth_card(app, admin_client, trained):
     assert config["previewUrl"] == "/admin/canlab/live/preview"
 
 
+def test_rules_page_filters_signal_query(admin_client):
+    html = admin_client.get("/admin/canlab/rules?q=없는신호xyz").get_data(as_text=True)
+    assert "신호·수식" in html and "없는신호xyz" in html
+
+
 def test_live_page_without_rules_uses_profile_commands(app, admin_client):
     with app.app_context():
         db.session.add(ObdProfile(name="vLinker", transport="ble", device_name_prefix="vLinker",

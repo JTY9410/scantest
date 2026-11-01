@@ -348,8 +348,25 @@ def rules():
     return _render_rules()
 
 
+def _rule_matches(key: str, rows: list, needle: str) -> bool:
+    signal = signals.BY_KEY.get(key)
+    label = signal.label.casefold() if signal else ""
+    if needle in key.casefold() or needle in label:
+        return True
+    for rule in rows:
+        text = f"{rule.formula or ''} {rule.request_id or ''} {rule.did or ''}".casefold()
+        if needle in text:
+            return True
+    return False
+
+
 def _render_rules(status: int = 200):
-    return render_template("canlab/rules.html", groups=service.list_rules(), signals=signals.BY_KEY,
+    q = (request.args.get("q") or "").strip()[:80]
+    groups = service.list_rules()
+    if q:
+        needle = q.casefold()
+        groups = {key: rows for key, rows in groups.items() if _rule_matches(key, rows, needle)}
+    return render_template("canlab/rules.html", groups=groups, signals=signals.BY_KEY, q=q,
                            action=ActionForm(), RuleStatus=RuleStatus, LogicStatus=LogicStatus,
                            drafts=service.draft_logics(), active_logics=service.active_logics(),
                            changes=service.list_changes(), incidents=service.list_incidents()), status
