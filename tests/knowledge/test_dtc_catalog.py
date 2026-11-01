@@ -99,3 +99,28 @@ def test_dtc_catalog_import_uses_pbcu_and_stays_draft(app, tmp_path):
     assert saved[2] == "U0204FA"
     assert saved[3] and saved[3].startswith("MAF")
     assert again["dtcs"] == 0 and again["kept"] == 3 and copies == 1
+
+
+def test_hyundai_kia_sheet_is_stored_for_both_makers(app, tmp_path):
+    path = tmp_path / "dtc_description_20261019.xlsx"
+    path.write_bytes(_xlsx({
+        "hyundai_kia_abs": [
+            ["id", "code", "detail", "pbcu", "memo"],
+            ["1", "523602", "고압 어큐뮬레이터 저압력", "C123602", ""],
+        ],
+        "kgm_abs": [
+            ["id", "code", "detail", "pbcu", "memo"],
+            ["2", "0102", "ABS 센서", "C0123", ""],
+        ],
+    }))
+    with app.app_context():
+        first = import_dtc_catalog(path)
+        rows = db.session.scalars(select(KnowledgeDTC).where(KnowledgeDTC.code == "C123602")).all()
+        kgm = db.session.scalar(select(KnowledgeDTC).where(KnowledgeDTC.code == "C0123"))
+        saved = {(row.maker, row.ecu_name, row.status) for row in rows}
+        kgm_saved = (kgm.maker, kgm.ecu_name) if kgm else None
+        again = import_dtc_catalog(path)
+    assert first["dtcs"] == 3
+    assert saved == {("현대", "abs", "draft"), ("기아", "abs", "draft")}
+    assert kgm_saved == ("KG모빌리티", "abs")
+    assert again["dtcs"] == 0 and again["kept"] == 3

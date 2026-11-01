@@ -180,7 +180,7 @@ def test_admin_can_edit_and_delete_knowledge(admin_client):
 
     terms = admin_client.get("/admin/knowledge/terms")
     text = terms.get_data(as_text=True)
-    assert "DoIP" in text and "ELM327" in text
+    assert "DoIP" in text and "ELM327" in text and "ISO-TP" in text and "7EA" in text
     token = csrf_token(admin_client, "/admin/knowledge/terms")
     saved = admin_client.post("/admin/knowledge/terms", data={
         "csrf_token": token, "term": "테스트 용어", "definition": "설명", "category": "연결", "status": "draft",

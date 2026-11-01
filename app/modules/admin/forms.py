@@ -8,6 +8,7 @@ from wtforms import (
     StringField,
 )
 from wtforms.validators import DataRequired, Length, NumberRange, Optional, Regexp
+from wtforms.fields import SelectChoice
 from wtforms.widgets import CheckboxInput, ListWidget
 
 from app.modules.admin.models import AI_FEATURES
@@ -27,7 +28,7 @@ class AiSettingsForm(FlaskForm):
             Regexp(r"^[A-Za-z0-9._:\-/]+$", message="영문, 숫자, . _ : - / 만 사용할 수 있습니다."),
         ],
     )
-    features = CheckboxListField("사용할 기능", choices=list(AI_FEATURES.items()))
+    features = CheckboxListField("사용할 기능", choices=[SelectChoice(key, label) for key, label in AI_FEATURES.items()])
     monthly_budget = DecimalField(
         "월 예산 상한(USD)",
         places=2,

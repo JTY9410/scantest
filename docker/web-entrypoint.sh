@@ -8,6 +8,11 @@ case "${AUTO_DB_UPGRADE:-}" in
       echo "ERROR: flask db upgrade failed. Container startup is aborted." >&2
       exit 1
     fi
+    echo "Importing DTC workbooks into the knowledge base."
+    if ! flask import-dtc-workbook || ! flask import-dtc-catalog || ! flask import-dtc-global; then
+      echo "ERROR: DTC workbook import failed. Container startup is aborted." >&2
+      exit 1
+    fi
     ;;
 esac
 

@@ -16,6 +16,9 @@ class WebAutoDbUpgradeTest(unittest.TestCase):
         self.assertIn("set -eu", contents)
         self.assertIn("AUTO_DB_UPGRADE", contents)
         self.assertIn("flask db upgrade", contents)
+        self.assertIn("flask import-dtc-workbook", contents)
+        self.assertIn("flask import-dtc-catalog", contents)
+        self.assertIn("flask import-dtc-global", contents)
         self.assertIn('exec "$@"', contents)
 
     def test_dockerfile_uses_entrypoint_without_replacing_cmd(self):
@@ -26,6 +29,8 @@ class WebAutoDbUpgradeTest(unittest.TestCase):
         self.assertIn('CMD ["flask", "run"', contents)
         self.assertIn('CMD ["gunicorn"', contents)
         self.assertIn("ADR 0002", contents)
+        self.assertIn("dtc_description_20261019.xlsx", contents)
+        self.assertIn("EV_DTC_전체코드.xlsx", contents)
         self.assertNotIn("시작 시 DB 이전을 자동 실행하지 않는다", contents)
 
     def test_compose_mac_and_prod_enable_auto_db_upgrade(self):

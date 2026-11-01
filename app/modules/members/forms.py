@@ -1,5 +1,6 @@
 from flask_wtf import FlaskForm
 from wtforms import BooleanField, EmailField, HiddenField, SelectField, StringField
+from wtforms.fields import SelectChoice
 from wtforms.validators import DataRequired, Email, Length, Optional, Regexp
 
 from app.modules.accounts.models import UserType
@@ -7,8 +8,8 @@ from app.modules.accounts.models import UserType
 
 class MemberEditForm(FlaskForm):
     name = StringField("이름", validators=[DataRequired("이름을 입력하세요."), Length(max=255)])
-    type = SelectField("유형", choices=[(t.value, t.label) for t in UserType])
-    company_id = SelectField("소속 회사", coerce=int, choices=[(0, "소속 없음")])
+    type = SelectField("유형", choices=[SelectChoice(t.value, t.label) for t in UserType])
+    company_id = SelectField("소속 회사", coerce=int, choices=[SelectChoice(0, "소속 없음")])
     mobile = StringField(
         "휴대전화",
         validators=[

@@ -84,6 +84,7 @@ def terms():
     """용어 목록. DoIP 안내 초안이 없으면 그때 넣는다."""
     status = request.args.get("status", "draft")
     service.ensure_lan_terms()
+    service.ensure_scan_terms()
     from app.extensions import db
     db.session.commit()
     items = service.list_terms(status=status)

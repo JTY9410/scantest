@@ -413,6 +413,45 @@ def analyze_unknown_dtcs() -> dict[str, int]:
     return {"described": described, "guessed": guessed, "skipped": skipped}
 
 
+_SCAN_TERMS = (
+    {
+        "term": "ISO-TP",
+        "abbreviation": "ISO 15765-2",
+        "category": "통신",
+        "definition": (
+            "한 진단 응답이 여러 CAN 프레임으로 나뉠 때 이를 한 메시지로 합칩니다. "
+            "흐름 제어 프레임은 데이터로 세지 않습니다."
+        ),
+    },
+    {
+        "term": "응답 주소",
+        "abbreviation": None,
+        "category": "통신",
+        "definition": (
+            "11비트 물리 요청의 응답 주소는 보통 요청 주소에 8을 더한 값입니다. "
+            "7E2로 요청하면 7EA로 받고, 717만 71D로 받습니다."
+        ),
+    },
+)
+
+
+def ensure_scan_terms() -> int:
+    """스캔 교재에서 확인한 주소·프레임 규칙을 용어 초안으로 남긴다."""
+    added = 0
+    for item in _SCAN_TERMS:
+        existing = db.session.scalar(select(KnowledgeTerm.id).where(KnowledgeTerm.term == item["term"]))
+        if existing is not None:
+            continue
+        db.session.add(KnowledgeTerm(
+            term=item["term"], abbreviation=item["abbreviation"], definition=item["definition"],
+            category=item["category"], source="public_docs", source_detail="ISO 15765 공개 설명",
+            status="draft"))
+        added += 1
+    if added:
+        db.session.flush()
+    return added
+
+
 def ensure_lan_terms() -> int:
     """DoIP를 보낼 수 없다는 공개된 사실을 용어 초안으로 남긴다."""
     added = 0

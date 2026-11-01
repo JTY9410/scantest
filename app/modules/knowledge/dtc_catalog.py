@@ -26,6 +26,7 @@ _STD = re.compile(r"^([PCBU][0-9A-F]{4,8})$", re.I)
 _IN_TEXT = re.compile(r"\(([PCBU][0-9A-F]{4,8})(?:\s|/|-|,|\))", re.I)
 _HEX = re.compile(r"^[0-9A-F]{3,8}$")
 _MAKER_PREFIXES = (
+    ("kgm", "KG모빌리티"),
     ("toyota_lexus", "Toyota/Lexus"),
     ("audi_vw", "Audi/VW"),
     ("renault_korea", "르노코리아"),
@@ -62,7 +63,7 @@ def import_dtc_catalog(path: Path | None = None) -> dict[str, int]:
     """제조사별 고장코드 설명을 초안으로 넣는다. 다시 실행해도 같은 출처는 한 건이다."""
     counts = {"sheet": 0, "saved": 0, "dtcs": 0, "kept": 0}
     for sheet_name, rows in _sheets(path or catalog_path()).items():
-        maker, ecu = _scope(sheet_name)
+        targets = _targets(sheet_name)
         headers = [_key(cell) for cell in (rows[0] if rows else [])]
         if not {"code", "detail"}.issubset(set(headers)):
             continue
@@ -74,14 +75,15 @@ def import_dtc_catalog(path: Path | None = None) -> dict[str, int]:
                 continue
             counts["sheet"] += 1
             memo = " · ".join(part for part in (line.get("memo", "").strip(), line.get("code", "").strip()) if part)
-            outcome = _upsert_dtc(
-                code=code, maker=maker, ecu=ecu, detail=detail, memo=memo or None,
-                source_detail=f"{_FILE}:{sheet_name}",
-            )
-            if outcome == "created":
-                counts["dtcs"] += 1
-            elif outcome == "kept":
-                counts["kept"] += 1
+            for maker, ecu in targets:
+                outcome = _upsert_dtc(
+                    code=code, maker=maker, ecu=ecu, detail=detail, memo=memo or None,
+                    source_detail=f"{_FILE}:{sheet_name}",
+                )
+                if outcome == "created":
+                    counts["dtcs"] += 1
+                elif outcome == "kept":
+                    counts["kept"] += 1
     try:
         db.session.commit()
     except IntegrityError as exc:
@@ -153,6 +155,15 @@ def _normalize(code: str, pbcu: str, detail: str) -> str:
     if _HEX.fullmatch(compact):
         return compact[:20]
     return ""
+
+
+def _targets(sheet_name: str) -> list[tuple[str, str | None]]:
+    """현대·기아 공통 시트는 제조사 두 건으로 나눈다. 제어기 이름에 kia_를 붙이지 않는다."""
+    name = sheet_name.strip()
+    if name == "hyundai_kia" or name.startswith("hyundai_kia_"):
+        ecu = name[len("hyundai_kia_"):] if name.startswith("hyundai_kia_") else None
+        return [("현대", ecu or None), ("기아", ecu or None)]
+    return [_scope(name)]
 
 
 def _scope(sheet_name: str) -> tuple[str, str | None]:

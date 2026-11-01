@@ -1,6 +1,7 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
 from flask_login import current_user
 from flask_wtf import FlaskForm
+from wtforms.fields import SelectChoice
 from sqlalchemy import select
 
 from app.core.errors import ServiceError
@@ -17,7 +18,7 @@ bp = Blueprint("obd", __name__, url_prefix="/admin/obd")
 def _device_form() -> TelematicsDeviceForm:
     form = TelematicsDeviceForm(prefix="device")
     companies = db.session.scalars(select(Company).where(Company.deleted_at.is_(None)).order_by(Company.name))
-    form.company_id.choices = [(0, "없음")] + [(c.id, c.name) for c in companies]
+    form.company_id.choices = [SelectChoice(0, "없음")] + [SelectChoice(c.id, c.name) for c in companies]
     return form
 
 

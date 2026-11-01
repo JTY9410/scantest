@@ -1,4 +1,5 @@
 from flask import Blueprint, flash, redirect, render_template, request, url_for
+from wtforms.fields import SelectChoice
 from flask_login import current_user
 
 from app.core.errors import ServiceError
@@ -45,7 +46,7 @@ def show(user_id: int):
 def edit(user_id: int):
     member = service.get_member(user_id)
     form = MemberEditForm(obj=member)
-    form.company_id.choices = [(0, "소속 없음")] + [(c.id, c.name) for c in service.companies()]
+    form.company_id.choices = [SelectChoice(0, "소속 없음")] + [SelectChoice(c.id, c.name) for c in service.companies()]
     if request.method == "GET":
         form.company_id.data = member.company_id or 0
         form.mobile.data = member.formatted_mobile

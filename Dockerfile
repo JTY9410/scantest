@@ -39,6 +39,12 @@ ENV APP_ENV=production \
 COPY --chown=app:app app ./app
 COPY --chown=app:app migrations ./migrations
 COPY --chown=app:app gunicorn.conf.py pyproject.toml ./
+COPY --chown=app:app \
+  "자동차_제조사별_DTC_고장코드_데이터베이스.xlsx" \
+  dtc_description_20261019.xlsx \
+  "EV_DTC_전체코드.xlsx" \
+  ICE_DTC_Global_Complete_no_grade.xlsx \
+  ./
 COPY --from=assets --chown=app:app /build/app/static/dist ./app/static/dist
 USER app
 EXPOSE 8000

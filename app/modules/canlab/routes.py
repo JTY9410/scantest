@@ -1,4 +1,5 @@
 from flask import Blueprint, Response, flash, redirect, render_template, request, url_for
+from wtforms.fields import SelectChoice
 from flask_login import current_user
 
 from app.core.errors import ServiceError
@@ -147,8 +148,8 @@ def delete_dataset(dataset_id: int):
     return redirect(url_for("canlab.datasets"))
 
 
-def _dataset_choice(d) -> tuple[int, str]:
-    return d.id, f"#{d.id} {d.vehicle} · {d.filename} ({d.kind_label})"
+def _dataset_choice(d) -> SelectChoice:
+    return SelectChoice(d.id, f"#{d.id} {d.vehicle} · {d.filename} ({d.kind_label})")
 
 
 def _pending_url(wescan_id: int, reverse_ids: list[int]) -> str:
@@ -236,12 +237,12 @@ def apply_run(run_id: int):
 @admin_required
 def compare():
     form = CompareForm()
-    choices = [(0, "— 파일로 올리기 —")] + [
-        (d.id, service.dataset_choice_label(d)) for d in service.scan_trace_datasets()
+    choices = [SelectChoice(0, "— 파일로 올리기 —")] + [
+        SelectChoice(d.id, service.dataset_choice_label(d)) for d in service.scan_trace_datasets()
     ]
     form.dataset_id.choices = choices
     preselect = request.args.get("dataset_id", type=int)
-    if request.method == "GET" and preselect and any(preselect == c[0] for c in choices):
+    if request.method == "GET" and preselect and any(preselect == choice.value for choice in choices):
         form.dataset_id.data = preselect
     if form.validate_on_submit():
         try:

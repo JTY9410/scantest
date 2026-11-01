@@ -25,6 +25,7 @@ def test_scan_page_menu_and_dashboard_button(admin_client):
     assert html.index("스캔하기</span>") < html.index("운영 데이터")
     assert html.index("진단 작업 흐름") < html.index("진단기 연결") < html.index("data-scan-flow")
     assert "지식 고장코드" in html and "이더넷 진단" in html and "AI 연결" in html
+    assert "7E2 요청은 7EA" in html and "717만 71D" in html
     assert "data-scan-mix" in html
     assert "차량정보 조회 인증키가 없어" not in html
     dashboard = admin_client.get("/admin/").get_data(as_text=True)

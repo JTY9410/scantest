@@ -8,7 +8,7 @@ import zipfile
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.exc import IntegrityError
 
 from app.core.errors import ServiceError
@@ -64,29 +64,39 @@ def import_workbook(path: Path | None = None) -> dict[str, int]:
 
 def workbook_hints(codes: set[str], maker: str | None) -> dict[str, KnowledgeDTC]:
     """확인 전인 제조사 코드. 스캔 설명 대신 참고로만 붙인다."""
-    wanted = {code.upper()[:5] for code in codes if code}
+    raw = {code.upper() for code in codes if code}
+    prefixes = {code[:5] for code in raw}
+    wanted = raw | prefixes
     if not wanted:
         return {}
     names = _maker_names(maker)
     if not names:
         return {}
     rows = db.session.scalars(select(KnowledgeDTC).where(
-        KnowledgeDTC.code.in_(wanted),
-        KnowledgeDTC.source == _SOURCE,
+        or_(KnowledgeDTC.code.in_(wanted), func.substr(KnowledgeDTC.code, 1, 5).in_(prefixes)),
+        KnowledgeDTC.source.in_((_SOURCE, "upload")),
         KnowledgeDTC.status == "draft",
         KnowledgeDTC.maker.is_not(None),
-    ))
-    return {row.code: row for row in rows if (row.maker or "").casefold() in names}
+    ).order_by(KnowledgeDTC.id))
+    found: dict[str, KnowledgeDTC] = {}
+    for row in rows:
+        if (row.maker or "").casefold() not in names:
+            continue
+        found.setdefault(row.code, row)
+        found.setdefault(row.code[:5], row)
+    return found
 
 
 def _maker_names(maker: str | None) -> set[str]:
     text = (maker or "").strip()
     if not text:
         return set()
-    names = {n.casefold() for n in maker_aliases(text)} | {text.casefold()}
-    alias = _MAKER_ALIASES.get(text)
-    if alias:
-        names.add(alias)
+    folded = text.casefold()
+    names = {n.casefold() for n in maker_aliases(text)} | {folded}
+    for korean, english in _MAKER_ALIASES.items():
+        if folded in {korean.casefold(), english.casefold()}:
+            names.add(korean.casefold())
+            names.add(english.casefold())
     return names
 
 

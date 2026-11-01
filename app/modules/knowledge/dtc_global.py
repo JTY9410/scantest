@@ -32,11 +32,44 @@ _CATEGORY_HEADERS = {"분류중분류시스템", "중분류시스템", "대분�
 _ACTION_HEADERS = {"권장조치"}
 _SEVERITY_HEADERS = {"심각도명칭"}
 _DRIVE_HEADERS = {"주행상태", "주행가능여부"}
+_SKIP_HEADERS = _CODE_HEADERS | _NAME_HEADERS | _DESC_HEADERS | _CATEGORY_HEADERS | _ACTION_HEADERS | _SEVERITY_HEADERS | _DRIVE_HEADERS | {
+    "접두사", "세부코드", "대분류", "구분", "내용",
+}
+_ALIAS_MAKERS = {
+    "현대기아": ("현대", "기아"),
+    "제네시스": ("제네시스",),
+    "르노코리아": ("르노코리아",),
+    "kg모빌리티": ("KG모빌리티",),
+    "폴스타": ("Polestar",),
+    "볼보": ("Volvo",),
+    "볼보폴스타": ("Volvo", "Polestar"),
+    "테슬라": ("Tesla",),
+    "벤츠": ("Mercedes-Benz",),
+    "bmw": ("BMW",),
+    "폭스바겐": ("Audi/VW",),
+    "폭스바겐아우디포르쉐": ("Audi/VW",),
+    "byd": ("BYD",),
+    "geely": ("Geely",),
+    "saic": ("SAIC",),
+    "stellantis": ("Stellantis",),
+    "stellantispsafca": ("Stellantis",),
+    "gm": ("GM",),
+    "gm쉐보레캐딜락": ("GM",),
+    "ford": ("Ford",),
+    "chery": ("Chery",),
+    "토요타": ("Toyota/Lexus",),
+    "토요타렉서스": ("Toyota/Lexus",),
+    "닛산": ("닛산",),
+    "닛산인피니티": ("닛산",),
+    "혼다": ("Honda",),
+    "혼다어큐라": ("Honda",),
+}
+_ALIAS_CODE = re.compile(r"^[A-Z0-9][A-Z0-9\-]{0,19}$")
 
 
 def import_dtc_global(paths: list[Path] | None = None) -> dict[str, int]:
     """없는 표준 고장코드만 추가한다. 같은 코드가 있으면 건너뛴다."""
-    counts = {"sheet": 0, "dtcs": 0, "codes": 0, "skipped": 0, "filled": 0}
+    counts = {"sheet": 0, "dtcs": 0, "codes": 0, "skipped": 0, "filled": 0, "aliases": 0}
     targets = paths or [_root() / name for name, _, _ in _FILES]
     for path in targets:
         if not path.is_file():
@@ -75,12 +108,52 @@ def import_dtc_global(paths: list[Path] | None = None) -> dict[str, int]:
                 counts["codes"] += 1
             elif code_outcome == "filled":
                 counts["filled"] += 1
+            counts["aliases"] += _maker_aliases(line, code, name, path.name)
     try:
         db.session.commit()
     except IntegrityError as exc:
         db.session.rollback()
         raise ServiceError("같은 고장코드가 이미 다른 형식으로 저장되어 있습니다.") from exc
     return counts
+
+
+def _maker_aliases(line: dict, standard: str, name: str, filename: str) -> int:
+    """표준 코드와 다른 제조사 표기는 초안으로만 남긴다. 진단코드 마스터에는 넣지 않는다."""
+    added = 0
+    for key, value in line.items():
+        makers = _ALIAS_MAKERS.get(key)
+        if not makers or key in _SKIP_HEADERS:
+            continue
+        alias = _alias_code(value, standard)
+        if not alias:
+            continue
+        for maker in makers:
+            if _add_alias(alias, maker, name, standard, filename) == "created":
+                added += 1
+    return added
+
+
+def _alias_code(value: str, standard: str) -> str:
+    text = re.sub(r"\s+", "", str(value or "")).upper()
+    if not text or text == standard or not _ALIAS_CODE.fullmatch(text):
+        return ""
+    return text
+
+
+def _add_alias(code: str, maker: str, name: str, standard: str, filename: str) -> str:
+    existing = db.session.scalar(select(KnowledgeDTC).where(
+        KnowledgeDTC.code == code,
+        KnowledgeDTC.maker == maker,
+        KnowledgeDTC.source == _SOURCE,
+    ))
+    if existing is not None:
+        return "skipped"
+    db.session.add(KnowledgeDTC(
+        code=code, maker=maker, source=_SOURCE, description=name,
+        detail_name=name[:200], notes=standard, source_detail=f"{filename} ({standard})"[:500],
+        status="draft", confidence=0.4,
+    ))
+    return "created"
 
 
 def _add_dtc(code, name, detail, category, notes, filename, kind) -> str:

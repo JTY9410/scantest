@@ -78,3 +78,29 @@ def test_global_import_skips_existing_and_adds_missing(app, tmp_path):
     assert saved[2] == "verified" and saved[3] == "HV 배터리 팩 전압 이상"
     assert saved[4] == "VVT 오일제어밸브A 회로 이상" and saved[5] == "ice"
     assert again["dtcs"] == 0 and again["codes"] == 0 and copies == 1
+
+
+def test_maker_column_alias_stays_draft(app, tmp_path):
+    ev = tmp_path / "EV_DTC_전체코드.xlsx"
+    ice = tmp_path / "ICE_DTC_Global_Complete_no_grade.xlsx"
+    ev.write_bytes(_xlsx("EV_DTC_전체코드", [
+        ["표준DTC코드", "코드명칭(한글)", "상세내용", "르노코리아"],
+        ["P0A02", "HV 배터리 팩 전압 이상", "배터리 팩 총전압 측정 오류", "DF020"],
+        ["P0A1A", "같은 표기", "표준 코드와 같으면 별도 행이 없다", "P0A1A"],
+    ]))
+    ice.write_bytes(_xlsx("전체코드", [
+        ["표준DTC코드", "코드명칭(한글)", "상세내용"],
+        ["P0010", "VVT", "흡기",],
+    ]))
+    with app.app_context():
+        first = import_dtc_global([ev, ice])
+        alias = db.session.scalar(select(KnowledgeDTC).where(
+            KnowledgeDTC.code == "DF020", KnowledgeDTC.maker == "르노코리아"))
+        master = db.session.scalar(select(Code).where(Code.code == "DF020", Code.deleted_at.is_(None)))
+        saved = (alias.status if alias else None, alias.notes if alias else None, alias.detail_name if alias else None)
+        again = import_dtc_global([ev, ice])
+        copies = db.session.scalar(select(func.count()).select_from(KnowledgeDTC).where(KnowledgeDTC.code == "DF020"))
+    assert first["aliases"] == 1
+    assert saved == ("draft", "P0A02", "HV 배터리 팩 전압 이상")
+    assert master is None
+    assert again["aliases"] == 0 and copies == 1

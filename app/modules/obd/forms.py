@@ -3,6 +3,7 @@ from collections.abc import Callable
 
 from flask_wtf import FlaskForm
 from wtforms import BooleanField, HiddenField, IntegerField, SelectField, StringField, TextAreaField
+from wtforms.fields import SelectChoice
 from wtforms.validators import DataRequired, Length, NumberRange, Optional, ValidationError
 
 from app.modules.obd.models import CAN_BITRATES, ObdDialect, ObdTransport
@@ -44,10 +45,11 @@ _header = _matches(HEADER_PATTERN, "7E4 같은 3자리 또는 18DA10F1 같은 8�
 
 class ObdProfileForm(FlaskForm):
     name = StringField("프로필 이름", validators=[DataRequired("프로필 이름을 입력하세요."), Length(max=100)])
-    transport = SelectField("연결 방식", choices=[(t.value, t.label) for t in ObdTransport])
-    dialect = SelectField("명령 체계", choices=[(d.value, d.label) for d in ObdDialect], default=ObdDialect.ELM327)
+    transport = SelectField("연결 방식", choices=[SelectChoice(t.value, t.label) for t in ObdTransport])
+    dialect = SelectField("명령 체계", choices=[SelectChoice(d.value, d.label) for d in ObdDialect], default=ObdDialect.ELM327)
     can_bitrate = SelectField("CAN 속도(slcan)", coerce=int, default=0, filters=[lambda v: v or 0],
-                              choices=[(0, "자동 감지")] + [(b, f"{b // 1000} kbit/s") for b in CAN_BITRATES])
+                              choices=[SelectChoice(0, "자동 감지")] + [
+                                  SelectChoice(b, f"{b // 1000} kbit/s") for b in CAN_BITRATES])
     device_name_prefix = StringField(
         "기기 이름 접두사",
         validators=[DataRequired("기기 이름 접두사를 입력하세요."), Length(max=50)],

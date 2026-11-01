@@ -105,7 +105,7 @@ def register_cli(app: Flask) -> None:
         stats = load()
         click.echo(
             f"문서 {stats['sheet']}건 중 지식 {stats['dtcs']}건·마스터 {stats['codes']}건 추가, "
-            f"기존 유지 {stats['skipped']}건, 빈 설명 채움 {stats['filled']}건"
+            f"제조사 표기 {stats['aliases']}건, 기존 유지 {stats['skipped']}건, 빈 설명 채움 {stats['filled']}건"
         )
 
     @app.cli.command("import-wecar-app")
