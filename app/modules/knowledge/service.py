@@ -86,8 +86,8 @@ def list_dtcs(*, status: str | None = "verified", maker: str | None = None, limi
     return db.session.scalars(stmt).all()
 
 
-def page_dtcs(*, status: str | None = "verified", maker: str | None = None, page: int = 1,
-              per_page: int = 50):
+def page_dtcs(*, status: str | None = "verified", maker: str | None = None, code: str | None = None,
+              page: int = 1, per_page: int = 50):
     """관리자 목록용 고장코드 페이지. 한 화면에 모두 넣지 않는다."""
     from app.core.pagination import paginate
 
@@ -96,6 +96,8 @@ def page_dtcs(*, status: str | None = "verified", maker: str | None = None, page
         stmt = stmt.where(KnowledgeDTC.status == status)
     if maker:
         stmt = stmt.where(or_(KnowledgeDTC.maker.in_(maker_aliases(maker)), KnowledgeDTC.maker.is_(None)))
+    if code:
+        stmt = stmt.where(KnowledgeDTC.code == code)
     return paginate(stmt, page, per_page)
 
 

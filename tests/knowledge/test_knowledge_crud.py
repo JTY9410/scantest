@@ -123,7 +123,10 @@ def test_dtcs_page_is_paginated(admin_client, app):
     body = first.get_data(as_text=True)
     assert first.status_code == 200
     # 상단 '고장코드 추가' 폼 1칸 + 목록 50칸
-    assert body.count('name="code"') == 51
+    assert body.count('name="code"') == 52
+    one = admin_client.get("/admin/knowledge/dtcs?code=P0001")
+    one_body = one.get_data(as_text=True)
+    assert "P0001" in one_body and "P0002" not in one_body
     assert "page=2" in body or "다음" in body
 
 

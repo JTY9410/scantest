@@ -320,7 +320,8 @@
         <td data-label="상태">{% for kind in d.kinds or [d.kind] %}{{ badge(kind, "danger" if kind in ("현재", "확정") else "warning") }} {% endfor %}{% if d.status_bits %}<span class="text-sm text-muted">{{ d.status_bits|join(", ") }}</span>{% endif %}</td>
         <td data-label="제어기" class="mono">{{ d.ecu }} <span class="text-sm text-muted">{{ (d.sources or [d.source])|join(", ") }}</span></td>
         <td data-label="설명" class="text-sm">
-          <p class="font-semibold">{{ d.desc or "고장코드 마스터에 설명이 없습니다." }}</p>
+          <p class="font-semibold">{{ d.desc or "고장코드 마스터에 설명이 없습니다." }}
+            <a class="ml-1 font-normal underline print:hidden" href="{{ url_for('knowledge.dtcs', code=d.code, maker=car.diag_company or '') }}">지식에서 이 코드</a></p>
           {% if d.workbook_ref %}<p class="mt-1 text-muted">제조사 자료(확인 전): {{ d.workbook_ref }}{% if d.workbook_note %} · {{ d.workbook_note }}{% endif %}</p>{% endif %}
           {% if d.root_cause %}<p class="mt-1">원인: {{ d.root_cause }}</p>{% endif %}
           {% if d.howto %}<ol class="mt-1 list-decimal pl-5">{% for h in d.howto %}<li>{{ h }}</li>{% endfor %}</ol>{% endif %}

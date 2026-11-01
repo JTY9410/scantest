@@ -1,4 +1,6 @@
 """지식베이스 화면."""
+import re
+
 from flask import Blueprint, Response, current_app, flash, jsonify, redirect, render_template, request, url_for
 from flask_login import current_user, login_required
 
@@ -63,13 +65,14 @@ def dtcs():
     """List DTC meanings."""
     status = request.args.get("status", "all")
     maker = request.args.get("maker", "").strip()[:50] or None
+    code = re.sub(r"[^0-9A-Za-z]", "", request.args.get("code") or "").upper()[:20] or None
     page = service.page_dtcs(
-        status=None if status == "all" else status, maker=maker,
+        status=None if status == "all" else status, maker=maker, code=code,
         page=clamp_page(request.args.get("page")),
         per_page=clamp_per_page(request.args.get("per_page"), 50))
     return render_template(
         "knowledge/dtcs.html", page=page, items=page.items, status=status, maker=maker or "",
-        totals=service.status_totals("dtc", maker))
+        code=code or "", totals=service.status_totals("dtc", maker))
 
 
 @bp.get("/terms")
