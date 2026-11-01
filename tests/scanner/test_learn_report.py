@@ -64,6 +64,14 @@ def test_remember_only_successful_reads_and_prefers_model(app, admin):
     assert any(s["command"] == "220101" and s["optional"] for s in learned_steps)
 
 
+def test_remember_skips_doip_addresses(app, admin):
+    scan = service_scan(admin)
+    scan.device_type = "doip"
+    remember(scan, [{"status": "ok", "command": "1902FF", "header": "0000E400"}])
+    db.session.commit()
+    assert db.session.scalar(select(func.count()).select_from(MakerScanCommand)) == 0
+
+
 def test_remember_caps_at_forty(app, admin):
     scan = service_scan(admin)
     remember(scan, [{"status": "ok", "command": f"22{i:04X}", "header": "7E4"} for i in range(45)])

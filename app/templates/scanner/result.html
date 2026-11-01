@@ -382,7 +382,8 @@
         <td data-primary class="font-semibold">{{ v.label }}</td>
         <td data-label="값" class="num">{{ num(v.value) }} {{ v.unit }}{% if v.outlier %} {{ badge("이상값", "warning") }}{% endif %}</td>
         <td data-label="근거">{{ badge("참고 해석(미검증)", "warning") if v.reference else badge("적용 규칙", "success") }}
-          {% if v.origin or v.source %}<span class="text-sm text-muted">{{ v.origin or "" }} {{ v.source or "" }}</span>{% endif %}</td>
+          {% if v.origin or v.source %}<span class="text-sm text-muted">{{ v.origin or "" }} {{ v.source or "" }}</span>{% endif %}
+          <a class="ml-1 text-sm underline print:hidden" href="{{ url_for('knowledge.formulas', status='all', q=v.label, maker=car.diag_company or '') }}">디코드 공식</a></td>
       </tr>
       {% endfor %}
     </tbody>

@@ -9,6 +9,7 @@ from app.core.pagination import clamp_page, clamp_per_page
 from app.modules.auth.access import admin_required
 from app.modules.knowledge import alerts, importer, service
 from app.modules.scanner.ethernet import read_plan
+from app.modules.scanner.learn import list_commands as list_learned
 
 bp = Blueprint("knowledge", __name__, url_prefix="/admin/knowledge")
 
@@ -46,7 +47,7 @@ def commands():
     return render_template(
         "knowledge/commands.html", items=items, status=status, maker=maker or "",
         totals=service.status_totals("command", maker), deletion_alerts=alerts.pending_alerts(),
-        doip_reads=read_plan())
+        doip_reads=read_plan(), learned=list_learned(maker or ""))
 
 
 @bp.get("/formulas")
@@ -55,8 +56,9 @@ def formulas():
     """List decode formulas."""
     status = request.args.get("status", "verified")
     maker = request.args.get("maker", "").strip()[:50] or None
-    items = service.list_formulas(status=status, maker=maker)
-    return render_template("knowledge/formulas.html", items=items, status=status, maker=maker or "")
+    q = (request.args.get("q") or "").strip()[:80]
+    items = service.list_formulas(status=None if status == "all" else status, maker=maker, q=q or None)
+    return render_template("knowledge/formulas.html", items=items, status=status, maker=maker or "", q=q)
 
 
 @bp.get("/dtcs")

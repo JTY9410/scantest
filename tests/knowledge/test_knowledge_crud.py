@@ -110,6 +110,17 @@ def test_dtc_lookup(app):
         assert "Misfire" in p0300.description
 
 
+def test_formulas_page_filters_by_text(admin_client, app):
+    with app.app_context():
+        db.session.add(KnowledgeFormula(
+            label="배터리 잔량", command="22F1", formula="A", source="test", status="draft"))
+        db.session.add(KnowledgeFormula(
+            label="냉각수온", command="0105", formula="A-40", source="test", status="verified"))
+        db.session.commit()
+    page = admin_client.get("/admin/knowledge/formulas?status=all&q=배터리").get_data(as_text=True)
+    assert "배터리 잔량" in page and "냉각수온" not in page
+
+
 def test_dtcs_page_is_paginated(admin_client, app):
     from app.extensions import db
     from app.modules.knowledge.models import KnowledgeDTC

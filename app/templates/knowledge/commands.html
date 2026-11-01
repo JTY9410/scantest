@@ -23,6 +23,30 @@
   </table></div>
 </section>
 
+<section class="card card-body mb-6" aria-labelledby="learned-reads-title">
+  <h2 id="learned-reads-title" class="text-lg font-bold">스캔에서 응답한 명령</h2>
+  <p class="mt-1 text-sm text-muted">CAN·블루투스 스캔에서 성공한 읽기만 다음 계획에 붙습니다. 이더넷 주소는 여기 넣지 않고, 위 이더넷 읽기 표를 그대로 씁니다.
+    <a class="underline" href="{{ url_for('monitoring.scan_commands', maker=maker) }}">전체 목록</a></p>
+  {% if learned %}
+  <div class="table-wrap mt-3"><table class="table">
+    <thead><tr><th scope="col">제조사</th><th scope="col">차종</th><th scope="col">주소</th><th scope="col">명령</th><th scope="col">횟수</th></tr></thead>
+    <tbody>
+    {% for row in learned %}
+      <tr>
+        <td data-label="제조사">{{ row.maker }}</td>
+        <td data-label="차종">{{ row.model or "공통" }}</td>
+        <td data-label="주소" class="font-mono">{{ row.header or "-" }}</td>
+        <td data-label="명령" class="font-mono">{{ row.command }}</td>
+        <td data-label="횟수" class="tabular-nums">{{ row.hits }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="mt-3 text-sm">이 조건으로 기억된 명령이 없습니다.</p>
+  {% endif %}
+</section>
+
 {% if deletion_alerts %}
 <section id="deletion-alerts" class="card card-body mb-6 border-2" style="border-color:#e30313" role="alert">
   <h2 class="text-lg font-bold" style="color:#e30313">삭제 여부 확인 필요 · {{ deletion_alerts|length }}건</h2>

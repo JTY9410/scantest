@@ -66,11 +66,19 @@ def _formula_for(item: KnowledgeFormula, row: KnowledgeCommand, command: str, pi
     return True
 
 
-def list_formulas(*, status: str = "verified", maker: str | None = None, limit: int = 100):
-    """해석에 쓸 수식. 기본은 검증된 항목만."""
-    stmt = select(KnowledgeFormula).where(KnowledgeFormula.status == status).order_by(KnowledgeFormula.pid)
+def list_formulas(*, status: str | None = "verified", maker: str | None = None, q: str | None = None,
+                  limit: int = 100):
+    """해석에 쓸 수식. 기본은 검증된 항목만. status를 비우면 전체, q는 이름·명령·PID."""
+    stmt = select(KnowledgeFormula).order_by(KnowledgeFormula.pid)
+    if status:
+        stmt = stmt.where(KnowledgeFormula.status == status)
     if maker:
         stmt = stmt.where(or_(KnowledgeFormula.maker.in_(maker_aliases(maker)), KnowledgeFormula.maker.is_(None)))
+    if q:
+        like = f"%{q[:80]}%"
+        stmt = stmt.where(or_(
+            KnowledgeFormula.label.ilike(like), KnowledgeFormula.detail_name.ilike(like),
+            KnowledgeFormula.command.ilike(like), KnowledgeFormula.pid.ilike(like)))
     stmt = stmt.limit(limit)
     return db.session.scalars(stmt).all()
 

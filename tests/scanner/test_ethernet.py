@@ -49,6 +49,11 @@ class Gateway:
         return None
 
 
+def test_ethernet_page_points_at_the_read_table(admin_client):
+    html = admin_client.get("/admin/scan/ethernet").get_data(as_text=True)
+    assert "이더넷 읽기 표만 보냅니다" in html and "CAN 학습 목록에 넣지 않습니다" in html
+
+
 def test_read_plan_is_public_reads_on_the_functional_address():
     steps = read_plan()
     commands = [step["command"] for step in steps]

@@ -42,7 +42,7 @@ def _upsert(maker: str, model: str | None, header: str | None, command: str, sca
 def remember(scan: Scan, steps: list[dict]) -> None:
     """성공한 읽기 명령만 건수를 올린다. AT·지우기·ELM 오류·NO DATA·7F·세션·쓰기 명령은 남기지 않는다."""
     maker = (scan.car_maker or "").strip()
-    if not maker:
+    if not maker or (scan.device_type or "") == "doip":
         return
     model = (scan.car_model or "").strip() if scan.car_model and scan.car_model != "미확인" else None
     seen: set[tuple[str | None, str]] = set()
