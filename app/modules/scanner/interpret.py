@@ -291,6 +291,15 @@ def interpret(steps: list[dict], rules: list, record: str, car: dict | None = No
                     monitor_tests += [t | {"ecu": address} for t in obd.mode06_tests(payload)]
                 elif service == 0x19 and command[2:4] == "04" and (snapshot := obd.uds_snapshot(payload)):
                     snapshots.append(snapshot | {"ecu": address})
+                elif service == 0x22 and len(command) >= 6 and command[2:4] == "F4":
+                    # UDS DID F4+PID → 모드 01과 동일 환산(ISO 14229 관례).
+                    pid = int(command[4:6], 16)
+                    data = payload[3:] if len(payload) > 3 else b""
+                    if value := obd.mode01(bytes([0x41, pid]) + data):
+                        if value["key"] in formula_labels:
+                            value["label"] = formula_labels[value["key"]]
+                        value = dict(value, source=f"UDS 22 F4{pid:02X}", reference=True)
+                        ecu_values.setdefault(address, {}).setdefault(value["key"], value)
                 elif service == 0x21 and step.get("header"):
                     kwp.setdefault((int(step["header"], 16), 0x0100 | payload[1]), []).append(
                         (float(step.get("t_ms") or 0), payload[2:]))

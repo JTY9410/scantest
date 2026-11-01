@@ -16,6 +16,7 @@ class Trace:
     transactions: list[uds.Transaction]
     samples: Samples
     meta: dict = field(default_factory=dict)
+    frames: list = field(default_factory=list)
 
 
 def load_trace(text: str) -> Trace:
@@ -23,7 +24,7 @@ def load_trace(text: str) -> Trace:
     can_frames = [frame for frame in parsed.frames if frame.direction != "serial"]
     transactions = uds.pair_transactions(reassemble(can_frames))
     return Trace(parsed.format, len(parsed.frames), parsed.skipped_lines, transactions,
-                 uds.did_samples(transactions), parsed.meta)
+                 uds.did_samples(transactions), parsed.meta, frames=list(parsed.frames))
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,13 @@ def diagnose(trace: Trace) -> dict:
     try:
         from app.modules.scanner.security.status import analyze_security_trace
         result["security"] = analyze_security_trace(trace.transactions)
+    except Exception:
+        pass
+    try:
+        from app.modules.canlab.engine.features import flag
+        if flag("CANLAB_BROADCAST_ANALYSIS") and getattr(trace, "frames", None):
+            from app.modules.canlab.engine import broadcast as broadcast_mod
+            result["broadcast"] = broadcast_mod.analyze_frames(trace.frames)
     except Exception:
         pass
     return result

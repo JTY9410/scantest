@@ -101,6 +101,57 @@ def _outliers(result: dict) -> list[str]:
     return found
 
 
+
+# ECU 간 동일 키 비교 허용 상대오차(또는 절대 하한)
+_CROSS_KEYS = {
+    "pack_voltage": (0.03, 1.0),  # 상대 3% 또는 1V
+    "soc": (0.05, 2.0),
+    "soc_display": (0.08, 3.0),
+    "aux_voltage": (0.05, 0.5),
+}
+_CROSS_TOLERANCE_DEFAULT = (0.05, 1.0)
+
+
+def _ecu_cross_warnings(result: dict) -> list[str]:
+    """여러 ECU가 같은 물리량을 보고했을 때 차이가 크면 소견을 낸다(읽기 전용)."""
+    rows = []
+    primary = result.get("values") or []
+    others = result.get("ecu_values") or []
+    by_key: dict[str, list[tuple[str, float]]] = {}
+    for item in primary:
+        key, val = item.get("key"), item.get("value")
+        if key is None or val is None:
+            continue
+        by_key.setdefault(key, []).append(("주 ECU", float(val)))
+    for group in others:
+        label = group.get("label") or group.get("ecu") or "다른 ECU"
+        for item in group.get("values") or []:
+            key, val = item.get("key"), item.get("value")
+            if key is None or val is None:
+                continue
+            by_key.setdefault(key, []).append((str(label), float(val)))
+    # SOC vs 디스플레이 SOC
+    socs = by_key.get("soc") or []
+    displays = by_key.get("soc_display") or []
+    if socs and displays:
+        a, b = socs[0][1], displays[0][1]
+        rel, abs_min = _CROSS_KEYS["soc_display"]
+        if abs(a - b) > max(abs_min, rel * max(abs(a), abs(b), 1e-9)):
+            rows.append(f"BMS SOC({a:g}%)와 디스플레이 SOC({b:g}%)가 크게 다릅니다. 표시·보정 차이를 확인하세요.")
+    for key, pairs in by_key.items():
+        if len(pairs) < 2:
+            continue
+        rel, abs_min = _CROSS_KEYS.get(key, _CROSS_TOLERANCE_DEFAULT)
+        values = [v for _, v in pairs]
+        lo, hi = min(values), max(values)
+        if hi - lo <= max(abs_min, rel * max(abs(hi), abs(lo), 1e-9)):
+            continue
+        detail = ", ".join(f"{name} {val:g}" for name, val in pairs[:4])
+        label = next((v.get("label") for v in primary if v.get("key") == key), key)
+        rows.append(f"ECU 간 '{label}' 값이 어긋납니다({detail}). 센서·통신을 확인하세요.")
+    return rows
+
+
 def _checks(result: dict) -> list[str]:
     """서로 맞지 않는 값. 해석 배치가 차종과 다르거나 센서 이상일 수 있다."""
     warnings = []
@@ -122,6 +173,10 @@ def _checks(result: dict) -> list[str]:
             and abs(module - result["voltage"]) > MODULE_VOLTAGE_TOLERANCE:
         warnings.append(f"제어 모듈 전압({module:g} V)과 단말기 측정 전압({result['voltage']:g} V)이 "
                         f"{MODULE_VOLTAGE_TOLERANCE:g} V 넘게 다릅니다. 접지·배선을 확인하세요.")
+
+    from app.modules.canlab.engine.features import flag
+    if flag("SCAN_ECU_CROSS_CHECK"):
+        warnings.extend(_ecu_cross_warnings(result))
     return warnings
 
 

@@ -87,6 +87,13 @@ class Config:
     SCAN_SECURITY_STATUS = _bool("SCAN_SECURITY_STATUS", False)
     SCAN_SECURITY_UNLOCK = _bool("SCAN_SECURITY_UNLOCK", False)
 
+    # 모드 01 무응답 시 UDS 22 F4xx 대체 요청(읽기 전용).
+    SCAN_F4_FALLBACK = _bool("SCAN_F4_FALLBACK", False)
+    # ECU 간 동일 물리량 교차 확인(읽기 전용 보고).
+    SCAN_ECU_CROSS_CHECK = _bool("SCAN_ECU_CROSS_CHECK", False)
+    # 주기 CAN 로그 변화 분석(오프라인 트레이스).
+    CANLAB_BROADCAST_ANALYSIS = _bool("CANLAB_BROADCAST_ANALYSIS", False)
+
     # 검증 명령 삭제 여부 알림(docs/command-alerts.md). 실제 스캔 응답이 아래 기준을 넘으면
     # 관리자에게 "삭제/유지"를 묻는 알림을 만든다. 자동 삭제는 하지 않는다.
     #  - 연속 실패 COMMAND_ALERT_CONSECUTIVE 회 이상, 또는

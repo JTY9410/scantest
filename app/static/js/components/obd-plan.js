@@ -147,7 +147,7 @@
   }
 
   function newContext() {
-    return { bus: null, dead: new Set(), support: {}, dtcCount: null, dtcs: {}, speed: null, clearFailed: false };
+    return { bus: null, dead: new Set(), support: {}, mode01Ok: new Set(), dtcCount: null, dtcs: {}, speed: null, clearFailed: false };
   }
 
   // 이 차량에서 쓸 요청 주소. 29비트 CAN은 header29, 없으면 null(보내지 않음).
@@ -170,6 +170,12 @@
       return "모든 제어기가 14 FF FF FF로 지워졌고 OBD 고장코드가 없어 04는 보내지 않았습니다.";
     }
     if (when.dtc && ctx.dtcCount === 0) return "저장된 고장코드가 없어 건너뛰었습니다.";
+    if (when.f4_fallback !== undefined) {
+      const pid = parseInt(when.f4_fallback, 16);
+      if (ctx.mode01Ok && ctx.mode01Ok.has(pid)) {
+        return "모드 01에서 이미 읽어 UDS 대체(22 F4xx)를 건너뛰었습니다.";
+      }
+    }
     for (const [key, service] of Object.entries(WHEN_SERVICE)) {
       if (when[key] === undefined) continue;
       const known = ctx.support[service] || (key === "pid02" ? ctx.support["01"] : null);
@@ -221,6 +227,13 @@
       if (found.size) ctx.support["02"] = found;
     }
     if (command === "0101") ctx.dtcCount = dtcCount(reply, ctx.bus);
+    if (/^01[0-9A-F]{2,}$/.test(command) && command !== "0100") {
+      for (const p of payloads(reply, ctx.bus)) {
+        if (p[0] === 0x41 && p.length > 2 && ![0x00, 0x20, 0x40, 0x60, 0x80, 0xa0, 0xc0, 0xe0, 0x01, 0x41].includes(p[1])) {
+          ctx.mode01Ok.add(p[1]);
+        }
+      }
+    }
     if (command === "010D" && step.group === "clear_check") {
       const p = payloads(reply, ctx.bus).find((x) => x[0] === 0x41 && x[1] === 0x0d && x.length > 2);
       ctx.speed = p ? p[2] : null;

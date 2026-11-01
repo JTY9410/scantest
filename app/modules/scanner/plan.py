@@ -87,6 +87,8 @@ SWEEP_TIMEOUT_MS = 1000
 SWEEP_ST = "19"  # ELM327 ATST 단위 4ms → 0x19 = 100ms. 응답 없는 제어기를 빨리 넘긴다.
 # 실주행거리(누적) DID. 위카 앱 dev getClusterRange 순서.
 CLUSTER_ODO_DIDS = ("B002", "B004", "B001", "B003")
+# 모드 01 대체용 표준 PID → UDS DID = F4 + PID (ISO 14229 관례). 읽기 전용.
+F4_FALLBACK_PIDS = (0x04, 0x05, 0x0C, 0x0D, 0x0F, 0x10, 0x11)
 BMS_ODO_DID = "1050"
 _BLOCKED = {"10", "27", "2E", "31"}
 _FOREIGN_OBDB = {"TESLA", "AUDI", "BMW", "LEXUS"}
@@ -161,6 +163,17 @@ def build_plan(car: dict | None = None, *, expand: bool = False) -> dict:
     else:
         for pid in live:
             add("pid", PIDS[pid].label, f"01{pid:02X}", optional=True, when={"pid": f"{pid:02X}"})
+
+    # C6: 모드 01이 실패한 PID만 클라이언트에서 보내고, 서버 계획은 플래그 ON일 때만 포함.
+    from app.modules.canlab.engine.features import flag
+    if flag("SCAN_F4_FALLBACK"):
+        for pid in F4_FALLBACK_PIDS:
+            if pid not in PIDS:
+                continue
+            spec = PIDS[pid]
+            add("uds", f"UDS 대체 {spec.label}(22 F4{pid:02X})", f"22F4{pid:02X}",
+                header="7E0", header29="18DA10F1", timeout=UDS_TIMEOUT_MS, optional=True, bus="can",
+                when={"f4_fallback": f"{pid:02X}"})
 
     add("vehicle", "지원 차량 정보 항목", "0900", optional=True)
     for info, label in INFO09:
