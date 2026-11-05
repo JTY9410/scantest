@@ -47,7 +47,9 @@ def test_pairs_requests_with_positive_and_negative_responses():
     assert by_did[0x0101].data == bms_0101()[3:]
 
 
-def test_dtc_vin_and_ecu_summary():
+def test_dtc_vin_and_ecu_summary(monkeypatch):
+    # .env나 셸에 SCAN_DTC_FTB_LABELS=1이 있어도 결과가 바뀌지 않도록 끈 상태로 고정한다.
+    monkeypatch.setenv("SCAN_DTC_FTB_LABELS", "0")
     summary = diagnose(load_trace(bms_session(count=1)))
 
     assert summary["vin"] == "TESTVIN0000******"
@@ -56,6 +58,17 @@ def test_dtc_vin_and_ecu_summary():
     assert bms["label"] == "BMS(배터리 관리)"
     assert bms["dids"] == ["0101"]
     assert bms["negative"][0]["did"] == "010A"
+
+
+def test_dtc_summary_with_ftb_labels_on(monkeypatch):
+    monkeypatch.setenv("SCAN_DTC_FTB_LABELS", "1")
+    summary = diagnose(load_trace(bms_session(count=1)))
+
+    row = summary["dtcs"]["7E4"][0]
+    assert {k: row[k] for k in ("code", "status", "confirmed", "active")} == {
+        "code": "P0A7F00", "status": 9, "confirmed": True, "active": True}
+    assert row["fault_type"] == "일반 고장유형 없음"
+    assert row["fault_type_source"] == "표준 기준"
 
 
 def test_format_dtc_prefixes():

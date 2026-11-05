@@ -85,8 +85,8 @@ def test_bms_decoding_confirmed_fields(name):
     assert abs(result["checks"]["cell_sum_vs_pack_pct"]) < 0.5
     assert 650 < result["checks"]["charge_kwh_per_ah_v"] < 800
     grades = {f["key"]: f["grade"] for f in result["fields"]}
-    assert grades["pack_current"] == "확인됨" and grades["aux_voltage"] == "유력"
-    assert grades["inlet_temp"] == "유력"
+    assert grades["pack_current"] == "확인됨" and grades["aux_voltage"] == "확인됨"
+    assert grades["inlet_temp"] == "확인됨"
     assert all(u["pid"] not in ("0101", "0105") for u in result["unverified"])
 
 
@@ -95,14 +95,73 @@ def test_inlet_temp_offset_by_platform():
     samples = {(0x7E4, 0x0101): [(0.0, data)]}
     by = lambda hint: next(f for f in bms.decode_bms(samples, hint)["fields"] if f["key"] == "inlet_temp")  # noqa: E731
     assert by("아이오닉5")["value"] == 15
-    assert by("포터EV")["value"] == 0x37
+    assert by("아이오닉5")["grade"] == "확인됨"
+    assert by("코나EV")["value"] == 0x37 and by("코나EV")["grade"] == "확인됨"
+    # 모듈 온도 정보가 없으면 니로·포터는 판정하지 않는다
+    assert by("포터EV")["value"] is None and by("포터EV")["grade"] == "미확인"
     assert by(None)["value"] is None and by(None)["grade"] == "미확인"
+
+
+def _bms_0101(inlet_raw: int, module_temp: int) -> bytes:
+    data = bytearray(59)
+    data[14] = data[15] = module_temp
+    data[22] = inlet_raw
+    return bytes(data)
+
+
+@pytest.mark.parametrize("hint,raw,expected", [
+    ("니로EV", 0x37, 15),     # 실차 니로EV(2세대): 0x37 → −40 적용 시 모듈 13°C와 부합
+    ("포터EV", 0x0E, 14),     # 실차 포터EV: 오프셋 없음
+    ("그랜저 HEV", 0x3B, 19),  # 실차 HEV: −40 적용 시 모듈 15~17°C와 부합
+])
+def test_inlet_temp_plausibility_for_unsourced_platforms(hint, raw, expected):
+    samples = {(0x7E4, 0x0101): [(0.0, _bms_0101(raw, 13))]}
+    field = next(f for f in bms.decode_bms(samples, hint)["fields"] if f["key"] == "inlet_temp")
+    assert field["value"] == expected and field["grade"] == "유력"
+
+
+def _cells(count: int) -> dict:
+    samples = {}
+    for i, did in enumerate(bms.CELL_PIDS):
+        n = max(0, min(32, count - 32 * i))
+        samples[(0x7E4, did)] = [(0.0, b"\xff" * 4 + bytes([185] * n + [0] * (32 - n)))]
+    return samples
+
+
+def test_equivalent_cycles_only_for_officially_specified_pack():
+    data = bytearray(59)
+    data[42:46] = (77400).to_bytes(4, "big")  # 누적 방전 7,740.0 kWh
+    base = {(0x7E4, 0x0101): [(0.0, bytes(data))]}
+    r192 = bms.decode_bms({**base, **_cells(192)}, "아이오닉5")
+    assert r192["pack"]["kwh"] == 77.4 and r192["pack"]["grade"] == "확인됨"
+    assert r192["checks"]["equivalent_cycles"] == 100.0
+    r180 = bms.decode_bms({**base, **_cells(180)}, "아이오닉5")
+    assert r180["pack"]["grade"] == "유력" and "equivalent_cycles" not in r180["checks"]
+    r132 = bms.decode_bms({**base, **_cells(132)}, "아이오닉6")
+    assert r132["pack"] is None and "equivalent_cycles" not in r132["checks"]
+
+
+def test_egmp_0105_energy_and_0111_charge_counters_are_likely():
+    d0105 = bytearray(43); d0105[25:27] = (994).to_bytes(2, "big"); d0105[28:30] = (0x49A1).to_bytes(2, "big")
+    d0111 = bytearray(74); d0111[4:8] = (65).to_bytes(4, "big"); d0111[8:12] = (174).to_bytes(4, "big")
+    d0111[12:16] = (1131).to_bytes(4, "big"); d0111[16:20] = (2907).to_bytes(4, "big"); d0111[26] = 14; d0111[27] = 14
+    samples = {(0x7E4, 0x0105): [(0.0, bytes(d0105))], (0x7E4, 0x0111): [(0.0, bytes(d0111))], **_cells(192)}
+    r = bms.decode_bms(samples, "아이오닉5")
+    f = {x["key"]: x for x in r["fields"]}
+    assert f["remaining_energy_kwh"]["value"] == 37.698 and f["remaining_energy_kwh"]["grade"] == "유력"
+    assert f["quick_charge_count"]["value"] == 174 and f["normal_charge_kwh"]["value"] == 1131
+    assert f["module_temp_17"]["value"] == 14
+    assert all(u["pid"] != "0111" for u in r["unverified"])
+    # 아이오닉6(132셀)은 0111 [26–27]이 0이라 모듈 온도로 쓰지 않는다
+    r6 = bms.decode_bms({**samples, **_cells(132)}, "아이오닉6")
+    assert "module_temp_17" not in {x["key"] for x in r6["fields"]}
 
 
 def test_hev_soh_is_only_likely():
     data = bytes(25) + (1000).to_bytes(2, "big") + bytes(20)
     result = bms.decode_bms({(0x7E4, 0x0105): [(0.0, data)]}, "그랜저 HEV")
     assert result["soh"]["value"] == 100.0 and result["soh"]["grade"] == "유력"
+    assert bms.decode_bms({(0x7E4, 0x0105): [(0.0, data)]}, "니로EV")["soh"]["grade"] == "확인됨"
 
 
 def test_command_sequence_and_tool_compare():

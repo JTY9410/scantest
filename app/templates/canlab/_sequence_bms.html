@@ -12,6 +12,8 @@
       {% if b.cells %}<dt>셀</dt><dd class="tabular-nums">{{ b.cells.count }}개 · 최저 {{ b.cells.min }} V · 최고 {{ b.cells.max }} V · 평균 {{ b.cells.avg }} V · 편차 {{ b.cells.spread_mv }} mV</dd>{% endif %}
       {% if b.checks.cell_sum_vs_pack_pct is defined %}<dt>셀 합계 검증</dt><dd class="tabular-nums">팩 전압 대비 {{ b.checks.cell_sum_vs_pack_pct }} %</dd>{% endif %}
       {% if b.checks.charge_kwh_per_ah_v is defined %}<dt>kWh/Ah</dt><dd class="tabular-nums">{{ b.checks.charge_kwh_per_ah_v }} V (팩 공칭전압 근처면 정상 파싱)</dd>{% endif %}
+      {% if b.pack %}<dt>공칭 용량</dt><dd class="tabular-nums">{{ b.pack.kwh }} kWh{% if b.pack.ah %} · {{ b.pack.ah }} Ah{% endif %} · {{ b.pack.grade }} · {{ b.pack.source }}</dd>{% endif %}
+      {% if b.checks.equivalent_cycles is defined %}<dt>등가 사이클</dt><dd class="tabular-nums">{{ b.checks.equivalent_cycles }}회 (누적 방전 kWh ÷ 공칭 kWh)</dd>{% endif %}
       {% if b.checks.efficiency_pct is defined %}<dt>충방전 효율</dt><dd class="tabular-nums">{{ b.checks.efficiency_pct }} %</dd>{% endif %}
     </dl>
   </div>
