@@ -30,11 +30,12 @@ from app.modules.obd.models import ObdDialect
 from app.modules.scanner import pdf
 from app.modules.scanner.interpret import detect_protocol, interpret, record_text
 from app.modules.scanner.learn import remember
+from app.modules.scanner.powertrain import classify
 from app.modules.scanner.report import basic_report
 from app.modules.scanner.obd import STATUS_LABELS, SYSTEMS
 from app.modules.scanner.plan import DOIP_NOTE
 from app.modules.scans import car_info
-from app.modules.scans.models import Code, Scan, ScanCode, ScanDocument, ScanType
+from app.modules.scans.models import Code, Scan, ScanCode, ScanDocument
 
 TRANSPORTS = {
     "ble": "블루투스(BLE)", 
@@ -440,9 +441,10 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     db.session.flush()
 
     odometer = next((v["value"] for v in result["values"] if v["key"] == "odometer"), None)
-    is_ev = "전기" in str(car.get("diag_fuel") or "") or any(k == "soc" for k in result["battery"])
+    kind = classify(car, result)
+    result["powertrain"] = kind
     scan = Scan(
-        type=ScanType.EV if is_ev else ScanType.ICE, device_type=transport, device_uid=device,
+        type=kind["type"], type_source=kind["source"], device_type=transport, device_uid=device,
         tester_id=actor.id, company_id=actor.company_id, scan_vin=result["vin"], car_no=car_no,
         car_vin=str(car.get("diag_car_id") or result["vin"] or "미확인"), car_maker=car.get("diag_company"),
         car_model=str(car.get("diag_model") or "미확인"), car_submodel=car.get("diag_submodel"),
@@ -476,7 +478,7 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     record_command_outcomes(scan.car_maker, result["steps"], scan.id)
     record_incidents(scan.id, logic, result["errors"])
     for code in {c.id: c for c in matched.values()}.values():
-        db.session.add(ScanCode(type=scan.type, scan_id=scan.id, code_id=code.id))
+        db.session.add(ScanCode(type=code.type, scan_id=scan.id, code_id=code.id))
     document = _save_document(scan)
     if document is None:
         _add_error(result, "pdf", "결과 PDF", "pdf_error", "결과 PDF를 만들지 못했습니다. 결과 화면에서 다시 내려받으세요.")
@@ -544,3 +546,32 @@ def scan_result(scan: Scan) -> dict:
         flag_modified(scan, "bms_data")
         db.session.commit()
     return data
+
+
+def change_type(actor, scan: Scan, new_type: str, reason: str | None = None) -> Scan:
+    """검사자·관리자가 결과 화면에서 유형을 바꾼다. 이력을 남기고 기본 보고서·PDF를 다시 만든다."""
+    from app.core import audit
+    from app.modules.scanner.powertrain import LABELS, TYPES
+
+    if new_type not in TYPES:
+        raise ServiceError("유형은 전기차·하이브리드·내연기관 중에서 고르세요.", 400)
+    data = dict(scan.bms_data) if isinstance(scan.bms_data, dict) else {}
+    if data.get("source") != "scanner":
+        raise ServiceError("스캔하기로 만든 결과만 유형을 바꿀 수 있습니다.", 404)
+    old = scan.type
+    if old == new_type:
+        return scan
+    history = list(scan.type_history or [])
+    history.append({"from": old, "to": new_type, "source": "manual", "by": actor.id, "at": _now().isoformat(),
+                    "reason": (reason or "").strip()[:200] or None})
+    scan.type, scan.type_source, scan.type_history = new_type, "manual", history
+    data["powertrain"] = classify(data.get("car") or {}, data, manual=new_type)
+    data.pop("wescan", None)
+    scan.bms_data = data
+    flag_modified(scan, "bms_data")
+    audit.record("스캔 유형 변경", "Scan", scan.id, user_id=actor.id,
+                 changes={"type": [LABELS.get(old, old), LABELS[new_type]]})
+    db.session.commit()
+    scan_result(scan)
+    scan_document(scan)
+    return scan

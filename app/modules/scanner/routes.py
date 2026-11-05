@@ -1,7 +1,7 @@
 import json
 from io import BytesIO
 
-from flask import Blueprint, Response, current_app, render_template, request, send_file, url_for
+from flask import Blueprint, Response, current_app, flash, redirect, render_template, request, send_file, url_for
 from flask_login import current_user
 
 from app.core import audit
@@ -261,6 +261,22 @@ def inspection(scan_id: int):
     from app.modules.scanner.report import inspection as build_inspection
 
     return render_template("scanner/inspection.html", scan=scan, view=build_inspection(scan, result))
+
+
+@bp.post("/<int:scan_id>/type")
+@admin_required
+@limiter.limit("30 per hour")
+def change_type(scan_id: int):
+    """결과 화면에서 차량 유형(전기차·하이브리드·내연기관)을 바꾼다. 이력은 scans.type_history에 남는다."""
+    try:
+        scan = get_visible_scan(current_user, scan_id)
+        service.change_type(current_user, scan, request.form.get("type", ""), request.form.get("reason"))
+    except ServiceError as error:
+        db.session.rollback()
+        flash(error.message, "error")
+    else:
+        flash(f"차량 유형을 '{scan.type_label}'(으)로 바꿨습니다. 보고서와 PDF를 다시 만들었습니다.", "success")
+    return redirect(url_for("scanner.result", scan_id=scan_id))
 
 
 @bp.get("/<int:scan_id>/pdf")

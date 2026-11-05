@@ -29,6 +29,14 @@
   </div>
 {% endcall %}
 
+{% set tab_args = filters.copy() %}{% set _ = tab_args.pop("type", None) %}
+<nav class="mb-4 flex flex-wrap gap-2 print:hidden" aria-label="차량 유형별 최종결과">
+  {% for value, label in [("", "전체"), ("ev", "전기차"), ("hev", "하이브리드"), ("ice", "내연기관")] %}
+  <a href="{{ url_for('monitoring.scans', type=value or None, **tab_args) }}"
+     class="btn {{ 'btn-primary' if scan_type == value else 'btn-secondary' }}"{% if scan_type == value %} aria-current="page"{% endif %}>{{ label }} <span class="tabular-nums">{{ type_counts.get(value, 0) }}</span></a>
+  {% endfor %}
+</nav>
+
 <section class="card overflow-hidden" aria-label="스캔 목록">
   {% if page.items %}
   <table class="rtable">
@@ -56,7 +64,7 @@
           </a>
         </td>
         <td data-label="VIN" class="mono text-sm">{{ (s.scan_vin or s.car_vin or "-")[:17] }}</td>
-        <td data-label="차종">{{ badge(s.type_label, "info" if s.type == "ev" else "") }}</td>
+        <td data-label="차종">{{ badge(s.type_label, {"ev": "info", "hev": "success"}.get(s.type, "")) }}</td>
         <td data-label="고장코드" class="num">
           {% if dtc_count %}
             <span class="badge badge-danger">{{ dtc_count }}건</span>

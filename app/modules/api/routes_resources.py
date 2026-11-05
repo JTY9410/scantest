@@ -48,7 +48,7 @@ SCAN_DEFAULT_WITH = {"owner", "tester", "company", "scan_codes"}
 
 _STR = ["string", ("max", 255)]
 SCAN_STORE_RULES = {
-    "type": ["required", "string", ("in", ["ev", "ice"])],
+    "type": ["required", "string", ("in", ["ev", "hev", "ice"])],
     "device_type": ["required", *_STR],
     "device_uid": ["required", *_STR],
     "owner_id": ["nullable", "integer", ("exists", User, "id")],

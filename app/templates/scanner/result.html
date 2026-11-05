@@ -60,6 +60,38 @@
   </ul>
 </section>
 
+{% set pt = result.powertrain or {} %}
+<section class="card card-body mb-6" aria-labelledby="powertrain-title">
+  <div class="flex flex-wrap items-center justify-between gap-3">
+    <div>
+      <h2 id="powertrain-title" class="text-lg font-bold">차량 유형 {{ badge(scan.type_label, {"ev": "info", "hev": "success"}.get(scan.type, "")) }}
+        {% if pt.plugin %}{{ badge("플러그인", "") }}{% endif %}{% if pt.hydrogen %}{{ badge("수소", "") }}{% endif %}</h2>
+      <p class="mt-1 text-sm text-muted">판별 근거: {{ {"manual": "수동 지정", "fuel": "차량조회 연료", "model": "모델명", "ecu": "ECU 응답", "bms": "BMS 데이터", "default": "근거 없음(기본값)", "reclassified": "일괄 재분류"}.get(scan.type_source or pt.source, scan.type_source or pt.source or "-") }}{% if pt.reason and not scan.type_source == "manual" %} · {{ pt.reason }}{% endif %}.
+        최종결과(기본 진단 보고서·PDF)는 이 유형의 양식으로 만듭니다.</p>
+    </div>
+    <form method="post" action="{{ url_for('scanner.change_type', scan_id=scan.id) }}" class="flex flex-wrap items-end gap-2 print:hidden">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="field"><label for="powertrain-type" class="field-label">유형 바꾸기</label>
+        <select id="powertrain-type" name="type" class="input">
+          {% for value, label in [("ev", "전기차"), ("hev", "하이브리드"), ("ice", "내연기관")] %}
+          <option value="{{ value }}" {% if scan.type == value %}selected{% endif %}>{{ label }}</option>{% endfor %}
+        </select></div>
+      <div class="field"><label for="powertrain-reason" class="field-label">사유(선택)</label>
+        <input id="powertrain-reason" name="reason" type="text" maxlength="200" class="input"></div>
+      <button type="submit" class="btn btn-secondary">변경</button>
+    </form>
+  </div>
+  {% if scan.type_history %}
+  <details class="mt-3 text-sm"><summary>변경 이력 {{ scan.type_history|length }}건</summary>
+    <ul class="mt-2 grid gap-1">
+      {% for h in scan.type_history|reverse %}
+      <li>{{ h.at[:16]|replace("T", " ") if h.at else "-" }} (UTC) · {{ {"ev": "전기차", "hev": "하이브리드", "ice": "내연기관"}.get(h["from"], h["from"]) }} → {{ {"ev": "전기차", "hev": "하이브리드", "ice": "내연기관"}.get(h.to, h.to) }} · {{ "일괄 재분류" if h.source == "reclassified" else "수동" }}{% if h.reason %} · {{ h.reason }}{% endif %}</li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</section>
+
 {% set report = result.wescan %}
 {% if report %}
 <section class="card card-body mb-6" aria-labelledby="wescan-title">

@@ -51,7 +51,7 @@ def scans():
         scan_type=scan_type, device=device, maker=maker, model=model, role=role, **params)
     return render_template(
         "monitoring/scans.html", page=page, params=params, scan_type=scan_type, device=device,
-        maker=maker, model=model, role=role, types=list(ScanType),
+        maker=maker, model=model, role=role, types=list(ScanType), type_counts=service.scan_type_counts(),
         filters=_filters(params, type=scan_type, device=device, maker=maker, model=model, role=role),
         member=service.member_name(params["user_id"]),
     )

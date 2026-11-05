@@ -4,7 +4,7 @@ from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
 from flask import current_app
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.core.audit import Activity
@@ -47,7 +47,7 @@ def search_scans(*, q: str, scan_type: str, user_id: int | None, start: date | N
                  selectinload(Scan.scan_codes))
         .where(Scan.deleted_at.is_(None), *_day_range(Scan.created_at, start, end))
     )
-    if scan_type in ("ev", "ice"):
+    if scan_type in ("ev", "hev", "ice"):
         stmt = stmt.where(Scan.type == scan_type)
     if user_id:
         if role == "tester":
@@ -67,6 +67,13 @@ def search_scans(*, q: str, scan_type: str, user_id: int | None, start: date | N
         stmt = stmt.where(or_(Scan.car_no.ilike(pattern), Scan.car_vin.ilike(pattern),
                               Scan.scan_vin.ilike(pattern), Scan.car_model.ilike(pattern)))
     return paginate(stmt.order_by(Scan.created_at.desc(), Scan.id.desc()), page, _size())
+
+
+def scan_type_counts() -> dict[str, int]:
+    """유형별 탭(전체·전기차·하이브리드·내연기관)에 보일 건수."""
+    rows = db.session.execute(select(Scan.type, func.count()).where(Scan.deleted_at.is_(None)).group_by(Scan.type))
+    counts = {str(kind): int(count) for kind, count in rows}
+    return {"": sum(counts.values()), **counts}
 
 
 def get_scan(scan_id: int) -> Scan:

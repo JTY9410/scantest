@@ -23,6 +23,18 @@ from app.modules.accounts.models import Company, SoftDeleteMixin, TimestampMixin
 
 
 class ScanType(enum.StrEnum):
+    """스캔(차량)의 구동 유형. 판별은 scanner/powertrain.classify()."""
+    EV = "ev"
+    HEV = "hev"
+    ICE = "ice"
+
+    @property
+    def label(self) -> str:
+        return {"ev": "전기차", "hev": "하이브리드", "ice": "내연기관"}[self.value]
+
+
+class CodeType(enum.StrEnum):
+    """고장코드 사전(codes, scan_codes)의 구분. 스캔 유형과 따로 둔다(하이브리드 코드도 ev/ice 사전을 쓴다)."""
     EV = "ev"
     ICE = "ice"
 
@@ -59,7 +71,7 @@ class Code(TimestampMixin, SoftDeleteMixin, db.Model):
 class Scan(TimestampMixin, SoftDeleteMixin, db.Model):
     __tablename__ = "scans"
     __table_args__ = (
-        CheckConstraint("type IN ('ev', 'ice')", name="type_valid"),
+        CheckConstraint("type IN ('ev', 'hev', 'ice')", name="type_valid"),
         Index("ix_scans_created_at", "created_at"),
         Index("ix_scans_car_no", "car_no"),
     )
@@ -87,6 +99,9 @@ class Scan(TimestampMixin, SoftDeleteMixin, db.Model):
     car_cc: Mapped[int | None] = mapped_column(Integer)
     car_year: Mapped[int | None] = mapped_column(Integer)
     car_fuel: Mapped[str | None] = mapped_column(String(255))
+    # 유형 판별 근거(manual·fuel·model·ecu·bms·default·reclassified)와 변경 이력([{from,to,source,by,at,reason}]).
+    type_source: Mapped[str | None] = mapped_column(String(20))
+    type_history: Mapped[Any | None] = mapped_column(JSON)
     car_distance: Mapped[int | None] = mapped_column(Integer)
     car_battery_capacity: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     car_discharge_energy: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))

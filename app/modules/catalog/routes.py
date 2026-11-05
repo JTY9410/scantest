@@ -6,7 +6,7 @@ from app.core.pagination import clamp_page
 from app.modules.auth.access import admin_required
 from app.modules.catalog import service
 from app.modules.catalog.forms import CodeForm, CompanyForm
-from app.modules.scans.models import ScanType
+from app.modules.scans.models import CodeType
 
 bp = Blueprint("catalog", __name__, url_prefix="/admin")
 
@@ -43,7 +43,7 @@ def codes():
     code_type = request.args.get("type", "")
     page = service.search_codes(q, code_type, clamp_page(request.args.get("page")))
     return render_template("catalog/codes.html", page=page, q=q, code_type=code_type,
-                           types=list(ScanType), totals=service.code_totals())
+                           types=list(CodeType), totals=service.code_totals())
 
 
 @bp.post("/codes/fill")

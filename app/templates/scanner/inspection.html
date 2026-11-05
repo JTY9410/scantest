@@ -1,5 +1,5 @@
 {% extends "layouts/base.html" %}
-{% block title %}EV 기술 진단 보고서 {{ scan.car_no }}{% endblock %}
+{% block title %}{{ view.heading }} {{ scan.car_no }}{% endblock %}
 {% block body_class %}bg-canvas{% endblock %}
 
 {% macro tile(item) -%}
@@ -25,9 +25,10 @@
 
   <article class="mb-6 overflow-hidden rounded-lg bg-surface shadow-md print:mb-0 print:break-after-page print:shadow-none">
     <header class="bg-ink px-6 py-8 text-on-ink">
-      <p class="text-xs tracking-[0.25em] text-on-ink-muted">EV TECHNICAL INSPECTION REPORT</p>
-      <h1 class="mt-2 text-3xl font-bold">EV 기술 진단 보고서</h1>
-      <p class="mt-2 text-sm text-on-ink-muted">WESCAN 진단 솔루션 기반 · 전기차 고전압 시스템 정밀 진단</p>
+      <p class="text-xs tracking-[0.25em] text-on-ink-muted">{{ view.heading_en }}</p>
+      <h1 class="mt-2 text-3xl font-bold">{{ view.heading }}</h1>
+      <p class="mt-2 text-sm text-on-ink-muted">{{ view.subheading }}</p>
+      <p class="mt-2 text-sm text-on-ink-muted">차량 유형 {{ view.kind_label }} · 판별 근거 {{ view.powertrain.source_label or "-" }}</p>
     </header>
     <div class="grid gap-4 px-6 py-6 sm:grid-cols-2">
       {% for label, value in [
@@ -42,16 +43,31 @@
       </div>
       {% endfor %}
     </div>
+    {% if view.kind == "ev" %}
     <section class="border-t border-line px-6 py-6" aria-labelledby="soh-title">
       <h2 id="soh-title" class="text-sm tracking-[0.2em] text-muted">STATE OF HEALTH — 배터리 건강 상태</h2>
       <p class="mt-2 text-5xl font-bold tabular-nums text-success">{{ "%.1f"|format(view.soh) ~ "%" if view.soh is number else "-" }}</p>
       <p class="mt-2">{{ view.soh_note }}</p>
       <p class="text-sm text-muted">{{ view.mileage_note }}</p>
     </section>
+    {% elif view.kind == "hev" %}
+    <section class="border-t border-line px-6 py-6" aria-label="하이브리드 시스템">
+      <h2 class="text-sm tracking-[0.2em] text-muted">HYBRID SYSTEM — 하이브리드 시스템 진단</h2>
+      <p class="mt-2">{{ view.soh_note }}</p>
+      <p class="text-sm text-muted">{{ view.mileage_note }}</p>
+    </section>
+    {% else %}
+    <section class="border-t border-line px-6 py-6" aria-label="고장 코드 검출 현황">
+      <h2 class="text-sm tracking-[0.2em] text-muted">DTC SUMMARY — 고장 코드 검출 현황</h2>
+      <p class="mt-2 text-5xl font-bold tabular-nums {{ 'text-success' if view.dtc_clear else 'text-danger' }}">{{ view.dtc_count }}건</p>
+      <p class="mt-2">{{ "주요 ECU를 스캔한 결과, 검출된 고장 코드가 없습니다." if view.dtc_clear else "주요 ECU를 스캔한 결과, 고장 코드 " ~ view.dtc_count ~ "건이 검출되었습니다." }}</p>
+      <p class="text-sm text-muted">{{ view.mileage_note }}</p>
+    </section>
+    {% endif %}
     <section class="grid gap-3 border-t border-line px-6 py-6 sm:grid-cols-2" aria-label="종합 판정">
       <div>
         <p class="text-sm tracking-[0.2em] text-muted">OVERALL</p>
-        <p class="text-3xl font-bold {{ 'text-success' if view.overall == '양호' else 'text-warning' }}">{{ view.overall }}</p>
+        <p class="text-3xl font-bold {{ 'text-success' if view.overall == '양호' else ('text-muted' if view.overall == '판정보류' else 'text-warning') }}">{{ view.overall }}</p>
         <p class="mt-1 text-sm">{{ view.judgment_note }}</p>
       </div>
       <div>
@@ -60,7 +76,7 @@
       </div>
     </section>
     <section class="border-t border-line px-6 py-6" aria-labelledby="dtc-groups-title">
-      <h2 id="dtc-groups-title" class="text-sm font-semibold">고장 코드 진단 · 8개 계통 전수 스캔</h2>
+      <h2 id="dtc-groups-title" class="text-sm font-semibold">고장 코드 진단 · {{ view.groups|length }}개 계통 전수 스캔</h2>
       <p class="mt-2 font-semibold">{{ "검출된 고장 코드가 없습니다" if view.dtc_clear else "검출된 고장 코드 " ~ view.dtc_count ~ "건" }}</p>
       <ul class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
         {% for group in view.groups %}
@@ -81,9 +97,9 @@
   <article class="mb-6 rounded-lg bg-surface p-6 shadow-md print:mb-0 print:break-after-page print:shadow-none">
     <p class="text-sm text-muted">{{ view.title }} · {{ view.vehicle.number }}</p>
     <p class="text-sm font-semibold">{{ view.code }}</p>
+    {% if view.kind != "ice" %}
     <h2 class="mt-4 text-xl font-bold">주요 진단 데이터</h2>
-    <p class="text-sm text-muted">{{ view.judgments|length }}개 항목{% if view.judgments and view.overall == '양호' %} · 전항 기준 충족{% endif %}</p>
-    {% if view.judgments %}
+    <p class="text-sm text-muted">{{ view.judgments|length }}개 항목{% if view.overall == '양호' %} · 전항 기준 충족{% elif view.unread %} · 측정불가 {{ view.unread }}개{% endif %}</p>
     <ul class="mt-4 grid gap-3">
       {% for row in view.judgments %}
       <li class="flex flex-wrap items-end justify-between gap-2 border-b border-line pb-3">
@@ -91,17 +107,26 @@
           <p class="font-semibold">{{ row.item }}</p>
           <p class="text-sm text-muted">{{ row.standard }}</p>
         </div>
-        <p class="text-lg font-bold tabular-nums {{ 'text-success' if row.result == '양호' else 'text-warning' }}">{{ row.value }} {{ row.unit }} · {{ row.result }}</p>
+        <p class="text-lg font-bold tabular-nums {{ 'text-success' if row.result == '양호' else ('text-muted' if row.result == '측정불가' else 'text-warning') }}">{% if row.value is not none %}{{ row.value }} {{ row.unit }}{% else %}-{% endif %} · {{ row.result }}</p>
       </li>
       {% endfor %}
     </ul>
-    <p class="mt-4 text-sm text-muted">막대 대신 기준 문장과 실측값을 함께 보여 줍니다. 읽지 못한 항목은 목록에 없습니다.</p>
-    {% else %}
-    <p class="mt-4">{{ view.judgment_note }}</p>
+    {% if view.unread %}<p class="mt-4 text-sm text-muted">측정불가 항목은 이 차량의 스캔에서 값을 읽지 못한 항목입니다. 측정불가 항목이 있으면 종합판정은 '판정보류'입니다.</p>{% endif %}
     {% endif %}
-    <h2 class="mt-8 text-xl font-bold">고장 코드 상세</h2>
-    <p class="mt-2">{{ "검출된 고장 코드가 없습니다." if view.dtc_clear else "검출 " ~ view.dtc_count ~ "건. 코드 목록은 스캔 결과에 있습니다." }}</p>
+    <h2 class="mt-8 text-xl font-bold">고장 코드 상세 <span class="text-base font-semibold text-muted">검출 {{ view.dtc_count }}건</span></h2>
+    {% if view.dtc_rows %}
+    <table class="rtable mt-3">
+      <thead><tr><th scope="col">코드</th><th scope="col">계통</th><th scope="col">제어기</th><th scope="col">상태</th><th scope="col">설명</th></tr></thead>
+      <tbody>{% for row in view.dtc_rows %}
+        <tr><td data-primary class="mono font-semibold">{{ row.code }}</td><td data-label="계통">{{ row.group }}</td><td data-label="제어기">{{ row.ecu }}</td><td data-label="상태">{{ row.status }}</td><td data-label="설명" class="text-sm">{{ row.desc }}</td></tr>
+      {% endfor %}</tbody>
+    </table>
+    {% else %}
+    <p class="mt-2">{{ "검출된 고장 코드가 없습니다." if view.dtc_read else "고장 코드를 읽지 못했습니다." }}</p>
+    {% endif %}
+    {% if view.kind == "ice" %}<p class="mt-6 text-sm text-muted">본 보고서의 수치는 진단 시점의 차량 상태를 기록한 것으로, 이후 사용 조건에 따라 변동될 수 있습니다.</p>{% endif %}
   </article>
+  {% if view.kind != "ice" %}
 
   <article class="mb-6 rounded-lg bg-surface p-6 shadow-md print:mb-0 print:break-after-page print:shadow-none">
     <p class="text-sm text-muted">{{ view.title }} · {{ view.vehicle.number }}</p>
@@ -110,7 +135,7 @@
     <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {% for item in view.bms %}{{ tile(item) }}{% endfor %}
     </div>
-    <h3 class="mt-8 text-lg font-bold">전력 · 충전 · 구동 계통</h3>
+    <h3 class="mt-8 text-lg font-bold">{{ "전력 · 충전 · 구동 계통" if view.kind == "ev" or view.plugin else "전력 · 구동 계통" }}</h3>
     <div class="mt-3 grid gap-3 sm:grid-cols-2">
       {% for item in view.power %}{{ tile(item) }}{% endfor %}
     </div>
@@ -160,5 +185,6 @@
     <p class="mt-2 text-sm text-muted">진단 방식 및 판정 기준 문의: 위카모빌리티(주) 자동차진단기술연구소 · 070-7588-0561</p>
     <p class="mt-2 text-sm font-semibold">{{ view.code }}</p>
   </article>
+  {% endif %}
 </main>
 {% endblock %}

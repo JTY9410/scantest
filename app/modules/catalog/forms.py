@@ -3,7 +3,7 @@ from wtforms import SelectField, StringField, TextAreaField
 from wtforms.fields import SelectChoice
 from wtforms.validators import DataRequired, Length, Optional, Regexp
 
-from app.modules.scans.models import ScanType
+from app.modules.scans.models import CodeType
 
 
 class CompanyForm(FlaskForm):
@@ -24,7 +24,7 @@ def _text(label: str) -> TextAreaField:
 
 
 class CodeForm(FlaskForm):
-    type = SelectField("차종", choices=[SelectChoice(t.value, t.label) for t in ScanType])
+    type = SelectField("차종", choices=[SelectChoice(t.value, t.label) for t in CodeType])
     code = StringField("고장코드", validators=[DataRequired("고장코드를 입력하세요."), Length(max=255)])
     unit_name = StringField("유니트명", validators=[DataRequired("유니트명을 입력하세요."), Length(max=255)])
     unit_type = StringField("유니트 구분", validators=[Optional(), Length(max=255)])

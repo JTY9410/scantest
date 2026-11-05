@@ -106,7 +106,9 @@ def test_run_then_result_page_shows_wescan_format(admin_client):
     assert "오류 기록" in html and "시간 초과" in html and "ISO 15765-4 CAN" in html
     assert "분석 요약" in html and "배출 점검(레디니스)" in html and "불꽃 점화" in html
     report = admin_client.get(f"/admin/scan/{saved['id']}/report").get_data(as_text=True)
-    assert "EV 기술 진단 보고서" in report and "8개 계통" in report and "BMS 센서 데이터" in report
+    # 경유 차량이라 내연기관(OBD-II DTC) 보고서: 6개 계통, 배터리 쪽 없음.
+    assert "자동차 DTC 진단 보고서" in report and "6개 계통" in report and "BMS 센서 데이터" not in report
+    assert "P0133" in report
     show = admin_client.get(f"/admin/scans/{saved['id']}").get_data(as_text=True)
     assert "위스캔 결과" in show and "스캔 오류 1건" in show and f"/admin/scan/{saved['id']}/pdf" in show
     assert "/admin/canlab/datasets/" in show and "/admin/canlab/compare?dataset_id=" in show
