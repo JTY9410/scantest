@@ -2076,14 +2076,21 @@ def reconcile_finalize(actor: User, run: AnalysisRun):
     dtcs = [{"code": d["code"], "ecu": d["ecu"], "kind": "위스캔", "desc": None, "system": None}
             for d in dtc.get("final") or []]
     battery = final_values(result)
+    steps = result.get("steps")
+    if steps is None and result.get("wescan_dataset_id"):  # 단계 저장 전에 만든 대조 기록
+        from app.modules.canlab.engine.reconcile import comm_steps
+        steps = comm_steps(load_trace(decode_text(get_dataset(result["wescan_dataset_id"], with_content=True).content)))
+    steps = steps or []
+    errors = [s for s in steps if s["status"] not in ("ok", "unsupported", "skipped", "pending")]
     data = {
         "source": RECONCILE_SOURCE, "origin_label": "완료 데이터 대조", "status": "ok", "transport": "upload",
         "device": "완료 데이터 대조", "dialect": None, "car": car, "vin": vin.get("wescan"),
-        "battery": battery, "cells": result.get("cells") or {}, "dtcs": dtcs, "values": [], "steps": [],
-        "errors": [], "powertrain": kind, "dataset_id": result.get("wescan_dataset_id"),
-        "counts": {"total": len(result.get("items") or []), "ok": (result.get("counts") or {}).get("일치", 0),
-                   "unsupported": 0, "errors": 0},
-        "notes": ["완료 데이터 대조로 만든 결과입니다(위스캔 통신기록 vs 리버스데이터). 단계별 통신 기록은 대조 화면에 있습니다."],
+        "battery": battery, "cells": result.get("cells") or {}, "dtcs": dtcs, "values": [], "steps": steps,
+        "errors": errors, "powertrain": kind, "dataset_id": result.get("wescan_dataset_id"),
+        "counts": {"total": len(steps), "ok": sum(s["status"] == "ok" for s in steps),
+                   "unsupported": sum(s["status"] == "unsupported" for s in steps), "errors": len(errors)},
+        "notes": ["완료 데이터 대조로 만든 결과입니다(위스캔 통신기록 vs 리버스데이터). "
+                  "단계별 통신 기록은 위스캔 통신기록의 요청/응답 짝으로 만들었습니다."],
         "monitor": {}, "ecus": [], "ecu_names": {}, "ecu_values": {}, "freeze_frame": None, "iumpr": None,
         "snapshots": [], "calibration_ids": [], "cvns": [], "systems": {}, "protocol": {"name": "통신기록 업로드"},
         "voltage": None, "vin_match": None, "scan_logic": None, "report_id": None,

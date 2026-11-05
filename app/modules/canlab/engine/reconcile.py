@@ -176,6 +176,52 @@ def _grade(base: str, status: str) -> str:
     return LIKELY if base == CONFIRMED else UNKNOWN  # 위스캔에만: 리버스로 검증하지 못했다
 
 
+_SERVICE_STEP = {  # 서비스 → (결과 화면 단계 출처 group, 이름)
+    0x01: ("pid", "실시간 데이터"), 0x02: ("freeze", "고장 당시 데이터"), 0x03: ("dtc", "고장코드(OBD)"),
+    0x07: ("dtc", "대기 고장코드(OBD)"), 0x09: ("vehicle", "차량정보"), 0x0A: ("dtc", "영구 고장코드(OBD)"),
+    0x10: ("uds", "진단 세션"), 0x14: ("dtc", "고장코드 지우기"), 0x19: ("dtc", "고장코드(UDS)"),
+    0x1A: ("maker", "제조사 정보(KWP)"), 0x21: ("maker", "제조사 데이터(KWP)"), 0x22: ("maker", "제조사 데이터"),
+    0x27: ("uds", "보안 접근"), 0x3E: ("uds", "연결 유지"),
+}
+_UNSUPPORTED_NRC = {0x11, 0x12, 0x31, 0x7E, 0x7F}
+
+
+def comm_steps(trace: Trace) -> list[dict]:
+    """위스캔 통신기록의 요청/응답 짝을 결과 화면 단계 형식(scanner.interpret._row)으로 만든다.
+
+    단계 구분(header)은 요청 주소, 출처(group)는 서비스 종류다. 응답 원문은 200자까지만 둔다.
+    VIN 응답(09 02, 22 F190)은 원문을 남기지 않는다(개인정보)."""
+    from app.modules.canlab.engine.uds import NEGATIVE_CODES, ecu_label
+
+    rows = []
+    for index, tx in enumerate(trace.transactions, 1):
+        group, name = _SERVICE_STEP.get(tx.service, ("uds", f"서비스 {tx.service:02X}"))
+        command = tx.request.hex(" ").upper()
+        did = tx.did
+        label = f"{ecu_label(tx.request_id)} · {name}" + (f" {did:04X}" if did is not None else "")
+        vin = (tx.service == 0x09 and tx.request[1:2] == b"\x02") or did == 0xF190
+        if tx.negative_code is not None:
+            status = "unsupported" if tx.negative_code in _UNSUPPORTED_NRC else "negative"
+            message = f"NRC {tx.negative_code:02X} {NEGATIVE_CODES.get(tx.negative_code, '')}".strip()
+        elif tx.response is not None:
+            status = "ok"
+            message = "VIN 응답(원문 생략)" if vin else tx.response.hex(" ").upper()[:60]
+        elif not tx.expects_response:
+            status, message = "ok", "응답 생략 요청(정상)"
+        else:
+            status, message = "no_data", "응답 없음"
+        raw = "" if vin or tx.response is None else tx.response.hex(" ").upper()[:200]
+        latency = None if tx.response_t_ms is None else round(tx.response_t_ms - tx.t_ms, 1)
+        rows.append({"id": index, "group": group, "label": label, "header": f"{tx.request_id:03X}",
+                     "command": command, "status": status, "status_label": _STATUS_LABEL.get(status, status),
+                     "message": message + (f" · {latency} ms" if latency is not None else ""), "raw": raw,
+                     "t_ms": round(tx.t_ms, 1)})
+    return rows
+
+
+_STATUS_LABEL = {"ok": "성공", "no_data": "응답 없음", "unsupported": "지원 안 함", "negative": "부정 응답"}
+
+
 def _commands(trace: Trace) -> list[tuple[str, str]]:
     out = []
     for tx in trace.transactions:
@@ -316,6 +362,7 @@ def reconcile(wescan: Trace, reverse: list[Trace], *, kind: str, model_hint: str
         grades[item["grade"]] = grades.get(item["grade"], 0) + 1
     return {
         "kind": kind, "platform": platform, "vin": vin,
+        "steps": comm_steps(wescan),
         "coverage": coverage(kind, _commands(wescan), [c for t in reverse for c in _commands(t)]),
         "items": items, "measured_only": measured_only, "dtc": dtc,
         "cells": detail, "counts": counts, "grades": grades,

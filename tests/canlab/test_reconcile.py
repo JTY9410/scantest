@@ -111,7 +111,15 @@ def test_reconcile_web_flow_requires_vin_confirm_then_finalizes_scan(app, admin_
         assert "soh" in scans[0].bms_data["battery"]
         scan_id = scans[0].id
     assert again.headers["Location"].endswith(f"/admin/scan/{scan_id}")
-    assert admin_client.get(f"/admin/scan/{scan_id}").status_code == 200
+    page = admin_client.get(f"/admin/scan/{scan_id}")
+    assert page.status_code == 200
+    html = page.get_data(as_text=True)
+    # 단계별 통신 기록: 위스캔 요청/응답 짝을 요청 주소별 단계로 보여 준다(기존 결과 화면 형식)
+    assert "저장된 단계가 없습니다" not in html and "7E4 ·" in html and "22 01 01" in html
+    with app.app_context():
+        steps = db.session.get(Scan, scan_id).bms_data["steps"]
+        assert steps and {"id", "group", "label", "header", "command", "status", "message", "raw"} <= set(steps[0])
+        assert all(s["status"] in {"ok", "no_data", "unsupported", "negative"} for s in steps)
     report = admin_client.get(f"/admin/scan/{scan_id}/report").get_data(as_text=True)
     assert "EV 기술 진단 보고서" in report and "대조 근거" in report and "(확인됨)" in report
     pdf = admin_client.get(f"/admin/scan/{scan_id}/pdf")
