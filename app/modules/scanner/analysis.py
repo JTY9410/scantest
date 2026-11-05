@@ -52,7 +52,8 @@ def _ev(result: dict) -> list[dict]:
                     "coulomb_counting": "누적 충방전량 기반 추정",
                     "energy_throughput": "누적 에너지량 기반 추정",
                     "time_based_fallback": "운영 시간 기반 추정",
-                    "fusion": "복합 추정"
+                    "fusion": "복합 추정",
+                    "bms_direct": "BMS 직접값"
                 }.get(estimated_soh.method, estimated_soh.method)
                 
                 value_text = f"{estimated_soh.soh:g} % (추정)"
@@ -65,7 +66,7 @@ def _ev(result: dict) -> list[dict]:
                     "range": "60 ~ 100 %",
                     "method": "estimated",
                     "estimation_method": method_label,
-                    "assumptions": estimated_soh.assumptions
+                    "assumptions": (estimated_soh.details or {}).get("assumptions")
                 })
     
     high, low = _item(result, "max_cell_v"), _item(result, "min_cell_v")

@@ -19,13 +19,13 @@ from app.core.errors import ServiceError
 from app.extensions import db
 from app.modules.accounts.models import User
 from app.modules.canlab import ai, references
-from app.modules.canlab.engine import signals, uds
+from app.modules.canlab.engine import bms, sequence, signals, uds
 from app.modules.canlab.engine.decode import RuleRef, Trace, decode_signals, diagnose, load_trace
 from app.modules.canlab.engine.frames import decode_text, elm_from_exchanges
 from app.modules.canlab.engine.search import GroundTruth, Layout, Samples, search
 from app.modules.canlab.engine.validate import judge
 from app.modules.canlab.models import (
-    AnalysisRun, CanDataset, ChangeAction, DatasetKind, DatasetSource, DecodeRule, DiagnosticReport,
+    AnalysisRun, CanDataset, ChangeAction, DatasetKind, DatasetSource, FileFormat, DecodeRule, DiagnosticReport,
     GroundTruthValue, LogicStatus, RuleChange, RuleIncident, RuleStatus, ScanLogic, ScanWescanCompare,
     TruthSource,
 )
@@ -35,7 +35,8 @@ from app.modules.obd.service import list_profiles
 from app.modules.scans import car_info
 
 CONFLICT = "다른 관리자가 먼저 바꿨습니다. 새로고침한 뒤 다시 시도하세요."
-TRACE_EXTENSIONS = (".trc", ".txt", ".log")
+TRACE_EXTENSIONS = (".trc", ".txt", ".log", ".csv")
+TRACE_EXTENSIONS_TEXT = ".trc, .txt, .log, .csv"
 VALUE_EXTENSIONS = (".txt", ".csv", ".tsv")
 MAX_TRUTH_LINES = 200
 MAX_PDF_PAGES = 20
@@ -120,7 +121,7 @@ def get_dataset(dataset_id: int, with_content: bool = False) -> CanDataset:
     return dataset
 
 
-def _trace_summary(trace: Trace) -> dict:
+def _trace_summary(trace: Trace, model_hint: str | None = None) -> dict:
     times = [t for rows in trace.samples.values() for t, _ in rows]
     diagnosis = diagnose(trace)
     return {
@@ -135,6 +136,9 @@ def _trace_summary(trace: Trace) -> dict:
         "ecus": diagnosis["ecus"],
         "dtc_count": sum(len(v) for v in diagnosis["dtcs"].values()),
         "commands": extract_commands(trace),
+        "sequence": sequence.command_sequence(trace.transactions),
+        "bms": bms.decode_bms(trace.samples, model_hint),
+        "status_rows": int((trace.meta or {}).get("STATUS_ROWS") or 0),
     }
 
 
@@ -181,8 +185,43 @@ def dataset_commands(dataset: CanDataset) -> list[dict]:
 def _responded_trace(content: bytes) -> Trace:
     trace = load_trace(decode_text(content))
     if not any(tx.response is not None for tx in trace.transactions):
-        raise ServiceError("진단 요청·응답을 찾지 못했습니다. PCAN TRC 또는 위카 ELM 기록인지 확인하세요.")
+        raise ServiceError("진단 요청·응답을 찾지 못했습니다. PCAN TRC·CSV 또는 위카 ELM 기록인지 확인하세요.")
     return trace
+
+
+def diagnostic_csv(content: bytes) -> bytes:
+    """PCAN 계열 CSV에서 헤더와 진단 프레임(CAN ID 0x700~0x7FF) 행만 남긴다. 방송 CAN 분석은 원본에서 이미 요약했다."""
+    text = decode_text(content).lstrip("\ufeff")
+    lines = text.splitlines()
+    if not lines:
+        return content
+    header = [c.strip().lower() for c in lines[0].split(",")]
+    if "can_id" not in header:
+        return content
+    index = header.index("can_id")
+    kept = [lines[0]]
+    for line in lines[1:]:
+        cells = line.split(",")
+        try:
+            if 0x700 <= int(cells[index], 16) <= 0x7FF:
+                kept.append(line)
+        except (ValueError, IndexError):
+            continue
+    return ("\n".join(kept) + "\n").encode("utf-8")
+
+
+def tool_compare(a: CanDataset, b: CanDataset) -> dict:
+    """두 통신기록(보통 위스캔 a·지스캔 b, 같은 차량)의 ECU·DID 커버리지·응답 일치·지연 비교."""
+    if not (a.is_trace and b.is_trace):
+        raise ServiceError("통신 기록끼리만 비교할 수 있습니다.")
+    traces = [load_trace(decode_text(get_dataset(d.id, with_content=True).content)) for d in (a, b)]
+    result = sequence.compare_tools(traces[0].transactions, traces[1].transactions)
+    bms_a, bms_b = (bms.decode_bms(t.samples, d.vehicle) for t, d in zip(traces, (a, b)))
+    if bms_a and bms_b:
+        keys = [f["key"] for f in bms_a["fields"] if f["grade"] == bms.CONFIRMED]
+        result["bms"] = [{"key": k, "label": next(f["label"] for f in bms_a["fields"] if f["key"] == k),
+                          "a": bms_a["values"].get(k), "b": bms_b["values"].get(k)} for k in keys]
+    return result
 
 
 def _pdf_reader(content: bytes):
@@ -202,7 +241,10 @@ def _pdf_summary(content: bytes) -> dict:
 
 def upload_dataset(actor: User, *, filename: str, content: bytes, kind: str, vehicle: str,
                    note: str | None = None, source: str = DatasetSource.UPLOAD,
-                   maker: str | None = None, model: str | None = None) -> CanDataset:
+                   maker: str | None = None, model: str | None = None,
+                   diagnostic_only: bool = False) -> CanDataset:
+    """diagnostic_only: CSV에서 진단 프레임(7xx)만 남겨 저장한다(방송 CAN이 대부분인 대용량 기록용).
+    중복 판정(sha256)은 원본 파일 기준이다."""
     if kind not in {k.value for k in DatasetKind}:
         raise ServiceError("데이터 종류를 확인하세요.")
     if not content:
@@ -215,17 +257,23 @@ def upload_dataset(actor: User, *, filename: str, content: bytes, kind: str, veh
         if not (lower.endswith(".pdf") and content.startswith(b"%PDF")):
             raise ServiceError("결과지는 PDF 파일이어야 합니다.")
         summary = _pdf_summary(content)
+        file_format = FileFormat.PDF
     else:
         if not lower.endswith(TRACE_EXTENSIONS):
-            raise ServiceError("통신 기록은 .trc, .txt, .log 파일이어야 합니다.")
-        summary = _trace_summary(_responded_trace(content))
+            raise ServiceError(f"통신 기록은 {TRACE_EXTENSIONS_TEXT} 파일이어야 합니다.")
+        summary = _trace_summary(_responded_trace(content), " ".join(v for v in (vehicle, model) if v))
+        file_format = summary.get("format")
 
     digest = hashlib.sha256(content).hexdigest()
+    if diagnostic_only and file_format == FileFormat.PCAN_CSV:
+        original = len(content)
+        content = diagnostic_csv(content)
+        summary["stored"] = {"diagnostic_only": True, "original_bytes": original, "stored_bytes": len(content)}
     existing = db.session.scalar(select(CanDataset.id).where(CanDataset.sha256 == digest))
     if existing:
         raise ServiceError(f"이미 등록된 파일입니다(데이터 #{existing}).", 409, dataset_id=existing)
 
-    dataset = CanDataset(kind=kind, source=source, vehicle=vehicle.strip()[:100], filename=filename[:255],
+    dataset = CanDataset(kind=kind, file_format=file_format, source=source, vehicle=vehicle.strip()[:100], filename=filename[:255],
                          sha256=digest, size=len(content), content=content, summary=summary,
                          note=(note or "").strip()[:500] or None, uploaded_by=actor.id,
                          maker=(maker or "").strip()[:50] or None, model=(model or "").strip()[:100] or None)
@@ -453,7 +501,7 @@ def ingest(actor: User, *, car_no: str | None, wescan: tuple[str, bytes], values
         raise ServiceError("리버스데이터를 하나 이상 올리세요.")
     for filename, content in reverse:
         if not filename.lower().endswith(TRACE_EXTENSIONS):
-            raise ServiceError(f"'{filename}': 리버스데이터는 .trc, .txt, .log 파일이어야 합니다.")
+            raise ServiceError(f"'{filename}': 리버스데이터는 {TRACE_EXTENSIONS_TEXT} 파일이어야 합니다.")
         _responded_trace(content)
     name = " ".join(v for v in (vehicle["maker"], vehicle["model"], vehicle["submodel"]) if v)
     wescan_dataset = upload_wescan(actor, filename=wescan[0], content=wescan[1], vehicle=name,

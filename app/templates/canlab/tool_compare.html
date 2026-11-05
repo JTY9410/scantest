@@ -1,0 +1,62 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, field, badge %}
+{% block title %}위스캔·지스캔 비교{% endblock %}
+
+{% block content %}
+{{ page_header("위스캔·지스캔 비교", "같은 차량의 두 통신기록을 제어기·DID 커버리지, 응답 일치, 응답 지연으로 비교합니다.") }}
+{% include "canlab/_tabs.html" %}
+
+<section class="card card-body mb-6">
+  <form method="get" class="grid gap-4 md:grid-cols-2">
+    {{ field(form.a) }}
+    {{ field(form.b) }}
+    <div class="md:col-span-2"><button class="btn btn-primary" type="submit">비교</button></div>
+  </form>
+</section>
+
+{% if result %}
+<section class="card card-body mb-6" aria-labelledby="cov-title">
+  <h2 id="cov-title" class="text-lg font-bold">커버리지</h2>
+  <dl class="dl mt-3 tabular-nums">
+    <dt>요청 수</dt><dd>위스캔 {{ result.transactions.a }} · 지스캔 {{ result.transactions.b }}</dd>
+    <dt>응답한 제어기</dt><dd>위스캔 {{ result.ecus.a }} · 지스캔 {{ result.ecus.b }} · 공통 {{ result.ecus.common }}{% if result.ecus.only_a %} · 위스캔만 {{ result.ecus.only_a|join(", ") }}{% endif %}</dd>
+    <dt>지스캔만 응답한 제어기</dt><dd class="mono text-sm">{{ result.ecus.only_b|join(", ") or "-" }}</dd>
+    <dt>읽은 DID(22)</dt><dd>위스캔 {{ result.dids.a }} · 지스캔 {{ result.dids.b }} · 공통 {{ result.dids.common }}</dd>
+    <dt>위스캔만 읽은 DID</dt><dd class="mono text-sm">{{ result.dids.only_a|join(", ") or "-" }}</dd>
+    <dt>지스캔만 읽은 DID</dt><dd class="mono text-sm">{{ result.dids.only_b|join(", ") or "-" }}</dd>
+    <dt>응답 지연(긍정, ms)</dt><dd>위스캔 {{ result.latency_ms.a.median if result.latency_ms.a else "-" }} · 지스캔 {{ result.latency_ms.b.median if result.latency_ms.b else "-" }} (중앙값)</dd>
+    <dt>공통 DID 판정</dt><dd>{% for k, v in result.verdicts.items() %}{{ k }} {{ v }}{{ " · " if not loop.last }}{% endfor %}</dd>
+  </dl>
+</section>
+
+<section class="card overflow-hidden mb-6">
+  <h2 class="card-body pb-0 text-lg font-bold">공통 DID 응답 비교</h2>
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">요청·DID</th><th scope="col">판정</th><th scope="col" class="num">길이(위/지)</th><th scope="col" class="num">같은 바이트</th><th scope="col" class="num">지연 ms(위/지)</th></tr></thead>
+    <tbody>
+      {% for r in result.rows %}
+      <tr>
+        <td data-primary class="mono">{{ r.request_id }} 22 {{ r.did }}</td>
+        <td>{{ badge(r.verdict, "success" if r.verdict == "일치" else ("warning" if r.verdict == "부분 일치" else "danger")) }}</td>
+        <td class="num">{{ r.length_a }} / {{ r.length_b }}</td>
+        <td class="num">{{ r.same_bytes }}</td>
+        <td class="num">{{ r.latency_a if r.latency_a is not none else "-" }} / {{ r.latency_b if r.latency_b is not none else "-" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+{% if result.bms %}
+<section class="card overflow-hidden">
+  <h2 class="card-body pb-0 text-lg font-bold">BMS 확인됨 항목 값 비교</h2>
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">항목</th><th scope="col" class="num">위스캔</th><th scope="col" class="num">지스캔</th></tr></thead>
+    <tbody>
+      {% for r in result.bms %}<tr><td data-primary>{{ r.label }}</td><td class="num tabular-nums">{{ r.a }}</td><td class="num tabular-nums">{{ r.b }}</td></tr>{% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% endif %}
+{% endblock %}

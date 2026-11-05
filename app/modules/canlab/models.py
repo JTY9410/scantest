@@ -21,8 +21,8 @@ class DatasetKind(enum.StrEnum):
     @property
     def label(self) -> str:
         return {
-            "gscan_trc": "리버스 데이터 TRC",
-            "wecan_trc": "위스캔 스캔 데이터",
+            "gscan_trc": "지스캔(리버스) 통신기록",
+            "wecan_trc": "위스캔 통신기록",
             "live_capture": "블루투스 실시간 수집",
             "gscan_pdf": "G스캔 결과지 PDF(정답값)",
         }[self.value]
@@ -30,6 +30,19 @@ class DatasetKind(enum.StrEnum):
     @property
     def is_trace(self) -> bool:
         return self is not DatasetKind.GSCAN_PDF
+
+
+class FileFormat(enum.StrEnum):
+    """파일 형식. 데이터 종류(kind = 어떤 도구·용도의 기록인지)와 따로 둔다."""
+    PCAN_TRC = "pcan_trc"
+    PCAN_CSV = "pcan_csv"
+    WECAR_ELM = "wecar_elm"
+    PDF = "pdf"
+
+    @property
+    def label(self) -> str:
+        return {"pcan_trc": "PCAN TRC", "pcan_csv": "CSV(PCAN 계열)", "wecar_elm": "위카 ELM 기록",
+                "pdf": "PDF"}[self.value]
 
 
 class DatasetSource(enum.StrEnum):
@@ -93,6 +106,8 @@ class CanDataset(ScopeMixin, TimestampMixin, db.Model):
         primary_key=True
     )
     kind: Mapped[str] = mapped_column(String(20))
+    # 예전 데이터는 마이그레이션에서 채운다. 알 수 없으면 NULL(화면에서는 요약의 format을 쓴다).
+    file_format: Mapped[str | None] = mapped_column(String(20))
     source: Mapped[str] = mapped_column(String(10), default=DatasetSource.UPLOAD)
     vehicle: Mapped[str] = mapped_column(String(100))
     filename: Mapped[str] = mapped_column(String(255))
@@ -115,6 +130,14 @@ class CanDataset(ScopeMixin, TimestampMixin, db.Model):
     @property
     def source_label(self) -> str:
         return DatasetSource(self.source).label
+
+    @property
+    def format_label(self) -> str:
+        value = self.file_format or (self.summary or {}).get("format")
+        try:
+            return FileFormat(value).label
+        except ValueError:
+            return value or "-"
 
     @property
     def is_trace(self) -> bool:

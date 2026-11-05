@@ -24,7 +24,7 @@
       {% if dataset.note %}<dt>메모</dt><dd>{{ dataset.note }}</dd>{% endif %}
       {% if dataset.is_trace %}
       {% set s = dataset.summary %}
-      <dt>형식</dt><dd>{{ "PCAN TRC" if s.format.startswith("pcan") else "위카 ELM 기록" }} · 프레임 {{ "{:,}".format(s.frames) }}개{% if s.skipped_lines %} · 읽지 못한 줄 {{ s.skipped_lines }}{% endif %}</dd>
+      <dt>형식</dt><dd>{{ dataset.format_label }} · 프레임 {{ "{:,}".format(s.frames) }}개{% if s.skipped_lines %} · 읽지 못한 줄 {{ s.skipped_lines }}{% endif %}{% if s.status_rows %} · 장비 상태 행 {{ s.status_rows }}개 제외{% endif %}{% if s.stored and s.stored.diagnostic_only %} · 진단 프레임만 저장({{ "{:,}".format(s.stored.original_bytes) }}→{{ "{:,}".format(s.stored.stored_bytes) }} 바이트){% endif %}</dd>
       <dt>요청·응답</dt><dd class="tabular-nums">{{ s.transactions }}건 · 데이터 표본 {{ s.samples }}개 · {{ s.duration_s }}초</dd>
       <dt>차대번호</dt><dd class="mono">{{ s.vin or "기록 없음" }}</dd>
       <dt>고장코드</dt><dd>{{ s.dtc_count }}개</dd>
@@ -75,6 +75,8 @@
   </section>
   {% endif %}
 </div>
+
+{% if dataset.is_trace %}{% include "canlab/_sequence_bms.html" %}{% endif %}
 
 {% if dataset.is_trace and dataset.summary.commands %}
 <section class="card mt-6 overflow-hidden" aria-labelledby="commands-title">

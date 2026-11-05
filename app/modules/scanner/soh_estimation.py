@@ -203,6 +203,42 @@ def estimate_soh_by_time(
     )
 
 
+# 같은 값이 호출 경로마다 다른 키로 온다. canlab 디코더·OBDb 신호 키(cum_charge_ah 등)가 표준이고,
+# battery_*·cumulative_* 는 예전 호출 호환용이다(2026-11-05 확인: scanner/analysis는 표준 키만 넘긴다).
+KEY_ALIASES = {
+    "cum_charge_ah": ("cum_charge_ah", "battery_cum_charge_ah", "cumulative_charge_ah"),
+    "cum_discharge_ah": ("cum_discharge_ah", "battery_cum_discharge_ah", "cumulative_discharge_ah"),
+    "cum_charge_kwh": ("cum_charge_kwh", "battery_cum_charge_kwh", "cumulative_charge_kwh"),
+    "cum_discharge_kwh": ("cum_discharge_kwh", "battery_cum_discharge_kwh", "cumulative_discharge_kwh"),
+    "operating_time_s": ("operating_time_s", "total_operating_time_s"),
+    "soh": ("soh", "soh_direct", "battery_soh"),
+}
+
+
+def _get(ev_data: dict, key: str):
+    for alias in KEY_ALIASES.get(key, (key,)):
+        if ev_data.get(alias):
+            return ev_data[alias]
+    return None
+
+
+def battery_indicators(ev_data: dict, spec: dict | None = None) -> dict:
+    """보조 지표: 충방전 효율, kWh/Ah(= 팩 공칭전압 근처여야 파싱이 맞다), 등가 사이클(공칭 용량 필요)."""
+    out: dict = {}
+    c_ah, d_ah = _get(ev_data, "cum_charge_ah"), _get(ev_data, "cum_discharge_ah")
+    c_kwh, d_kwh = _get(ev_data, "cum_charge_kwh"), _get(ev_data, "cum_discharge_kwh")
+    if c_kwh and d_kwh:
+        out["efficiency_pct"] = round(d_kwh / c_kwh * 100, 1)
+    if c_ah and c_kwh:
+        out["kwh_per_ah_v"] = round(c_kwh * 1000 / c_ah, 1)
+    if d_ah and spec and spec.get("capacity_ah"):
+        out["equivalent_cycles"] = round(d_ah / spec["capacity_ah"], 1)
+    high, low = ev_data.get("max_cell_v"), ev_data.get("min_cell_v")
+    if high and low:
+        out["cell_spread_mv"] = round((high - low) * 1000)
+    return out
+
+
 def estimate_soh(ev_data: dict, car: dict | None = None) -> SOHEstimate | None:
     """
     EV 진단 데이터에서 SOH를 추정한다.
@@ -224,10 +260,16 @@ def estimate_soh(ev_data: dict, car: dict | None = None) -> SOHEstimate | None:
     
     # 배터리 사양 조회
     spec = get_battery_spec(car)
-    
-    # Method 1: Coulomb Counting (최우선)
-    cum_charge_ah = ev_data.get("battery_cum_charge_ah") or ev_data.get("cumulative_charge_ah")
-    cum_discharge_ah = ev_data.get("battery_cum_discharge_ah") or ev_data.get("cumulative_discharge_ah")
+
+    # Method 0: BMS가 산출한 SOH(현대·기아 7E4 22 0105 idx25–26, 확인됨)가 있으면 그대로 쓴다.
+    direct = _get(ev_data, "soh")
+    if direct and 0 < direct <= 110:
+        return SOHEstimate(soh=round(float(direct), 1), method="bms_direct", confidence=0.95,
+                           details={"source": "BMS 0105", "indicators": battery_indicators(ev_data, spec)})
+
+    # Method 1: Coulomb Counting
+    cum_charge_ah = _get(ev_data, "cum_charge_ah")
+    cum_discharge_ah = _get(ev_data, "cum_discharge_ah")
     
     if cum_charge_ah and cum_discharge_ah:
         return estimate_soh_by_throughput(
@@ -238,8 +280,8 @@ def estimate_soh(ev_data: dict, car: dict | None = None) -> SOHEstimate | None:
         )
     
     # Method 2: Energy Throughput
-    cum_charge_kwh = ev_data.get("battery_cum_charge_kwh") or ev_data.get("cumulative_charge_kwh")
-    cum_discharge_kwh = ev_data.get("battery_cum_discharge_kwh") or ev_data.get("cumulative_discharge_kwh")
+    cum_charge_kwh = _get(ev_data, "cum_charge_kwh")
+    cum_discharge_kwh = _get(ev_data, "cum_discharge_kwh")
     
     if cum_charge_kwh and cum_discharge_kwh:
         return estimate_soh_by_energy(
@@ -250,7 +292,7 @@ def estimate_soh(ev_data: dict, car: dict | None = None) -> SOHEstimate | None:
         )
     
     # Method 3: Time-based (최후)
-    operating_time = ev_data.get("operating_time_s") or ev_data.get("total_operating_time_s")
+    operating_time = _get(ev_data, "operating_time_s")
     
     if operating_time and operating_time > 0:
         # 온도 데이터가 있으면 사용

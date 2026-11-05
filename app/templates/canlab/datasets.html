@@ -3,7 +3,7 @@
 {% block title %}전체 데이터{% endblock %}
 
 {% block content %}
-{{ page_header("전체 데이터", "등록된 모든 통신 기록·결과지입니다. 파일은 4MB 이하, 같은 파일은 한 번만 등록됩니다.") }}
+{{ page_header("전체 데이터", "등록된 모든 통신 기록·결과지입니다. 파일은 " ~ (config.CANLAB_MAX_UPLOAD_BYTES // 1048576) ~ "MB 이하, 같은 파일은 한 번만 등록됩니다.") }}
 {% include "scanner/_path.html" %}
 {% include "canlab/_tabs.html" %}
 
@@ -11,11 +11,13 @@
   <h2 id="upload-title" class="text-lg font-bold">파일 올리기</h2>
   <form method="post" enctype="multipart/form-data" class="mt-4 grid gap-4 md:grid-cols-2" novalidate>
     {{ form.csrf_token }}
-    {{ field(form.file, help="PCAN TRC(.trc), 위카 ELM 기록(.txt/.log), G스캔 결과지(.pdf)", accept=".trc,.txt,.log,.pdf") }}
+    {{ field(form.file, help="PCAN TRC(.trc), PCAN 계열 CSV(.csv, 위스캔·지스캔 수집), 위카 ELM 기록(.txt/.log), G스캔 결과지(.pdf)", accept=".trc,.csv,.txt,.log,.pdf") }}
     {{ field(form.kind) }}
     {{ field(form.vehicle, placeholder="예: 그랜저 HEV 2024") }}
     {{ field(form.note) }}
-    <div class="md:col-span-2"><button class="btn btn-primary" type="submit">올리기</button></div>
+    <label class="flex items-center gap-2 text-sm md:col-span-2">{{ form.diagnostic_only() }} {{ form.diagnostic_only.label.text }}</label>
+    <div class="md:col-span-2 flex gap-3"><button class="btn btn-primary" type="submit">올리기</button>
+      <a class="btn" href="{{ url_for('canlab.tool_compare') }}">위스캔·지스캔 비교</a></div>
   </form>
 </section>
 

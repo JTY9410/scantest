@@ -7,7 +7,7 @@ from app.modules.auth.access import admin_required
 from app.modules.canlab import references, service
 from app.modules.canlab.engine import signals
 from app.modules.canlab.forms import (
-    ActionForm, CompareForm, InputForm, ObdbSyncForm, ReferenceUrlForm, ReportForm, TruthTextForm, UploadForm,
+    ActionForm, CompareForm, InputForm, ObdbSyncForm, ReferenceUrlForm, ReportForm, ToolCompareForm, TruthTextForm, UploadForm,
 )
 from app.modules.canlab.models import DatasetKind, DatasetSource, LogicStatus, ReferenceStatus, RuleStatus
 
@@ -41,6 +41,7 @@ def datasets():
             dataset = service.upload_dataset(
                 current_user, filename=upload.filename or "upload", content=upload.read(),
                 kind=form.kind.data, vehicle=form.vehicle.data, note=form.note.data,
+                diagnostic_only=bool(form.diagnostic_only.data),
             )
         except ServiceError as error:
             status = _flash_error(error)
@@ -50,6 +51,23 @@ def datasets():
     elif request.method == "POST":
         status = 400
     return render_template("canlab/datasets.html", form=form, datasets=service.list_datasets()), status
+
+
+@bp.get("/datasets/compare-tools")
+@admin_required
+def tool_compare():
+    form = ToolCompareForm(request.args)
+    traces = [d for d in service.list_datasets() if d.is_trace]
+    choices = [SelectChoice(0, "— 고르세요 —")] + [
+        SelectChoice(d.id, f"#{d.id} {d.kind_label} · {d.vehicle} · {d.filename}"[:120]) for d in traces]
+    form.a.choices = form.b.choices = choices
+    result = None
+    if form.a.data and form.b.data:
+        try:
+            result = service.tool_compare(service.get_dataset(form.a.data), service.get_dataset(form.b.data))
+        except ServiceError as error:
+            return render_template("canlab/tool_compare.html", form=form, result=None), _flash_error(error)
+    return render_template("canlab/tool_compare.html", form=form, result=result)
 
 
 @bp.get("/datasets/<int:dataset_id>")

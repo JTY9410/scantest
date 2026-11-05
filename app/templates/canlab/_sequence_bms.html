@@ -1,0 +1,61 @@
+{# 명령 순서 리포트와 BMS(7E4 22 0101~010C) 해석. 등급: 확인됨(확정)·유력·미확인 #}
+{% from "components/ui.html" import badge %}
+{% set seq = dataset.summary.sequence %}
+{% set b = dataset.summary.bms %}
+{% if b %}
+<section class="card mt-6 overflow-hidden" aria-labelledby="bms-title">
+  <div class="card-body pb-0">
+    <h2 id="bms-title" class="text-lg font-bold">배터리(BMS) 해석 <span class="text-muted text-sm">7E4 22 0101~010C · 플랫폼 {{ b.platform }}</span></h2>
+    <p class="mt-1 text-sm text-muted">'확인됨'만 확정값입니다. '유력'은 근거 1개 또는 값 범위만 맞고, '미확인'은 공개 근거가 없어 원시값만 보여 줍니다.</p>
+    <dl class="dl mt-3">
+      {% if b.soh %}<dt>SOH(BMS)</dt><dd class="tabular-nums">{{ b.soh.value }} % · {{ b.soh.grade }}{% if b.soh.note %} · {{ b.soh.note }}{% endif %}</dd>{% endif %}
+      {% if b.cells %}<dt>셀</dt><dd class="tabular-nums">{{ b.cells.count }}개 · 최저 {{ b.cells.min }} V · 최고 {{ b.cells.max }} V · 평균 {{ b.cells.avg }} V · 편차 {{ b.cells.spread_mv }} mV</dd>{% endif %}
+      {% if b.checks.cell_sum_vs_pack_pct is defined %}<dt>셀 합계 검증</dt><dd class="tabular-nums">팩 전압 대비 {{ b.checks.cell_sum_vs_pack_pct }} %</dd>{% endif %}
+      {% if b.checks.charge_kwh_per_ah_v is defined %}<dt>kWh/Ah</dt><dd class="tabular-nums">{{ b.checks.charge_kwh_per_ah_v }} V (팩 공칭전압 근처면 정상 파싱)</dd>{% endif %}
+      {% if b.checks.efficiency_pct is defined %}<dt>충방전 효율</dt><dd class="tabular-nums">{{ b.checks.efficiency_pct }} %</dd>{% endif %}
+    </dl>
+  </div>
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">항목</th><th scope="col" class="num">값</th><th scope="col">PID·바이트</th><th scope="col">등급</th><th scope="col">비고</th></tr></thead>
+    <tbody>
+      {% for f in b.fields %}
+      <tr>
+        <td data-primary>{{ f.label }}</td>
+        <td data-label="값" class="num tabular-nums">{{ f.value if f.value is not none else "-" }} {{ f.unit }}</td>
+        <td data-label="PID" class="mono">{{ f.pid }} [{{ f.bytes }}]</td>
+        <td data-label="등급">{{ badge(f.grade, "success" if f.grade == "확인됨" else ("warning" if f.grade == "유력" else "")) }}</td>
+        <td data-label="비고" class="text-sm">{{ f.note }}</td>
+      </tr>
+      {% endfor %}
+      {% for u in b.unverified %}
+      <tr><td data-primary>PID {{ u.pid }} ({{ u.length }}바이트)</td><td class="mono text-sm break-all" colspan="2">{{ u.raw }}…</td><td>{{ badge("미확인", "") }}</td><td class="text-sm">공개 정의 없음</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+{% if seq %}
+<section class="card mt-6 overflow-hidden" aria-labelledby="seq-title">
+  <div class="card-body pb-0">
+    <h2 id="seq-title" class="text-lg font-bold">명령 순서 리포트 <span class="text-muted text-sm">요청 {{ seq.total }}건 · 제어기 {{ seq.ecus }}개{% if seq.latency_ms %} · 응답 지연 중앙값 {{ seq.latency_ms.median }} ms (p90 {{ seq.latency_ms.p90 }}){% endif %}</span></h2>
+    <p class="mt-1 text-sm text-muted">보낸 순서대로, 연속으로 같은 명령은 한 줄로 묶었습니다.{% if seq.truncated %} 앞 {{ seq.steps|length }}단계만 보여 줍니다.{% endif %}
+      서비스: {% for s in seq.services %}{{ s.service }} {{ s.name }} {{ s.count }}{{ ", " if not loop.last }}{% endfor %}</p>
+    {% if seq.negatives %}<p class="mt-1 text-sm">부정응답(7F): {% for n in seq.negatives %}{{ n.request_id }}/{{ n.service }} NRC {{ n.code }} {{ n.meaning }} ×{{ n.count }}{{ " · " if not loop.last }}{% endfor %}</p>{% endif %}
+  </div>
+  <details class="card-body"><summary class="cursor-pointer text-sm font-semibold">단계 {{ seq.steps|length }}개 펼치기</summary>
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col" class="num">#</th><th scope="col" class="num">시각(s)</th><th scope="col">요청</th><th scope="col">서비스</th><th scope="col" class="num">반복</th><th scope="col">결과</th></tr></thead>
+    <tbody>
+      {% for st in seq.steps %}
+      <tr>
+        <td class="num">{{ loop.index }}</td><td class="num tabular-nums">{{ st.t_s }}</td>
+        <td class="mono">{{ st.request_id }} {{ st.service }}{% if st.sub %} {{ st.sub }}{% endif %}</td>
+        <td>{{ st.name }}</td><td class="num">{{ st.repeat }}</td>
+        <td class="text-sm">{% if st.positive %}긍정 {{ st.positive }} {% endif %}{% if st.negative %}부정 {{ st.negative }} {% endif %}{% if st.none %}무응답 {{ st.none }} {% endif %}{% if st.silent_ok %}응답생략 {{ st.silent_ok }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </details>
+</section>
+{% endif %}

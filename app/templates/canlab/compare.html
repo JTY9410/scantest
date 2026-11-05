@@ -15,7 +15,7 @@
     <p class="mt-1 text-sm text-muted">저장된 실시간 수집·업로드 기록을 고르거나, WECAR-ELM/TRC 파일을 올리세요.</p>
     <div class="mt-4 grid gap-4 md:grid-cols-2">
       {{ field(form.dataset_id) }}
-      {{ field(form.scan_file, help="저장된 기록을 고르지 않을 때. .trc / .txt / .log", accept=".trc,.txt,.log") }}
+      {{ field(form.scan_file, help="저장된 기록을 고르지 않을 때. .trc / .csv / .txt / .log", accept=".trc,.csv,.txt,.log") }}
     </div>
   </section>
 

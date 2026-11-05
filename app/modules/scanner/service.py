@@ -417,7 +417,7 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
 
     content = record.encode()
     dataset = CanDataset(
-        kind=DatasetKind.LIVE_CAPTURE, source=source, vehicle=vehicle[:100],
+        kind=DatasetKind.LIVE_CAPTURE, file_format="wecar_elm", source=source, vehicle=vehicle[:100],
         filename=f"scan-{started:%Y%m%d-%H%M%S}.txt", sha256=hashlib.sha256(content).hexdigest(),
         size=len(content), content=content, summary=_trace_summary(trace) if trace else {},
         note=f"스캔하기 · {TRANSPORTS[transport]}", uploaded_by=actor.id,

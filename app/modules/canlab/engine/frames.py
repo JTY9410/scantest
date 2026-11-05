@@ -1,6 +1,13 @@
-"""CAN 프레임 읽기: PCAN-View TRC와 위카 ELM327 수집 로그."""
+"""CAN 프레임 읽기: PCAN-View TRC, PCAN 계열 CSV, 위카 ELM327 수집 로그.
 
+형식은 TRACE_FORMATS 레지스트리에 (이름, 판별 함수, 파서) 순으로 등록한다. 새 형식(ASC·BLF 등)은
+판별 함수와 파서를 만들어 레지스트리에 넣으면 이후 단계(ISO-TP·UDS·디코딩·방송 분석)를 그대로 쓴다.
+"""
+
+import csv
+import io
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 
 ELM_HEADER = "# WECAR-ELM 1"
@@ -156,11 +163,126 @@ def elm_from_exchanges(exchanges: list[dict], meta: dict[str, str], bus: str | N
     return "\n".join(lines) + "\n"
 
 
+# ── PCAN 계열 CSV ──────────────────────────────────────────────────────
+# 위스캔·지스캔 수집 CSV(2026-11 실측): Timestamp(초),Channel,CAN_ID(hex),DLC,Data(공백 hex),IDType,...,Status1,...
+# 방향(Tx/Rx) 열이 없으므로 진단 요청·응답은 이후 단계의 ID 규칙(응답 = 요청 + 8, 7DF → 7E8~7EF)으로 짝짓는다.
+# Status1의 최상위 비트(0x80000000)가 켜진 행(CAN_ID 0, DLC 3 등)은 차량 프레임이 아닌 장비 상태 행이라 뺀다.
+_CSV_ALIASES = {
+    "time": ("timestamp", "time", "time_s", "timestamp_s", "time(s)", "t"),
+    "time_ms": ("time_ms", "timestamp_ms", "time(ms)"),
+    "id": ("can_id", "id", "canid", "identifier", "arbitration_id", "msgid"),
+    "dlc": ("dlc", "len", "length", "datalength"),
+    "data": ("data", "payload", "bytes", "data_bytes"),
+    "dir": ("direction", "dir", "rx/tx", "type_dir"),
+    "status": ("status1", "status"),
+}
+STATUS_EVENT_BIT = 0x80000000
+
+
+def _norm_header(cell: str) -> str:
+    return cell.strip().strip('"').lstrip("\ufeff").strip().lower().replace(" ", "_")
+
+
+def _csv_columns(header: list[str]) -> dict[str, int] | None:
+    names = [_norm_header(cell) for cell in header]
+    columns: dict[str, int] = {}
+    for key, aliases in _CSV_ALIASES.items():
+        for alias in aliases:
+            if alias in names:
+                columns[key] = names.index(alias)
+                break
+    if "id" not in columns or "data" not in columns or not ({"time", "time_ms"} & columns.keys()):
+        return None
+    return columns
+
+
+def _sniff_delimiter(first_line: str) -> str:
+    counts = {d: first_line.count(d) for d in (",", ";", "\t")}
+    return max(counts, key=counts.get)
+
+
+def _is_pcan_csv(lines: list[str]) -> bool:
+    first = next((line for line in lines if line.strip()), "")
+    if not first:
+        return False
+    header = next(csv.reader([first], delimiter=_sniff_delimiter(first)))
+    return _csv_columns(header) is not None
+
+
+def _hex_int(text: str) -> int:
+    text = text.strip().lower()
+    if text.startswith("0x"):
+        text = text[2:]
+    return int(text.rstrip("h"), 16)
+
+
+def _parse_pcan_csv(lines: list[str]) -> ParsedTrace:
+    first_index = next(i for i, line in enumerate(lines) if line.strip())
+    delimiter = _sniff_delimiter(lines[first_index])
+    reader = csv.reader(io.StringIO("\n".join(lines[first_index:])), delimiter=delimiter)
+    columns = _csv_columns(next(reader))
+    frames: list[Frame] = []
+    skipped = 0
+    status_rows = 0
+    for row in reader:
+        if not row or not any(cell.strip() for cell in row):
+            continue
+        try:
+            if "status" in columns and columns["status"] < len(row) and row[columns["status"]].strip():
+                if _hex_int(row[columns["status"]]) & STATUS_EVENT_BIT:
+                    status_rows += 1
+                    continue
+            if "time" in columns:
+                t_ms = float(row[columns["time"]]) * 1000.0
+            else:
+                t_ms = float(row[columns["time_ms"]])
+            can_id = _hex_int(row[columns["id"]])
+            data = _bytes(row[columns["data"]].replace("-", " "))
+            if "dlc" in columns and row[columns["dlc"]].strip().isdigit():
+                data = data[: int(row[columns["dlc"]])]
+        except (ValueError, IndexError):
+            skipped += 1
+            continue
+        direction = "rx"
+        if "dir" in columns and columns["dir"] < len(row):
+            value = row[columns["dir"]].strip().lower()
+            direction = "tx" if value in ("tx", "t", "send") else "rx"
+        frames.append(Frame(round(t_ms, 3), can_id, data, direction))
+    if frames and "dir" not in columns:
+        # 방향 열이 없으면 ID 규칙으로 추정한다(요청 = 7DF 또는 요청+8 응답 ID가 기록에 있는 7xx).
+        ids = {frame.can_id for frame in frames}
+        frames = [Frame(f.t_ms, f.can_id, f.data,
+                        "tx" if f.can_id == 0x7DF or (0x700 <= f.can_id <= 0x7F7 and f.can_id + 8 in ids) else "rx")
+                  for f in frames]
+    meta = {"STATUS_ROWS": str(status_rows), "DIRECTION": "column" if "dir" in columns else "id_rule"}
+    return ParsedTrace("pcan_csv", frames, meta, skipped)
+
+
+def _is_elm(lines: list[str]) -> bool:
+    return bool(lines) and lines[0].strip() == ELM_HEADER
+
+
+# (형식 이름, 판별 함수, 파서). 앞에서부터 확인하고 아무것도 맞지 않으면 TRC로 읽는다.
+TRACE_FORMATS: list[tuple[str, Callable[[list[str]], bool], Callable[[list[str]], ParsedTrace]]] = [
+    ("wecar_elm", _is_elm, lambda lines: _parse_elm(lines[1:])),
+    ("pcan_csv", _is_pcan_csv, _parse_pcan_csv),
+]
+
+
+def detect_format(text: str) -> str:
+    lines = text.lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n").split("\n", 5)[:5]
+    for name, matches, _ in TRACE_FORMATS:
+        if matches(lines):
+            return name
+    return "pcan_trc"
+
+
 def parse_trace(text: str) -> ParsedTrace:
     """파일 내용으로 형식을 판별해 프레임 목록을 만든다. 읽지 못한 줄 수도 함께 돌려준다."""
-    lines = text.replace("\r\n", "\n").replace("\r", "\n").split("\n")
-    if lines and lines[0].strip() == ELM_HEADER:
-        return _parse_elm(lines[1:])
+    lines = text.lstrip("\ufeff").replace("\r\n", "\n").replace("\r", "\n").split("\n")
+    for _, matches, parser in TRACE_FORMATS:
+        if matches(lines[:5]):
+            return parser(lines)
     return _parse_trc(lines)
 
 

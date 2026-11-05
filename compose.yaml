@@ -19,6 +19,8 @@ services:
       APP_ENV: development
       PROXY_FIX_HOPS: ${PROXY_FIX_HOPS:-1}
       TRUST_PROXY: ${TRUST_PROXY:-1}
+      # 도커 배포는 Vercel(4.5MB) 한도가 없어 큰 CSV(예: 방송 CAN이 많은 28.7MB 기록)도 받는다. 앱 기본값은 4MB.
+      CANLAB_MAX_UPLOAD_BYTES: ${CANLAB_MAX_UPLOAD_BYTES:-67108864}
     ports:
       - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-18080}:8000"
     volumes:

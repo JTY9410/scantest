@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileRequired, MultipleFileField
-from wtforms import HiddenField, SelectField, StringField, TextAreaField
+from wtforms import BooleanField, HiddenField, SelectField, StringField, TextAreaField
 from wtforms.fields import SelectChoice
 from wtforms.validators import DataRequired, Length, Optional
 
@@ -9,9 +9,18 @@ from app.modules.canlab.models import DatasetKind
 
 class UploadForm(FlaskForm):
     file = FileField("파일", validators=[FileRequired("올릴 파일을 고르세요.")])
-    kind = SelectField("데이터 종류", choices=[SelectChoice(k.value, k.label) for k in DatasetKind])
+    kind = SelectField("도구·데이터 종류", choices=[SelectChoice(k.value, k.label) for k in DatasetKind])
     vehicle = StringField("차량", validators=[DataRequired("차량 이름을 입력하세요."), Length(max=100)])
     note = StringField("메모", validators=[Optional(), Length(max=500)])
+    diagnostic_only = BooleanField("CSV는 진단 프레임(7xx)만 저장(방송 CAN이 많은 대용량 기록)")
+
+
+class ToolCompareForm(FlaskForm):
+    class Meta:
+        csrf = False
+
+    a = SelectField("위스캔 기록", coerce=lambda v: int(v) if v else 0, validators=[Optional()])
+    b = SelectField("지스캔 기록", coerce=lambda v: int(v) if v else 0, validators=[Optional()])
 
 
 class TruthTextForm(FlaskForm):

@@ -40,6 +40,7 @@ class Transaction:
     response: bytes | None = None
     negative_code: int | None = None
     extra_responders: list[int] = field(default_factory=list)
+    response_t_ms: float | None = None
 
     @property
     def did(self) -> int | None:
@@ -115,6 +116,7 @@ def pair_transactions(messages: list[Message]) -> list[Transaction]:
             used.add(later_index)
             if tx.response is None:
                 tx.response_id = later.can_id
+                tx.response_t_ms = later.t_ms
                 tx.response = payload
                 tx.negative_code = payload[2] if payload[0] == 0x7F else None
                 if not broadcast:
