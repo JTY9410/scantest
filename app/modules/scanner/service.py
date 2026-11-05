@@ -531,7 +531,7 @@ def scan_document(scan: Scan) -> ScanDocument:
 def scan_result(scan: Scan) -> dict:
     """결과 화면용. 스캔하기로 만든 스캔만 위스캔 형식 결과가 있다."""
     data = dict(scan.bms_data) if isinstance(scan.bms_data, dict) else {}
-    if data.get("source") != "scanner":
+    if data.get("source") not in ("scanner", "reconcile"):
         raise ServiceError("스캔하기로 만든 결과가 아닙니다.", 404)
     wescan = data.get("wescan") if isinstance(data.get("wescan"), dict) else None
     if wescan is None or "judgments" not in wescan:
@@ -556,7 +556,7 @@ def change_type(actor, scan: Scan, new_type: str, reason: str | None = None) -> 
     if new_type not in TYPES:
         raise ServiceError("유형은 전기차·하이브리드·내연기관 중에서 고르세요.", 400)
     data = dict(scan.bms_data) if isinstance(scan.bms_data, dict) else {}
-    if data.get("source") != "scanner":
+    if data.get("source") not in ("scanner", "reconcile"):
         raise ServiceError("스캔하기로 만든 결과만 유형을 바꿀 수 있습니다.", 404)
     old = scan.type
     if old == new_type:

@@ -858,8 +858,9 @@ def run_analysis(actor: User, wescan_id: int, reverse_ids: list[int]) -> Analysi
     return run
 
 
-def list_runs() -> list[AnalysisRun]:
-    return list(db.session.scalars(select(AnalysisRun).order_by(AnalysisRun.id.desc()).limit(50)))
+def list_runs(mode: str = "rule_search") -> list[AnalysisRun]:
+    return list(db.session.scalars(select(AnalysisRun).where(AnalysisRun.mode == mode)
+                                   .order_by(AnalysisRun.id.desc()).limit(50)))
 
 
 def get_run(run_id: int) -> AnalysisRun:
@@ -1958,3 +1959,166 @@ def _dbc_signal(signal_key: str, layout) -> str:
         f"{name} : {start_bit}|{length}@{endian_at}{sign} "
         f"({factor:g},{offset:g}) [{minimum:g}|{maximum:g}] \"{unit}\" VECTOR_XXX"
     )
+
+
+# ---- 완료 데이터 대조(위스캔 통신기록 + 리버스데이터, 정답값 없음) ----------------------------------
+
+RECONCILE_SOURCE = "reconcile"
+_CAR_KEYS = ("diag_company", "diag_model", "diag_submodel", "diag_grade", "diag_year", "diag_fuel",
+             "diag_displacement", "diag_capacity")
+
+
+def _trace_dataset(actor: User, filename: str, content: bytes, kind: str, vehicle: dict) -> CanDataset:
+    name = " ".join(v for v in (vehicle["maker"], vehicle["model"], vehicle["submodel"]) if v)
+    try:
+        dataset = upload_dataset(actor, filename=filename, content=content, kind=kind, vehicle=name,
+                                 maker=vehicle["maker"], model=vehicle["model"])
+    except ServiceError as error:
+        if error.status != 409:
+            raise
+        dataset = get_dataset(error.extra["dataset_id"])
+        if not dataset.is_trace:
+            raise ServiceError(f"'{filename}'은 통신기록으로 쓸 수 없습니다(데이터 #{dataset.id}).") from error
+    return dataset
+
+
+def reconcile_upload(actor: User, *, car_no: str | None, wescan: tuple[str, bytes],
+                     reverse: list[tuple[str, bytes]], table: tuple[str, bytes] | None = None,
+                     vin_confirmed: bool = False) -> AnalysisRun:
+    """위스캔 통신기록과 리버스데이터(지스캔 통신기록)를 올려 대조한다. 규칙은 만들거나 바꾸지 않는다."""
+    from app.modules.canlab.engine.reconcile import parse_table, reconcile
+    from app.modules.scanner.powertrain import classify
+
+    try:
+        dto, _ = car_info.lookup(actor, car_no)
+    except car_info.CarInfoError as error:
+        raise ServiceError(f"차량정보 조회 실패: {error.guide}", error.status) from error
+    dto = car_info.normalize_dto(dto)
+    vehicle = vehicle_snapshot(car_info.normalize_car_no(car_no), dto)
+    if not (vehicle["maker"] and vehicle["model"]):
+        raise ServiceError("차량정보에 제조사·모델이 없어 차종을 정할 수 없습니다.")
+    if not reverse:
+        raise ServiceError("리버스데이터를 하나 이상 올리세요.")
+    for filename, content in (wescan, *reverse):
+        if not filename.lower().endswith(TRACE_EXTENSIONS):
+            raise ServiceError(f"'{filename}': 통신기록은 {TRACE_EXTENSIONS_TEXT} 파일이어야 합니다.")
+    w_trace = _responded_trace(wescan[1])
+    r_traces = [_responded_trace(content) for _, content in reverse]
+    definitions = None
+    if table and table[1]:
+        try:
+            definitions = parse_table(decode_text(table[1]))
+        except ValueError as error:
+            raise ServiceError(str(error)) from error
+    car = {k: dto.get(k) for k in _CAR_KEYS if dto.get(k) not in (None, "")}
+    hint = " ".join(str(v) for v in (vehicle["model"], vehicle["submodel"]) if v)
+    decoded = bms.decode_bms(w_trace.samples, hint) or {}
+    kind = classify(car, {"battery": decoded.get("values") or {}, "cells": decoded.get("cells") or {}})
+    scope = scope_car(vehicle["maker"], vehicle["model"])
+    rules = {key: _layout(rule) for key, rule in rules_for(scope).items()}
+    result = reconcile(w_trace, r_traces, kind=kind["type"], model_hint=hint, rules=rules, table=definitions,
+                       references=references.hypotheses(scope))
+    vin = result["vin"]
+    if vin["status"] == "불일치":
+        raise ServiceError("위스캔과 리버스데이터의 VIN이 다릅니다. 같은 차량의 기록인지 확인하세요. 대조를 중단했습니다.")
+    if vin["status"] == "없음":
+        if not vin_confirmed:
+            raise ServiceError("VIN을 읽지 못한 기록이 있습니다. 같은 차량의 기록인지 직접 확인하고 "
+                               "'같은 차량임을 직접 확인했습니다'를 체크한 뒤 다시 올리세요.")
+        vin["manual"] = {"by": actor.id, "at": _now().isoformat()}
+    wescan_set = _trace_dataset(actor, wescan[0], wescan[1], DatasetKind.WECAN_TRC, vehicle)
+    reverse_sets = []
+    for filename, content in reverse:
+        dataset = _trace_dataset(actor, filename, content, DatasetKind.GSCAN_TRC, vehicle)
+        if dataset.id == wescan_set.id:
+            raise ServiceError(f"'{filename}'은 위스캔 통신기록과 같은 파일입니다.")
+        if dataset not in reverse_sets:
+            reverse_sets.append(dataset)
+    result |= {"wescan_dataset_id": wescan_set.id, "car": car, "car_no": vehicle["car_no"], "powertrain": kind,
+               "table": len(definitions or []), "table_name": table[0] if definitions else None}
+    run = AnalysisRun(mode="reconcile", trace_dataset_ids=[wescan_set.id, *[d.id for d in reverse_sets]],
+                      reverse_dataset_ids=[d.id for d in reverse_sets], truth_dataset_id=None,
+                      commands=compare_commands(wescan_set, reverse_sets), maker=vehicle["maker"],
+                      model=vehicle["model"], vehicle=vehicle, interpretation=[], result=result,
+                      created_by=actor.id, created_at=_now())
+    db.session.add(run)
+    db.session.flush()
+    audit.record("완료 데이터 대조", "AnalysisRun", run.id, user_id=actor.id,
+                 changes={"wescan": wescan_set.id, "reverse": run.reverse_dataset_ids, "type": kind["type"],
+                          "vin": vin["status"], "vin_manual": bool(vin.get("manual")), "grades": result["grades"]})
+    db.session.commit()
+    return run
+
+
+def get_reconcile_run(run_id: int) -> AnalysisRun:
+    run = get_run(run_id)
+    if run.mode != "reconcile":
+        raise ServiceError("완료 데이터 대조 기록이 아닙니다.", 404)
+    return run
+
+
+def reconcile_finalize(actor: User, run: AnalysisRun):
+    """대조 결과를 최종결과로 확정해 스캔 기록 1건을 만든다(출처: 완료 데이터 대조). 이미 확정했으면 그 스캔."""
+    from sqlalchemy.orm.attributes import flag_modified
+
+    from app.modules.canlab.engine.reconcile import final_values
+    from app.modules.scanner import service as scanner_service
+    from app.modules.scanner.report import basic_report
+    from app.modules.scans.models import Scan
+
+    result = dict(run.result or {})
+    if result.get("scan_id") and (scan := db.session.get(Scan, result["scan_id"])) is not None:
+        return scan
+    car = result.get("car") or {}
+    kind = result.get("powertrain") or {"type": "ice", "source": "default"}
+    vin = result.get("vin") or {}
+    dtc = result.get("dtc") or {}
+    dtcs = [{"code": d["code"], "ecu": d["ecu"], "kind": "위스캔", "desc": None, "system": None}
+            for d in dtc.get("final") or []]
+    battery = final_values(result)
+    data = {
+        "source": RECONCILE_SOURCE, "origin_label": "완료 데이터 대조", "status": "ok", "transport": "upload",
+        "device": "완료 데이터 대조", "dialect": None, "car": car, "vin": vin.get("wescan"),
+        "battery": battery, "cells": result.get("cells") or {}, "dtcs": dtcs, "values": [], "steps": [],
+        "errors": [], "powertrain": kind, "dataset_id": result.get("wescan_dataset_id"),
+        "counts": {"total": len(result.get("items") or []), "ok": (result.get("counts") or {}).get("일치", 0),
+                   "unsupported": 0, "errors": 0},
+        "notes": ["완료 데이터 대조로 만든 결과입니다(위스캔 통신기록 vs 리버스데이터). 단계별 통신 기록은 대조 화면에 있습니다."],
+        "monitor": {}, "ecus": [], "ecu_names": {}, "ecu_values": {}, "freeze_frame": None, "iumpr": None,
+        "snapshots": [], "calibration_ids": [], "cvns": [], "systems": {}, "protocol": {"name": "통신기록 업로드"},
+        "voltage": None, "vin_match": None, "scan_logic": None, "report_id": None,
+        "reconcile": {"run_id": run.id, "grades": result.get("grades"), "counts": result.get("counts"),
+                      "coverage": (result.get("coverage") or {}).get("required_ratio"),
+                      "vin": vin.get("status"), "vin_manual": bool(vin.get("manual"))},
+        "reference": {
+            "reverse_only_dtcs": dtc.get("reverse_only") or [],
+            "definition_only": [{"label": i["label"], "value": (i.get("reverse") or {}).get("last"),
+                                 "unit": i["unit"]} for i in result.get("items") or [] if i["status"] == "정의만"],
+        },
+    }
+    scan = Scan(type=kind["type"], type_source=kind.get("source"), device_type="upload", device_uid="reconcile",
+                tester_id=actor.id, company_id=getattr(actor, "company_id", None), scan_vin=vin.get("wescan"),
+                car_no=result.get("car_no") or "미확인", car_vin=vin.get("wescan") or "미확인",
+                car_maker=car.get("diag_company"), car_model=str(car.get("diag_model") or "미확인"),
+                car_submodel=car.get("diag_submodel"), car_year=_int_or_none(car.get("diag_year")),
+                car_fuel=car.get("diag_fuel"), raw=[d["code"] for d in dtcs], bms_data=data)
+    db.session.add(scan)
+    db.session.flush()
+    data["wescan"] = basic_report(scan_id=scan.id, diagnosed_at=scan.created_at or _now(), car_no=scan.car_no,
+                                  car=car, result=data, report_id=None, pdf_url=f"/admin/scan/{scan.id}/pdf",
+                                  app_type="upload")
+    scan.bms_data = data
+    flag_modified(scan, "bms_data")
+    run.result = result | {"scan_id": scan.id, "finalized_by": actor.id, "finalized_at": _now().isoformat()}
+    audit.record("완료 데이터 대조 확정", "Scan", scan.id, user_id=actor.id,
+                 changes={"run": run.id, "type": kind["type"], "grades": result.get("grades")})
+    db.session.commit()
+    scanner_service.scan_document(scan)
+    return scan
+
+
+def _int_or_none(value) -> int | None:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None

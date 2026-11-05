@@ -1,0 +1,104 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, badge, empty, field %}
+{% block title %}완료 데이터 대조{% endblock %}
+
+{% macro grade_badge(g) -%}{{ badge(g, {"확인됨": "success", "유력": "info"}.get(g, "warning")) }}{%- endmacro %}
+{% macro status_badge(s) -%}{{ badge(s, {"일치": "success", "위스캔에만": "", "정의만": "", "불일치": "danger", "경합": "warning"}.get(s, "")) }}{%- endmacro %}
+{% macro num(v) -%}{{ v if v is not none else "-" }}{%- endmacro %}
+
+{% block content %}
+{{ page_header("완료 데이터 대조", "스캔을 마친 뒤 위스캔 통신기록과 리버스데이터(같은 차량의 지스캔 통신기록)만 올리면, 같은 정의로 양쪽 응답을 해석해 비교하고 위스캔 실측을 최종값으로 냅니다. 위스캔 최종값(결과지)은 필요 없고, 디코딩 규칙은 만들거나 바꾸지 않습니다.") }}
+{% include "canlab/_tabs.html" %}
+
+{% if form %}
+<form method="post" enctype="multipart/form-data" class="grid gap-6" novalidate>
+  {{ form.csrf_token }}
+  <section class="card card-body" aria-labelledby="rc-upload">
+    <h2 id="rc-upload" class="text-lg font-bold">완료 데이터 올리기</h2>
+    <p class="mt-1 text-sm text-muted">차량번호로 차종·연료를 조회해 유형(전기차·하이브리드·내연기관)을 정합니다. VIN이 서로 다르면 대조를 중단합니다.</p>
+    <div class="mt-4 grid gap-4 md:grid-cols-2">
+      {{ field(form.car_no, placeholder="예: 12가3456", autocomplete="off", maxlength="20") }}
+      {{ field(form.wescan_file, help="위스캔으로 스캔할 때 기록한 PCAN TRC·CSV 또는 위카 ELM 기록", accept=".trc,.csv,.txt,.log") }}
+      {{ field(form.reverse_files, help="같은 차량의 지스캔(리버스) TRC·CSV. 여러 개면 표본을 합칩니다.", accept=".trc,.csv,.txt,.log", multiple=True) }}
+      {{ field(form.table_file, help="선택. 역분석으로 정리한 정의표 CSV: signal_key,header,did,start,width[,endian,signed,scale,offset,unit,label]", accept=".csv") }}
+    </div>
+    <label class="mt-4 flex items-center gap-2">{{ form.vin_confirmed() }} <span>{{ form.vin_confirmed.label.text }}</span></label>
+    <div class="mt-4"><button class="btn btn-primary" type="submit">올리고 대조하기</button></div>
+  </section>
+</form>
+
+<section class="card mt-6 overflow-hidden" aria-labelledby="rc-runs">
+  <h2 id="rc-runs" class="card-body pb-0 text-lg font-bold">대조 기록</h2>
+  {% if runs %}
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">번호</th><th scope="col">실행</th><th scope="col">차종·유형</th><th scope="col">등급</th><th scope="col">확정</th></tr></thead>
+    <tbody>{% for r in runs %}{% set res = r.result or {} %}
+      <tr><td data-primary><a class="underline" href="{{ url_for('canlab.reconcile_run', run_id=r.id) }}">#{{ r.id }}</a></td>
+        <td data-label="실행">{{ r.created_at|kst }}</td>
+        <td data-label="차종·유형">{{ r.maker or "" }} {{ r.model or "" }} · {{ (res.powertrain or {}).label or "-" }}</td>
+        <td data-label="등급">{% for g, n in (res.grades or {}).items() %}{{ g }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</td>
+        <td data-label="확정">{% if res.scan_id %}<a class="underline" href="{{ url_for('scanner.result', scan_id=res.scan_id) }}">스캔 #{{ res.scan_id }}</a>{% else %}-{% endif %}</td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}{{ empty("아직 대조 기록이 없습니다.", "위스캔 통신기록과 리버스데이터를 올리면 여기에 남습니다.") }}{% endif %}
+</section>
+{% endif %}
+
+{% if run %}
+{% set res = run.result or {} %}
+{% set cov = res.coverage or {} %}
+<section class="card card-body mb-6" aria-labelledby="rc-summary">
+  <h2 id="rc-summary" class="text-lg font-bold">대조 #{{ run.id }} · {{ run.maker or "" }} {{ run.model or "" }} · {{ (res.powertrain or {}).label or "-" }}</h2>
+  <dl class="dl mt-3">
+    <dt>VIN</dt><dd>{{ res.vin.status }}{% if res.vin.manual %} · 검사자가 같은 차량임을 직접 확인함{% endif %} (위스캔 {{ res.vin.wescan or "없음" }} / 리버스 {{ res.vin.reverse or "없음" }})</dd>
+    <dt>필수 명령 커버리지</dt><dd>{{ "%.0f"|format((cov.required_ratio or 0) * 100) }}% {% for r in cov.required or [] %}<span class="mono text-sm">{{ r.header }} {{ r.command }}{{ "✓" if r.wescan and r.reverse else "✗" }}</span> {% endfor %}</dd>
+    <dt>공통 명령</dt><dd>{{ cov.common }} (위스캔 {{ cov.wescan_commands }} · 리버스 {{ cov.reverse_commands }}) · 순서 일치도 {{ "%.0f"|format((cov.sequence_ratio or 0) * 100) }}%</dd>
+    <dt>항목 판정</dt><dd>{% for k, n in (res.counts or {}).items() %}{{ k }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</dd>
+    <dt>신뢰등급</dt><dd>{% for k, n in (res.grades or {}).items() %}{{ k }} {{ n }}{% if not loop.last %} · {% endif %}{% endfor %}</dd>
+    {% if res.table %}<dt>정의표</dt><dd>{{ res.table_name }} · {{ res.table }}개 정의</dd>{% endif %}
+  </dl>
+  <p class="mt-3 text-sm text-muted">최종값은 위스캔 실측입니다. 확인됨·유력 값만 보고서 판정에 쓰고, 미확인 값이 판정 항목이면 그 항목은 '측정불가'가 되어 종합판정이 '판정보류'가 됩니다. 리버스에만 있는 값·고장코드는 '참고(리버스)'로만 보입니다.</p>
+  {% if res.scan_id %}
+  <p class="mt-3"><a class="btn btn-primary" href="{{ url_for('scanner.result', scan_id=res.scan_id) }}">확정한 최종결과(스캔 #{{ res.scan_id }})</a></p>
+  {% else %}
+  <form method="post" action="{{ url_for('canlab.reconcile_finalize', run_id=run.id) }}" class="mt-3">
+    {{ action.csrf_token }}
+    <button class="btn btn-primary" type="submit">최종결과로 확정</button>
+  </form>
+  {% endif %}
+</section>
+
+<section class="card mb-6 overflow-hidden" aria-labelledby="rc-items">
+  <h2 id="rc-items" class="card-body pb-0 text-lg font-bold">항목 대조 {{ (res["items"] or [])|length }}개</h2>
+  {% if res["items"] %}
+  <table class="rtable mt-3">
+    <thead><tr><th scope="col">항목</th><th scope="col" class="num">위스캔(최종값)</th><th scope="col">리버스</th><th scope="col">판정</th><th scope="col">등급</th><th scope="col">정의</th></tr></thead>
+    <tbody>{% for i in res["items"] %}
+      <tr><td data-primary class="font-semibold">{{ i.label }}{% if i.unit %} <span class="text-sm text-muted">{{ i.unit }}</span>{% endif %}</td>
+        <td data-label="위스캔" class="num tabular-nums">{{ num(i.wescan) }}</td>
+        <td data-label="리버스" class="tabular-nums text-sm">{% if i.reverse %}{{ i.reverse.last }}{% if i.reverse.min != i.reverse.max %} ({{ i.reverse.min }}~{{ i.reverse.max }}){% endif %} · {{ i.reverse.n }}회{% else %}-{% endif %}</td>
+        <td data-label="판정">{{ status_badge(i.status) }}{% if i.status == "정의만" %} 참고(리버스){% endif %}{% if i.note %}<p class="text-sm text-muted">{{ i.note }}</p>{% endif %}</td>
+        <td data-label="등급">{{ grade_badge(i.grade) }}</td>
+        <td data-label="정의" class="text-sm">{{ i.source_label }}<br><span class="mono">{{ i.header }} 22 {{ i.did }} · {{ i.formula }}</span></td></tr>
+    {% endfor %}</tbody>
+  </table>
+  {% else %}{{ empty("해석한 항목이 없습니다.", "위스캔·리버스 기록에 정의가 있는 응답이 없습니다.") }}{% endif %}
+</section>
+
+<section class="card card-body mb-6" aria-labelledby="rc-dtc">
+  <h2 id="rc-dtc" class="text-lg font-bold">고장코드</h2>
+  <p class="mt-2">최종(위스캔): {% for d in res.dtc.final %}<span class="mono">{{ d.code }}</span>({{ d.ecu }}){% if not loop.last %}, {% endif %}{% else %}없음{% endfor %}</p>
+  <p class="mt-1 text-sm text-muted">참고(리버스에만): {% for d in res.dtc.reverse_only %}<span class="mono">{{ d.code }}</span>({{ d.ecu }}){% if not loop.last %}, {% endif %}{% else %}없음{% endfor %} — 판정에는 쓰지 않습니다.</p>
+</section>
+
+{% if res.measured_only %}
+<section class="card mb-6 overflow-hidden" aria-labelledby="rc-raw">
+  <h2 id="rc-raw" class="card-body pb-0 text-lg font-bold">실측만(정의 없음, 해석불가) {{ res.measured_only|length }}개</h2>
+  <table class="rtable mt-3"><thead><tr><th scope="col">요청</th><th scope="col">원시 응답</th><th scope="col">리버스에도 있음</th></tr></thead>
+    <tbody>{% for m in res.measured_only %}<tr><td data-primary class="mono">{{ m.header }} {{ m.did }}</td><td data-label="원시" class="mono text-sm break-all">{{ m.raw }}</td><td data-label="리버스">{{ "예" if m.in_reverse else "아니오" }}</td></tr>{% endfor %}</tbody>
+  </table>
+</section>
+{% endif %}
+<p><a class="underline" href="{{ url_for('canlab.reconcile') }}">완료 데이터 대조 목록</a></p>
+{% endif %}
+{% endblock %}

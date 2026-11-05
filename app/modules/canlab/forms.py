@@ -35,6 +35,15 @@ class InputForm(FlaskForm):
     reverse_files = MultipleFileField("리버스데이터")
 
 
+class ReconcileForm(FlaskForm):
+    """완료 데이터 올리기: 위스캔 통신기록과 리버스데이터만으로 대조한다(위스캔 최종값 없음)."""
+    car_no = StringField("차량번호", validators=[DataRequired("차량번호를 입력하세요."), Length(max=20)])
+    wescan_file = FileField("위스캔 통신기록", validators=[FileRequired("위스캔 통신기록 파일을 고르세요.")])
+    reverse_files = MultipleFileField("리버스데이터")
+    table_file = FileField("정의표(선택)")
+    vin_confirmed = BooleanField("VIN을 읽지 못한 기록이 있으면, 같은 차량임을 직접 확인했습니다")
+
+
 class CompareForm(FlaskForm):
     dataset_id = SelectField("저장된 스캔 통신기록", coerce=lambda v: int(v) if v else 0,
                              validators=[Optional()])

@@ -7,7 +7,7 @@ from app.modules.auth.access import admin_required
 from app.modules.canlab import references, service
 from app.modules.canlab.engine import signals
 from app.modules.canlab.forms import (
-    ActionForm, CompareForm, InputForm, ObdbSyncForm, ReferenceUrlForm, ReportForm, ToolCompareForm, TruthTextForm, UploadForm,
+    ActionForm, CompareForm, InputForm, ReconcileForm, ObdbSyncForm, ReferenceUrlForm, ReportForm, ToolCompareForm, TruthTextForm, UploadForm,
 )
 from app.modules.canlab.models import DatasetKind, DatasetSource, LogicStatus, ReferenceStatus, RuleStatus
 
@@ -238,7 +238,58 @@ def pending(dataset_id: int):
 @bp.get("/analysis/<int:run_id>")
 @admin_required
 def run(run_id: int):
-    return render_template("canlab/run.html", run=service.get_run(run_id), action=ActionForm())
+    found = service.get_run(run_id)
+    if found.mode == "reconcile":
+        return redirect(url_for("canlab.reconcile_run", run_id=run_id))
+    return render_template("canlab/run.html", run=found, action=ActionForm())
+
+
+@bp.route("/reconcile", methods=["GET", "POST"])
+@admin_required
+def reconcile():
+    """완료 데이터 올리기: 위스캔 통신기록 + 리버스데이터만으로 대조해 최종결과를 낸다(정답값 없음)."""
+    form = ReconcileForm()
+    status = 200
+    if form.validate_on_submit():
+        upload = form.wescan_file.data
+        table = form.table_file.data
+        try:
+            run = service.reconcile_upload(
+                current_user, car_no=form.car_no.data, wescan=(upload.filename or "wescan.trc", upload.read()),
+                reverse=[(f.filename, f.read()) for f in form.reverse_files.data or [] if f and f.filename],
+                table=(table.filename, table.read()) if table and table.filename else None,
+                vin_confirmed=bool(form.vin_confirmed.data))
+        except ServiceError as error:
+            status = _flash_error(error)
+        else:
+            flash("대조를 마쳤습니다. 결과를 확인하고 '최종결과로 확정'을 누르세요.", "success")
+            return redirect(url_for("canlab.reconcile_run", run_id=run.id))
+    elif request.method == "POST":
+        status = 400
+    return render_template("canlab/reconcile.html", form=form, run=None,
+                           runs=service.list_runs("reconcile")), status
+
+
+@bp.get("/reconcile/<int:run_id>")
+@admin_required
+def reconcile_run(run_id: int):
+    return render_template("canlab/reconcile.html", form=None, run=service.get_reconcile_run(run_id),
+                           runs=[], action=ActionForm())
+
+
+@bp.post("/reconcile/<int:run_id>/finalize")
+@admin_required
+def reconcile_finalize(run_id: int):
+    if not ActionForm().validate_on_submit():
+        flash(CSRF_EXPIRED["message"], "error")
+        return redirect(url_for("canlab.reconcile_run", run_id=run_id))
+    try:
+        scan = service.reconcile_finalize(current_user, service.get_reconcile_run(run_id))
+    except ServiceError as error:
+        _flash_error(error)
+        return redirect(url_for("canlab.reconcile_run", run_id=run_id))
+    flash("최종결과로 확정했습니다. 스캔 기록에 '완료 데이터 대조'로 등록했습니다.", "success")
+    return redirect(url_for("scanner.result", scan_id=scan.id))
 
 
 @bp.post("/analysis/<int:run_id>/apply")

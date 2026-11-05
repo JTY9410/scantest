@@ -224,6 +224,24 @@ def type_judgments(result: dict, kind: str) -> list[dict]:
     return rows
 
 
+_ITEM_KEYS = {
+    "배터리 수명 (SOH)": ("soh",), "절연 저항": ("isolation_kohm",), "셀 전압 편차": ("max_cell_v", "min_cell_v"),
+    "모듈 온도 편차": ("max_temp", "min_temp"), "LDC 출력 전압": (LDC,), "LDC-보조배터리 전압 편차": (LDC, AUX),
+    "인렛 온도 편차": INLETS, "모터 온도 편차 (Front)": (MOTOR_T, INVERTER_T), "모터 옵셋 편차 (Front)": OFFSETS,
+}
+_GRADE_ORDER = {"확인됨": 0, "유력": 1, "미확인": 2}
+
+
+def attach_grades(rows: list[dict], result: dict) -> None:
+    """완료 데이터 대조 결과면 판정 항목마다 근거 값의 신뢰등급(가장 낮은 것)을 붙인다."""
+    battery = result.get("battery") or {}
+    for row in rows:
+        grades = [(battery.get(k) or {}).get("grade") for k in _ITEM_KEYS.get(row["item"], ())]
+        grades = [g for g in grades if g in _GRADE_ORDER]
+        if grades and row["value"] is not None:
+            row["grade"] = max(grades, key=_GRADE_ORDER.get)
+
+
 def overall(rows: list[dict], dtc_count: int, *, dtc_read: bool = True) -> str:
     """종합판정. 측정한 항목이 기준을 벗어나거나 고장코드가 있으면 '점검요',
     그 밖에 못 읽은 항목이 있으면(또는 고장코드를 읽지 못했으면) '판정보류', 모두 충족하면 '양호'."""
@@ -409,6 +427,8 @@ def inspection(scan, result: dict) -> dict:
     if mileage is None and getattr(scan, "car_distance", None) is not None:
         mileage = _num(scan.car_distance)
     judged = type_judgments(result, kind)
+    if result.get("source") == "reconcile":
+        attach_grades(judged, result)
     passed = sum(row["result"] == "양호" for row in judged)
     unread = sum(row["result"] == UNREAD for row in judged)
     dtcs = result.get("dtcs") or []
@@ -512,6 +532,8 @@ def inspection(scan, result: dict) -> dict:
         "dtc_rows": dtc_rows(result, group_kind),
         "groups": groups,
         "judgments": judged,
+        "reconcile": result.get("reconcile") if result.get("source") == "reconcile" else None,
+        "reference": result.get("reference") or {},
         "bms": [] if kind == "ice" else [
             _measure("SOC (표시)", _battery_value(result, "soc_display")
                      if _battery_value(result, "soc_display") is not None else _battery_value(result, "soc"), "%", 1),

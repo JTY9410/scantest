@@ -115,6 +115,22 @@ def _cover(view: dict) -> list:
     return story
 
 
+def _reconcile_note(view: dict) -> list:
+    rc = view.get("reconcile")
+    if not rc:
+        return []
+    grades = ", ".join(f"{g} {n}" for g, n in (rc.get("grades") or {}).items())
+    story = [_p(f"대조 근거: 위스캔 통신기록 vs 리버스데이터 · VIN {rc.get('vin')}"
+                f"{'(검사자 확인)' if rc.get('vin_manual') else ''} · 신뢰등급 {grades}. 확인됨·유력 값만 판정에 썼습니다.",
+                _SMALL)]
+    ref = view.get("reference") or {}
+    parts = [f"{d['code']}({d['ecu']})" for d in ref.get("reverse_only_dtcs") or []]
+    parts += [f"{v['label']} {v['value']}{v['unit']}" for v in ref.get("definition_only") or []]
+    if parts:
+        story.append(_p("참고(리버스, 판정 제외): " + ", ".join(parts[:30]), _SMALL))
+    return story
+
+
 def _dtc_detail(view: dict) -> list:
     story = [_p(f"고장 코드 상세 · 검출 {view['dtc_count']}건", _H2)]
     if view["dtc_rows"]:
@@ -123,7 +139,7 @@ def _dtc_detail(view: dict) -> list:
             [20, 24, 22, 20, 84]))
     else:
         story.append(_p("검출된 고장 코드가 없습니다." if view["dtc_read"] else "고장 코드를 읽지 못했습니다."))
-    return story
+    return story + _reconcile_note(view)
 
 
 _CLOSING = ("본 보고서의 수치는 진단 시점의 차량 상태를 기록한 것으로, 이후 사용 조건에 따라 변동될 수 있습니다.",
@@ -134,7 +150,8 @@ def _judgment_page(view: dict) -> list:
     story = [_p(f"주요 진단 데이터 · {len(view['judgments'])}개 항목", _H2)]
     story.append(_table([["항목", "진단 기준", "진단 결과", "판정"]] + [
         [row["item"], row["standard"],
-         f"{row['value']} {row['unit']}".strip() if row["value"] is not None else "-", row["result"]]
+         f"{row['value']} {row['unit']}".strip() if row["value"] is not None else "-",
+         row["result"] + (f" ({row['grade']})" if row.get("grade") else "")]
         for row in view["judgments"]], [40, 78, 28, 24]))
     if view["unread"]:
         story.append(_p(f"측정불가 {view['unread']}개 항목은 이 차량의 스캔에서 값을 읽지 못한 항목입니다. "

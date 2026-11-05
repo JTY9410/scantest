@@ -64,7 +64,7 @@
           </a>
         </td>
         <td data-label="VIN" class="mono text-sm">{{ (s.scan_vin or s.car_vin or "-")[:17] }}</td>
-        <td data-label="차종">{{ badge(s.type_label, {"ev": "info", "hev": "success"}.get(s.type, "")) }}</td>
+        <td data-label="차종">{{ badge(s.type_label, {"ev": "info", "hev": "success"}.get(s.type, "")) }}{% if data.source == "reconcile" %} {{ badge("완료 데이터 대조", "") }}{% endif %}</td>
         <td data-label="고장코드" class="num">
           {% if dtc_count %}
             <span class="badge badge-danger">{{ dtc_count }}건</span>

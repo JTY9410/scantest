@@ -192,6 +192,8 @@ class AnalysisRun(ScopeMixin, db.Model):
     )
     # 차량번호 조회 결과: {car_no, maker, model, submodel, grade, year, registered}
     vehicle: Mapped[dict | None] = mapped_column(JSON)
+    # rule_search: 위스캔 최종값으로 수식 찾기(기존) · reconcile: 정답값 없이 위스캔 통신기록 vs 리버스 대조
+    mode: Mapped[str] = mapped_column(String(20), default="rule_search", server_default="rule_search")
     # 1단계 리버스 해석: [{header, did, command, example, values: [{label, value, unit, source}]}]
     interpretation: Mapped[list[dict]] = mapped_column(JSON, default=list, server_default="[]")
     trace_dataset_ids: Mapped[list[int]] = mapped_column(JSON, default=list)
