@@ -5,8 +5,10 @@ diagnosis_info, vehicle, report, dtc.enhanced.ecus, sensor.ev|ice.
 없는 값은 키를 넣지 않는다. 통신이 안 된 제어기는 comm_status=fail, code_count=null.
 """
 
+import re
 from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 _ECU = {
     "7E0": "엔진", "7E8": "엔진", "7E1": "변속기", "7E9": "변속기",
@@ -134,8 +136,7 @@ def judgments(result: dict) -> list[dict]:
         spread = round(high - low, 3)
         rows.append(_judgment("셀 전압 편차", "셀 전압 최대-최소 차이 1.0V 이하 시 양호", spread, "V", spread <= 1))
     t_high, t_low = _battery_value(result, "max_temp"), _battery_value(result, "min_temp")
-    modules = [value for n in range(1, 19)
-               if (value := _battery_value(result, f"module_temp_{n}")) is not None]
+    modules = [item["value"] for item in module_temperatures(result)]
     if len(modules) >= 2:
         t_high, t_low = max(modules), min(modules)
     if t_high is not None and t_low is not None:
@@ -183,4 +184,155 @@ def basic_report(*, scan_id: int, diagnosed_at: datetime, car_no: str, car: dict
         "dtc": {"enhanced": {"ecus": _ecus(result)}},
         "sensor": sensor,
         "judgments": judgments(result),
+    }
+
+
+_GROUP_ECU = {
+    "7E4": "bms", "7EC": "bms", "7E5": "mcu", "7ED": "mcu",
+    "7E6": "power", "7EE": "power", "7E7": "charge", "7EF": "charge",
+}
+_GROUP_SYSTEM = {"chassis": "chassis", "body": "body", "network": "network"}
+_GROUPS = (
+    ("bms", "BMS (배터리)"), ("mcu", "MCU (모터)"), ("power", "통합전력"), ("charge", "차량충전"),
+    ("other", "P 코드 기타"), ("chassis", "샤시"), ("body", "바디"), ("network", "통신"),
+)
+_MODULE = re.compile(r"^module_temp_(\d+)$")
+
+
+def module_temperatures(result: dict) -> list[dict]:
+    """모듈 온도. 이상값은 빼서 번호 순으로 돌려준다."""
+    rows = []
+    for key, item in (result.get("battery") or {}).items():
+        if not (match := _MODULE.match(key)) or item.get("outlier") or _num(item.get("value")) is None:
+            continue
+        rows.append({"no": int(match.group(1)), "value": _num(item.get("value"))})
+    return sorted(rows, key=lambda row: row["no"])
+
+
+def cell_voltages(result: dict) -> list[dict]:
+    cells = result.get("cells") or {}
+    return [{"no": cell.get("no"), "voltage": _num(cell.get("voltage"))}
+            for cell in cells.get("values") or [] if _num(cell.get("voltage")) is not None]
+
+
+def dtc_groups(result: dict) -> list[dict]:
+    """기본 진단 보고서 8개 계통. 고장코드는 한 계통에만 센다."""
+    counts = {key: 0 for key, _ in _GROUPS}
+    for dtc in result.get("dtcs") or []:
+        ecu = str(dtc.get("ecu") or "").upper()
+        key = _GROUP_ECU.get(ecu) or _GROUP_SYSTEM.get(dtc.get("system")) or "other"
+        counts[key] += 1
+    return [{"key": key, "label": label, "count": counts[key]} for key, label in _GROUPS]
+
+
+def _measure(label: str, value: float | int | None, unit: str, digits: int | None = None) -> dict:
+    if value is None:
+        text = "-"
+    elif isinstance(value, float):
+        text = f"{value:,.{digits}f}" if digits is not None else f"{value:,.4g}"
+    else:
+        text = f"{value:,}"
+    return {"label": label, "value": value, "text": text, "unit": unit}
+
+
+def _local(value: datetime | None) -> datetime | None:
+    if value is None:
+        return None
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=ZoneInfo("UTC"))
+    return value.astimezone(ZoneInfo("Asia/Seoul"))
+
+
+def inspection(scan, result: dict) -> dict:
+    """WeSCAN 기본 진단 보고서(표지·판정·BMS·셀·모듈)에 넣을 값.
+
+    읽지 못한 칸은 '-'다. 없는 측정값을 만들지 않는다.
+    """
+    when = _local(getattr(scan, "created_at", None))
+    car = result.get("car") if isinstance(result.get("car"), dict) else {}
+    soh = _battery_value(result, "soh")
+    mileage = next((_num(item.get("value")) for item in result.get("values") or []
+                    if item.get("key") == "odometer"), None)
+    if mileage is None and getattr(scan, "car_distance", None) is not None:
+        mileage = _num(scan.car_distance)
+    judged = judgments(result)
+    passed = sum(row["result"] == "양호" for row in judged)
+    dtcs = result.get("dtcs") or []
+    overall = "양호" if judged and passed == len(judged) and not dtcs else "점검요"
+    if soh is None:
+        soh_note = "SOH를 읽지 못했습니다."
+    elif soh >= 80:
+        soh_note = f"양호 판정 기준 80%를 {soh - 80:.1f}%p 상회합니다."
+    else:
+        soh_note = f"양호 판정 기준 80%에 {80 - soh:.1f}%p 못 미칩니다."
+    cells = cell_voltages(result)
+    cell_stat = result.get("cells") or {}
+    cell_max = _num(cell_stat.get("max"))
+    cell_min = _num(cell_stat.get("min"))
+    if cell_max is None or cell_min is None:
+        cell_max, cell_min = _battery_value(result, "max_cell_v"), _battery_value(result, "min_cell_v")
+    modules = module_temperatures(result)
+    module_values = [row["value"] for row in modules]
+    temp_max = max(module_values) if module_values else _battery_value(result, "max_temp")
+    temp_min = min(module_values) if module_values else _battery_value(result, "min_temp")
+    groups = dtc_groups(result)
+    charge_codes = next(group["count"] for group in groups if group["key"] == "charge")
+    code = f"WeSCAN-{(when or datetime.now(ZoneInfo('Asia/Seoul'))):%Y%m%d}-{int(getattr(scan, 'id', 0) or 0):08d}"
+    maker = getattr(scan, "car_maker", None) or car.get("diag_company")
+    model = getattr(scan, "car_model", None) or car.get("diag_model")
+    return {
+        "code": code,
+        "issued_on": when.strftime("%Y.%m.%d") if when else "-",
+        "diagnosed_at": when.strftime("%Y. %m. %d.") if when else "-",
+        "vehicle": {
+            "manufacturer": maker or "-",
+            "model": model or "-",
+            "year": getattr(scan, "car_year", None) or car.get("diag_year") or "-",
+            "fuel": getattr(scan, "car_fuel", None) or car.get("diag_fuel") or "-",
+            "number": getattr(scan, "car_no", None) or "-",
+            "vin": result.get("vin") or getattr(scan, "car_vin", None) or "-",
+            "mileage": mileage,
+            "mileage_text": f"{mileage:,.0f} km" if mileage is not None else "-",
+        },
+        "title": " ".join(part for part in (maker, model) if part),
+        "soh": soh,
+        "soh_note": soh_note,
+        "mileage_note": f"주행거리 {mileage:,.0f} km 시점 진단" if mileage is not None else "주행거리를 읽지 못했습니다.",
+        "overall": overall,
+        "judgment_note": (f"진단 항목 {len(judged)}개 전항 충족" if judged and passed == len(judged)
+                          else f"진단 항목 {len(judged)}개 중 양호 {passed}개" if judged
+                          else "판정할 배터리 항목을 읽지 못했습니다."),
+        "dtc_clear": not dtcs,
+        "dtc_count": len(dtcs),
+        "groups": groups,
+        "judgments": judged,
+        "bms": [
+            _measure("SOC (표시)", _battery_value(result, "soc_display")
+                     if _battery_value(result, "soc_display") is not None else _battery_value(result, "soc"), "%", 1),
+            _measure("SOH", soh, "%", 1),
+            _measure("팩 전압", _battery_value(result, "pack_voltage"), "V", 1),
+            _measure("팩 전류", _battery_value(result, "pack_current"), "A", 1),
+            _measure("최고 온도", temp_max, "℃", 1),
+            _measure("최저 온도", temp_min, "℃", 1),
+            _measure("절연 저항", _battery_value(result, "isolation_kohm"), "kΩ", 0),
+            _measure("내부 저항", None, ""),
+            _measure("셀 최고 전압", cell_max, "V", 2),
+            _measure("셀 최저 전압", cell_min, "V", 2),
+            _measure("급속 충전 횟수", _battery_value(result, "quick_charge_count"), "회", 0),
+            _measure("완속 충전 횟수", _battery_value(result, "normal_charge_count"), "회", 0),
+        ],
+        "power": [
+            _measure("보조 배터리 전압", _battery_value(result, "aux_voltage"), "V", 1),
+            _measure("배터리 입구 온도", _battery_value(result, "inlet_temp"), "℃", 1),
+            _measure("인버터 커패시터 전압", _battery_value(result, "inverter_cap_voltage"), "V", 1),
+            _measure("충전 계통 고장코드", charge_codes, "건", 0),
+        ],
+        "cells": cells,
+        "cell_min": cell_min,
+        "cell_max": cell_max,
+        "cell_spread": round(cell_max - cell_min, 3) if cell_max is not None and cell_min is not None else None,
+        "modules": modules,
+        "module_min": temp_min if modules else None,
+        "module_max": temp_max if modules else None,
+        "module_spread": round(max(module_values) - min(module_values), 1) if len(module_values) >= 2 else None,
     }

@@ -147,6 +147,35 @@ def test_basic_report_shape(app):
     assert "vin" not in ice["vehicle"]
 
 
+def test_inspection_report_matches_basic_layout():
+    from types import SimpleNamespace
+
+    from app.modules.scanner.report import inspection
+
+    scan = SimpleNamespace(id=58, created_at=datetime(2026, 11, 4, tzinfo=UTC), car_no="12가3456",
+                           car_maker="기아", car_model="EV3", car_year=2025, car_fuel="전기",
+                           car_vin="KNATEST0000000001", car_distance=26602)
+    view = inspection(scan, {
+        "vin": "KNATEST0000000001",
+        "battery": {
+            "soh": {"value": 97.2}, "soc_display": {"value": 9}, "pack_voltage": {"value": 321.9},
+            "pack_current": {"value": 1.4}, "max_temp": {"value": 21}, "min_temp": {"value": 21},
+            "isolation_kohm": {"value": 1787}, "aux_voltage": {"value": 15},
+            "module_temp_1": {"value": 21}, "module_temp_2": {"value": 21},
+        },
+        "cells": {"min": 3.46, "max": 3.46, "values": [{"no": 1, "voltage": 3.46}, {"no": 2, "voltage": 3.46}]},
+        "dtcs": [], "values": [{"key": "odometer", "value": 26602}], "steps": [],
+    })
+    assert view["code"] == "WeSCAN-20261104-00000058"
+    assert view["overall"] == "양호" and view["soh"] == 97.2
+    assert view["dtc_clear"] and [g["count"] for g in view["groups"]] == [0] * 8
+    assert view["cells"][0]["voltage"] == 3.46 and len(view["modules"]) == 2
+    assert view["bms"][7]["text"] == "-"
+    missed = inspection(scan, {"battery": {"soh": {"value": 70}}, "dtcs": [{"code": "P0A80", "ecu": "7EC"}],
+                               "values": [], "steps": []})
+    assert missed["overall"] == "점검요" and missed["groups"][0]["count"] == 1
+
+
 @pytest.fixture
 def admin(app, make_user):
     make_user("scanner", type="admin")

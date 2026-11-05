@@ -252,6 +252,17 @@ def ai_verify(scan_id: int):
     return payload, 200
 
 
+@bp.get("/<int:scan_id>/report")
+@admin_required
+def inspection(scan_id: int):
+    """WeSCAN 기본 진단 보고서 형식의 전체 분석."""
+    scan = get_visible_scan(current_user, scan_id)
+    result = service.scan_result(scan)
+    from app.modules.scanner.report import inspection as build_inspection
+
+    return render_template("scanner/inspection.html", scan=scan, view=build_inspection(scan, result))
+
+
 @bp.get("/<int:scan_id>/pdf")
 @admin_required
 def pdf(scan_id: int):

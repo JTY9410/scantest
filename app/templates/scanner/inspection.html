@@ -1,0 +1,164 @@
+{% extends "layouts/base.html" %}
+{% block title %}EV 기술 진단 보고서 {{ scan.car_no }}{% endblock %}
+{% block body_class %}bg-canvas{% endblock %}
+
+{% macro tile(item) -%}
+<div class="rounded-md border border-line bg-surface px-4 py-3">
+  <p class="text-sm text-muted">{{ item.label }}</p>
+  <p class="mt-1 text-xl font-bold tabular-nums">{{ item.text }}{% if item.text != "-" and item.unit %} <span class="text-base font-semibold">{{ item.unit }}</span>{% endif %}</p>
+</div>
+{%- endmacro %}
+
+{% macro stat(label, value) -%}
+<div>
+  <p class="text-sm text-muted">{{ label }}</p>
+  <p class="text-lg font-bold tabular-nums">{{ value }}</p>
+</div>
+{%- endmacro %}
+
+{% block body %}
+<main id="main" class="mx-auto max-w-4xl px-4 py-6 print:max-w-none print:px-0">
+  <p class="mb-4 print:hidden">
+    <a class="underline" href="{{ url_for('scanner.result', scan_id=scan.id) }}">스캔 결과</a>
+    · <a class="underline" href="{{ url_for('scanner.pdf', scan_id=scan.id) }}">PDF 내려받기</a>
+  </p>
+
+  <article class="mb-6 overflow-hidden rounded-lg bg-surface shadow-md print:mb-0 print:break-after-page print:shadow-none">
+    <header class="bg-ink px-6 py-8 text-on-ink">
+      <p class="text-xs tracking-[0.25em] text-on-ink-muted">EV TECHNICAL INSPECTION REPORT</p>
+      <h1 class="mt-2 text-3xl font-bold">EV 기술 진단 보고서</h1>
+      <p class="mt-2 text-sm text-on-ink-muted">WESCAN 진단 솔루션 기반 · 전기차 고전압 시스템 정밀 진단</p>
+    </header>
+    <div class="grid gap-4 px-6 py-6 sm:grid-cols-2">
+      {% for label, value in [
+        ("제조사", view.vehicle.manufacturer), ("모델", view.vehicle.model),
+        ("연식", view.vehicle.year), ("연료 형식", view.vehicle.fuel),
+        ("차량번호", view.vehicle.number), ("차대번호 (VIN)", view.vehicle.vin),
+        ("주행거리", view.vehicle.mileage_text),
+        ("진단 일시", view.diagnosed_at)] %}
+      <div>
+        <p class="text-sm text-muted">{{ label }}</p>
+        <p class="font-semibold">{{ value }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    <section class="border-t border-line px-6 py-6" aria-labelledby="soh-title">
+      <h2 id="soh-title" class="text-sm tracking-[0.2em] text-muted">STATE OF HEALTH — 배터리 건강 상태</h2>
+      <p class="mt-2 text-5xl font-bold tabular-nums text-success">{{ "%.1f"|format(view.soh) ~ "%" if view.soh is number else "-" }}</p>
+      <p class="mt-2">{{ view.soh_note }}</p>
+      <p class="text-sm text-muted">{{ view.mileage_note }}</p>
+    </section>
+    <section class="grid gap-3 border-t border-line px-6 py-6 sm:grid-cols-2" aria-label="종합 판정">
+      <div>
+        <p class="text-sm tracking-[0.2em] text-muted">OVERALL</p>
+        <p class="text-3xl font-bold {{ 'text-success' if view.overall == '양호' else 'text-warning' }}">{{ view.overall }}</p>
+        <p class="mt-1 text-sm">{{ view.judgment_note }}</p>
+      </div>
+      <div>
+        <p class="text-sm text-muted">고장코드</p>
+        <p class="text-xl font-bold {{ 'text-success' if view.dtc_clear else 'text-danger' }}">{{ "미검출" if view.dtc_clear else view.dtc_count ~ "건" }}</p>
+      </div>
+    </section>
+    <section class="border-t border-line px-6 py-6" aria-labelledby="dtc-groups-title">
+      <h2 id="dtc-groups-title" class="text-sm font-semibold">고장 코드 진단 · 8개 계통 전수 스캔</h2>
+      <p class="mt-2 font-semibold">{{ "검출된 고장 코드가 없습니다" if view.dtc_clear else "검출된 고장 코드 " ~ view.dtc_count ~ "건" }}</p>
+      <ul class="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {% for group in view.groups %}
+        <li class="rounded-md bg-surface-2 px-3 py-2">
+          <p class="text-sm text-muted">{{ group.label }}</p>
+          <p class="text-lg font-bold tabular-nums">{{ group.count }}</p>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    <footer class="bg-surface-2 px-6 py-4 text-sm text-muted">
+      <p>본 진단보고서는 위카모빌리티(주)와 (주)배터와이가 공동개발한 WESCAN 진단솔루션을 기반으로, 스캔 데이터를 분석하여 산출한 자료입니다.</p>
+      <p class="mt-2 font-semibold text-fg">{{ view.code }} · 발행일 {{ view.issued_on }}</p>
+      <p class="mt-1">위카모빌리티(주) · (주)배터와이</p>
+    </footer>
+  </article>
+
+  <article class="mb-6 rounded-lg bg-surface p-6 shadow-md print:mb-0 print:break-after-page print:shadow-none">
+    <p class="text-sm text-muted">{{ view.title }} · {{ view.vehicle.number }}</p>
+    <p class="text-sm font-semibold">{{ view.code }}</p>
+    <h2 class="mt-4 text-xl font-bold">주요 진단 데이터</h2>
+    <p class="text-sm text-muted">{{ view.judgments|length }}개 항목{% if view.judgments and view.overall == '양호' %} · 전항 기준 충족{% endif %}</p>
+    {% if view.judgments %}
+    <ul class="mt-4 grid gap-3">
+      {% for row in view.judgments %}
+      <li class="flex flex-wrap items-end justify-between gap-2 border-b border-line pb-3">
+        <div>
+          <p class="font-semibold">{{ row.item }}</p>
+          <p class="text-sm text-muted">{{ row.standard }}</p>
+        </div>
+        <p class="text-lg font-bold tabular-nums {{ 'text-success' if row.result == '양호' else 'text-warning' }}">{{ row.value }} {{ row.unit }} · {{ row.result }}</p>
+      </li>
+      {% endfor %}
+    </ul>
+    <p class="mt-4 text-sm text-muted">막대 대신 기준 문장과 실측값을 함께 보여 줍니다. 읽지 못한 항목은 목록에 없습니다.</p>
+    {% else %}
+    <p class="mt-4">{{ view.judgment_note }}</p>
+    {% endif %}
+    <h2 class="mt-8 text-xl font-bold">고장 코드 상세</h2>
+    <p class="mt-2">{{ "검출된 고장 코드가 없습니다." if view.dtc_clear else "검출 " ~ view.dtc_count ~ "건. 코드 목록은 스캔 결과에 있습니다." }}</p>
+  </article>
+
+  <article class="mb-6 rounded-lg bg-surface p-6 shadow-md print:mb-0 print:break-after-page print:shadow-none">
+    <p class="text-sm text-muted">{{ view.title }} · {{ view.vehicle.number }}</p>
+    <h2 class="mt-2 text-xl font-bold">고전압 시스템 계통</h2>
+    <h3 class="mt-6 text-lg font-bold">BMS 센서 데이터</h3>
+    <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {% for item in view.bms %}{{ tile(item) }}{% endfor %}
+    </div>
+    <h3 class="mt-8 text-lg font-bold">전력 · 충전 · 구동 계통</h3>
+    <div class="mt-3 grid gap-3 sm:grid-cols-2">
+      {% for item in view.power %}{{ tile(item) }}{% endfor %}
+    </div>
+  </article>
+
+  <article class="mb-6 rounded-lg bg-surface p-6 shadow-md print:mb-0 print:break-after-page print:shadow-none">
+    <p class="text-sm text-muted">{{ view.title }} · {{ view.vehicle.number }}</p>
+    <h2 class="mt-2 text-xl font-bold">셀 별 전압 분포 <span class="text-base font-semibold text-muted">총 {{ view.cells|length }}개 셀</span></h2>
+    <div class="mt-4 grid grid-cols-3 gap-3">
+      {{ stat("최저 전압", "%.3f V"|format(view.cell_min) if view.cell_min is number else "-") }}
+      {{ stat("최고 전압", "%.3f V"|format(view.cell_max) if view.cell_max is number else "-") }}
+      {{ stat("편차 (Max−Min)", "%.3f V"|format(view.cell_spread) if view.cell_spread is number else "-") }}
+    </div>
+    {% if view.cells %}
+    <ol class="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+      {% for cell in view.cells %}
+      <li class="flex justify-between rounded-md bg-surface-2 px-3 py-2 tabular-nums">
+        <span class="text-muted">{{ cell.no }}</span><span class="font-semibold">{{ "%.3f"|format(cell.voltage) }} V</span>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="mt-6">셀 전압을 읽지 못했습니다.</p>
+    {% endif %}
+  </article>
+
+  <article class="rounded-lg bg-surface p-6 shadow-md print:shadow-none">
+    <p class="text-sm text-muted">{{ view.title }} · {{ view.vehicle.number }}</p>
+    <h2 class="mt-2 text-xl font-bold">모듈 별 온도 분포 <span class="text-base font-semibold text-muted">총 {{ view.modules|length }}개 모듈</span></h2>
+    <div class="mt-4 grid grid-cols-3 gap-3">
+      {{ stat("최저 온도", "%.1f ℃"|format(view.module_min) if view.module_min is number else "-") }}
+      {{ stat("최고 온도", "%.1f ℃"|format(view.module_max) if view.module_max is number else "-") }}
+      {{ stat("편차 (Max−Min)", "%.1f ℃"|format(view.module_spread) if view.module_spread is number else "-") }}
+    </div>
+    {% if view.modules %}
+    <ol class="mt-6 grid grid-cols-2 gap-2 sm:grid-cols-3">
+      {% for row in view.modules %}
+      <li class="flex justify-between rounded-md bg-surface-2 px-3 py-2 tabular-nums">
+        <span class="text-muted">모듈 {{ row.no }}</span><span class="font-semibold">{{ "%.1f"|format(row.value) }} ℃</span>
+      </li>
+      {% endfor %}
+    </ol>
+    {% else %}
+    <p class="mt-6">모듈 온도를 읽지 못했습니다.</p>
+    {% endif %}
+    <p class="mt-6 text-sm text-muted">본 보고서의 수치는 진단 시점의 차량 상태를 기록한 것으로, 이후 사용 조건에 따라 변동될 수 있습니다.</p>
+    <p class="mt-2 text-sm text-muted">진단 방식 및 판정 기준 문의: 위카모빌리티(주) 자동차진단기술연구소 · 070-7588-0561</p>
+    <p class="mt-2 text-sm font-semibold">{{ view.code }}</p>
+  </article>
+</main>
+{% endblock %}

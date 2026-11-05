@@ -22,6 +22,7 @@
 {% set protocol = result.protocol or {} %}
 {% call page_header("위스캔 결과 · " ~ scan.car_no, scan.created_at|kst ~ " · " ~ transports.get(result.transport, result.transport),
                     back=(url_for('scanner.index'), "스캔하기")) %}
+  <a class="btn btn-primary print:hidden" href="{{ url_for('scanner.inspection', scan_id=scan.id) }}">기본 진단 보고서</a>
   <a class="btn btn-secondary print:hidden" href="{{ url_for('scanner.pdf', scan_id=scan.id) }}" download
      {% if request.args.get('pdf') %}data-pdf-auto{% endif %}>PDF 내려받기</a>
   <button type="button" class="btn btn-secondary print:hidden" data-print>인쇄</button>
@@ -38,7 +39,7 @@
   {% elif summary.dtc_total %}
     <span class="btn btn-secondary print:hidden" aria-disabled="true" title="{% if not current_user.can_clear_dtc %}권한 없음{% elif not current_user.totp_secret_enc %}MFA 필요{% else %}스캔 실패{% endif %}">고장코드 지우기</span>
   {% endif %}
-  <a class="btn btn-primary print:hidden" href="{{ url_for('scanner.index', car_no=scan.car_no) }}">다시 스캔</a>
+  <a class="btn btn-secondary print:hidden" href="{{ url_for('scanner.index', car_no=scan.car_no) }}">다시 스캔</a>
 {% endcall %}
 {% include "scanner/_path.html" %}
 

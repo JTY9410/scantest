@@ -504,13 +504,24 @@ def _save_document(scan: Scan) -> ScanDocument | None:
 
 
 def scan_document(scan: Scan) -> ScanDocument:
-    """저장된 결과 PDF. 없으면(생성 실패, 이전 스캔) 지금 만든다."""
-    scan_result(scan)
+    """기본 진단 보고서 PDF. 저장된 파일이 없거나 이전 형식이면 지금 내용으로 다시 만든다."""
+    data = scan_result(scan)
+    try:
+        content = pdf.render(scan, data)
+    except Exception as exc:
+        current_app.logger.exception("스캔 결과 PDF 생성 실패")
+        raise ServiceError("결과 PDF를 만들지 못했습니다. 잠시 후 다시 시도하세요.", 500) from exc
     document = db.session.scalar(select(ScanDocument).where(ScanDocument.scan_id == scan.id))
     if document is None:
-        document = _save_document(scan)
-        if document is None:
-            raise ServiceError("결과 PDF를 만들지 못했습니다. 잠시 후 다시 시도하세요.", 500)
+        document = ScanDocument(scan_id=scan.id, filename=pdf.filename(scan), content=content,
+                                size=len(content), sha256=hashlib.sha256(content).hexdigest())
+        db.session.add(document)
+        db.session.commit()
+        return document
+    if document.content != content:
+        document.content = content
+        document.size = len(content)
+        document.sha256 = hashlib.sha256(content).hexdigest()
         db.session.commit()
     return document
 
