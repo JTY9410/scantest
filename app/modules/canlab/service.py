@@ -2016,8 +2016,13 @@ def reconcile_upload(actor: User, *, car_no: str | None, wescan: tuple[str, byte
     kind = classify(car, {"battery": decoded.get("values") or {}, "cells": decoded.get("cells") or {}})
     scope = scope_car(vehicle["maker"], vehicle["model"])
     rules = {key: _layout(rule) for key, rule in rules_for(scope).items()}
+    from app.modules.canlab.engine.reconcile import DEFAULT_REQUIRED, tolerance_table
+
+    required = {**DEFAULT_REQUIRED, **{k: tuple(tuple(x) for x in v)
+                                      for k, v in (current_app.config.get("RECONCILE_REQUIRED") or {}).items()}}
     result = reconcile(w_trace, r_traces, kind=kind["type"], model_hint=hint, rules=rules, table=definitions,
-                       references=references.hypotheses(scope))
+                       references=references.hypotheses(scope),
+                       tolerances=tolerance_table(current_app.config.get("RECONCILE_TOLERANCES")), required=required)
     vin = result["vin"]
     if vin["status"] == "불일치":
         raise ServiceError("위스캔과 리버스데이터의 VIN이 다릅니다. 같은 차량의 기록인지 확인하세요. 대조를 중단했습니다.")

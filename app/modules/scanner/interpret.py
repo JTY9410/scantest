@@ -3,7 +3,7 @@
 import re
 from typing import Any
 
-from app.modules.canlab.engine import obdb, signals
+from app.modules.canlab.engine import bms, obdb, signals
 from app.modules.canlab.engine.decode import Trace, decode_signals, load_trace
 from app.modules.canlab.engine.frames import elm_from_exchanges
 from app.modules.canlab.engine.search import Layout, load_references
@@ -143,6 +143,22 @@ def battery_values(trace: Trace, rules: list, kwp: dict | None = None, model: di
         }
         if normal:
             values[key].update(range=list(normal), outlier=not normal[0] <= value <= normal[1])
+    # BMS 밖 제어기(LDC·충전 인렛): 차종 플랫폼에 근거가 있는 정의만(canlab.engine.bms.ECU_FIELDS)
+    plat = bms.platform(model["repo"].replace("-", "") if model else None, None)
+    for field in bms.ecu_fields(plat):
+        signal = signals.BY_KEY.get(field.key)
+        rows = trace.samples.get((field.request, field.did))
+        value = field.value(rows[-1][1]) if rows else None
+        if field.key in values or signal is None or value is None or not signal.minimum <= value <= signal.maximum:
+            continue
+        values[field.key] = {
+            "value": value, "series": [[round(rows[-1][0], 1), value]], "label": field.label, "unit": field.unit,
+            "rule_id": None, "rule_version": None, "confidence": REFERENCE_CONFIDENCE,
+            "formula": f"{field.request:03X} 22 {field.did:04X} [{field.start}:{field.start + field.width}]"
+                       f"×{field.scale:g}" + (f"{field.offset:+g}" if field.offset else ""),
+            "source": f"{field.request:03X} 22 {field.did:04X}", "origin": "OBDb + 실차 로그 검증",
+            "reference": True, "grade": field.grade, "note": field.note,
+        }
     return values
 
 

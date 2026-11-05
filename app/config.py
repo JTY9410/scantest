@@ -13,6 +13,19 @@ def _bool(name: str, default: bool) -> bool:
     return value.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _json(name: str) -> dict:
+    """JSON 객체 환경변수. 비어 있으면 {}."""
+    import json
+
+    value = os.environ.get(name)
+    if not value:
+        return {}
+    parsed = json.loads(value)
+    if not isinstance(parsed, dict):
+        raise ValueError(f"{name}는 JSON 객체여야 합니다.")
+    return parsed
+
+
 def _int(name: str, default: int) -> int:
     value = os.environ.get(name)
     return int(value) if value else default
@@ -120,6 +133,10 @@ class Config:
     AI_REQUEST_TIMEOUT_SECONDS = _int("AI_REQUEST_TIMEOUT_SECONDS", 50)
     # 도커(gunicorn) 기준 업로드 한도. 방송 CAN이 많은 28.7MB 기록도 받도록 64MB.
     CANLAB_MAX_UPLOAD_BYTES = _int("CANLAB_MAX_UPLOAD_BYTES", 64 * 1024 * 1024)
+    # 완료 데이터 대조 허용오차·필수 명령 덮어쓰기(JSON). 예: {"soh": {"abs": 0.2}} / {"ice": [["7E0", "1902"]]}
+    # 기본값과 산출 근거: canlab/engine/reconcile.py DEFAULT_TOLERANCES·DEFAULT_REQUIRED, docs/flows/reconcile_tolerances.md
+    RECONCILE_TOLERANCES = _json("RECONCILE_TOLERANCES")
+    RECONCILE_REQUIRED = _json("RECONCILE_REQUIRED")
     PAGE_SIZE_DEFAULT = 15
     PAGE_SIZE_MAX = 100
     ADMIN_PAGE_SIZE = 20

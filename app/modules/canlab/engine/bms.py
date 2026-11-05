@@ -33,6 +33,7 @@ class Field:
     signed: bool = False
     offset: float = 0.0
     note: str = ""
+    request: int = BMS_REQUEST
 
     def value(self, data: bytes) -> float | None:
         if len(data) < self.start + self.width:
@@ -89,6 +90,37 @@ EGMP_EXTRA: tuple[Field, ...] = (
           note="OBDb IONIQ-5만 근거. 완속+급속 ≤ 누적 충전 에너지(로그 8대 성립)"),
     Field("quick_charge_kwh", "급속 충전 누적 에너지", 0x0111, 16, 4, 1, "kWh", LIKELY, note="OBDb IONIQ-5만 근거"),
 )
+# BMS 밖 제어기(2026-11-05 3차 검증: 바탕화면 실차 로그 22개 중 E-GMP 5개 + OBDb signalsets/v3).
+# 바이트 위치는 OBDb bix/8(응답 62 + DID 포함 기준)과 같은 셈이다(위 BMS 필드와 같은 기준으로 로그에서 확인).
+#  - LDC 출력 전압 7E5 22E011 [10–11]÷1000: OBDb IONIQ-5·Tucson-Hybrid 정의. 같은 응답 [14–15]÷10(LDC 입력 전압)이
+#    BMS 팩 전압과 로그 5개 모두 0.3% 안(690.2/691.9·711.5/712.0·540.0/539.9V) → 배치 확인. 출력 14.7~14.9V,
+#    보조배터리(0101[29]) 14.1~14.3V보다 0.4~0.8V 높음(정상 충전 상태). 위스캔·지스캔 같은 차 2쌍 차이 ≤0.03V → 유력
+#  - DC 인렛 1·2, AC 인렛 744 22E004 [8]·[9]·[10] −50: OBDb IONIQ-5·Kia-Niro-EV 일치. 로그 5개 16~30°C,
+#    위스캔·지스캔 같은 차 2쌍 차이 ≤1°C → 유력
+#  - 구동모터·인버터 온도 7E3 22E001: OBDb [25–26]·[27–28]÷100은 로그에서 −84~305°C로 맞지 않고, 값 범위로
+#    고르면 후보가 10곳 넘게 나와 정할 수 없다 → 넣지 않는다(미확인). U/V/W 옵셋은 공개 정의가 없다(미확인).
+# 플랫폼별 등급. 없는 플랫폼은 읽지 않는다(HEV LDC는 OBDb 투싼 하이브리드 정의뿐이고 로그가 없어 미확인).
+ECU_FIELDS: tuple[tuple[Field, dict[str, str]], ...] = (
+    (Field("ldc_voltage", "LDC 출력 전압", 0xE011, 10, 2, 0.001, "V", LIKELY, request=0x7E5,
+           note="OBDb IONIQ-5·Tucson-Hybrid 정의 + 같은 응답의 입력 전압=팩 전압(로그 5개)"), {"egmp": LIKELY}),
+    (Field("ldc_input_voltage", "LDC 입력 전압", 0xE011, 14, 2, 0.1, "V", LIKELY, request=0x7E5,
+           note="BMS 팩 전압과 0.3% 안(로그 5개)"), {"egmp": LIKELY}),
+    (Field("dc_inlet_temp_1", "급속(DC) 충전 인렛 온도 1", 0xE004, 8, 1, 1, "°C", LIKELY, offset=-50, request=0x744,
+           note="OBDb IONIQ-5·Kia-Niro-EV 일치, 위스캔·지스캔 2쌍 ±1°C"), {"egmp": LIKELY, "niro": LIKELY}),
+    (Field("dc_inlet_temp_2", "급속(DC) 충전 인렛 온도 2", 0xE004, 9, 1, 1, "°C", LIKELY, offset=-50, request=0x744,
+           note="OBDb IONIQ-5·Kia-Niro-EV 일치, 위스캔·지스캔 2쌍 ±1°C"), {"egmp": LIKELY, "niro": LIKELY}),
+    (Field("ac_inlet_temp_1", "완속(AC) 충전 인렛 온도", 0xE004, 10, 1, 1, "°C", LIKELY, offset=-50, request=0x744,
+           note="OBDb IONIQ-5·Kia-Niro-EV 일치, 위스캔·지스캔 2쌍 ±1°C"), {"egmp": LIKELY, "niro": LIKELY}),
+)
+
+
+def ecu_fields(plat: str) -> list[Field]:
+    """플랫폼에 근거가 있는 BMS 밖 필드(등급은 플랫폼별)."""
+    from dataclasses import replace
+
+    return [replace(f, grade=grades[plat]) for f, grades in ECU_FIELDS if plat in grades]
+
+
 # 0111 [26]/[27] 모듈 온도 17·18: 셀 96·180·192 차량에서만 모듈 온도와 같은 범위(아이오닉6 132셀은 0 → 다른 배치).
 EXTRA_TEMP_CELLS = (96, 180, 192)
 
@@ -196,6 +228,14 @@ def decode_bms(samples: dict, model_hint: str | None = None) -> dict | None:
                 fields.append({"key": f"module_temp_{n}", "label": f"모듈 온도 {n}", "value": t, "unit": "°C",
                                "grade": LIKELY, "pid": "0111", "bytes": str(idx),
                                "note": "OBDb IONIQ-5만 근거, 0101 모듈 온도와 같은 범위"})
+    for field in ecu_fields(plat):
+        rows = samples.get((field.request, field.did))
+        if not rows or (value := field.value(rows[-1][1])) is None:
+            continue
+        values[field.key] = value
+        fields.append({"key": field.key, "label": field.label, "value": value, "unit": field.unit,
+                       "grade": field.grade, "pid": f"{field.request:03X} {field.did:04X}", "bytes": f"{field.start}"
+                       + (f"–{field.start + field.width - 1}" if field.width > 1 else ""), "note": field.note})
     soh = None
     if (data := latest.get(0x0105)) is not None and len(data) >= 27:
         raw = int.from_bytes(data[25:27], "big") * 0.1

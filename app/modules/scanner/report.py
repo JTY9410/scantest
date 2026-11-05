@@ -183,7 +183,8 @@ def _diff(result: dict, a: str, b: str, digits: int = 2) -> float | None:
     return round(abs(x - y), digits) if x is not None and y is not None else None
 
 
-# 아래 키(LDC·충전 인렛·구동 모터)는 아직 스캔 해석(디코딩 규칙)이 없어 대개 '측정불가'다.
+# LDC 출력 전압(7E5 22E011)·충전 인렛 온도(744 22E004)는 E-GMP(니로EV는 인렛만)에서 canlab.engine.bms.ECU_FIELDS로
+# 읽는다(유력). 구동모터·인버터 온도와 U/V/W 옵셋은 근거 있는 정의가 없어 아직 '측정불가'다(HEV LDC도 미확인).
 # 규칙이 생겨 result.battery에 같은 키로 들어오면 그대로 판정한다.
 LDC, AUX = "ldc_voltage", "aux_voltage"
 INLETS = ("dc_inlet_temp_1", "dc_inlet_temp_2", "ac_inlet_temp_1")

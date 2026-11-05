@@ -52,6 +52,12 @@ SIGNALS: tuple[Signal, ...] = (
     Signal("inverter_cap_voltage", "인버터 커패시터 전압", "V", 0, 1000, ("인버터 커패시터 전압",),
            drifting=True),
     Signal("isolation_kohm", "절연 저항", "kΩ", 0, 65535, ("절연 저항",)),
+    # BMS 밖 제어기(LDC 7E5·VCMS 744). 정의는 bms.ECU_FIELDS
+    Signal("ldc_voltage", "LDC 출력 전압", "V", 0, 20, ("LDC 출력 전압",), drifting=True),
+    Signal("ldc_input_voltage", "LDC 입력 전압", "V", 0, 1000, ("LDC 입력 전압",), drifting=True),
+    Signal("dc_inlet_temp_1", "급속(DC) 충전 인렛 온도 1", "°C", -50, 150, ("DC 인렛 온도 1",)),
+    Signal("dc_inlet_temp_2", "급속(DC) 충전 인렛 온도 2", "°C", -50, 150, ("DC 인렛 온도 2",)),
+    Signal("ac_inlet_temp_1", "완속(AC) 충전 인렛 온도", "°C", -50, 150, ("AC 인렛 온도",)),
     Signal("max_charge_power_kw", "최대 충전 가능 파워", "kW", 0, 1000, ("최대 충전 가능 파워",)),
     Signal("max_discharge_power_kw", "최대 방전 가능 파워", "kW", 0, 1000, ("최대 방전 가능 파워",)),
 )
