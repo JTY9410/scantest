@@ -1,6 +1,6 @@
 # WECAR Scan 배포 가이드
 
-공식 운영 경로는 **Mac 서버 Docker Compose + Compose PostgreSQL**입니다. Vercel 앱과 Supabase DB 운영은 이 프로젝트에서 중단되었으며, 이 문서의 Vercel/Supabase 절차는 과거 배포 이력 확인용 보관 섹션입니다.
+공식 운영 경로는 **Mac 서버 Docker Compose + Compose PostgreSQL**입니다. Supabase DB 운영은 이 프로젝트에서 중단되었으며, 이 문서의 Supabase 절차는 과거 배포 이력 확인용 보관 섹션입니다.
 
 ## 공식 운영: Mac Docker Compose
 
@@ -19,7 +19,7 @@ curl http://localhost:${WEB_PORT:-8000}/up
 - `data/seed/supabase_baseline.dump`가 있으면 빈 PostgreSQL 볼륨 최초 기동 시에만 복원합니다. 기존 볼륨은 재시드하지 않습니다.
 - OBD HTTPS 안내는 `PUBLIC_BASE_URL`이 있으면 그 주소를 보여주고, 없으면 현재 사이트의 HTTPS 주소를 쓰도록 안내합니다.
 
-## 중단된 Vercel/Supabase 절차(보관)
+## 중단된 Supabase 절차(보관)
 
 ## 사전 준비
 
@@ -28,7 +28,6 @@ curl http://localhost:${WEB_PORT:-8000}/up
 - ✅ PR #2: https://github.com/JTY9410/scantest/pull/2
 
 ### 2. 필요한 계정
-- Vercel 계정 (https://vercel.com)
 - Supabase 계정 (https://supabase.com)
 - GitHub 저장소 접근 권한
 
@@ -98,7 +97,7 @@ python -m pytest -v
 ### 2. 데이터베이스 URL 확인
 1. 프로젝트 대시보드 → Settings → Database
 2. **Connection string** 섹션:
-   - **Pooled URL** (Transaction mode): Vercel 웹 앱용
+   - **Pooled URL** (Transaction mode): 웹 앱용
    - **Direct URL** (Session mode): 마이그레이션용
 
 ### 3. 데이터베이스 마이그레이션
@@ -143,104 +142,6 @@ python -m flask shell
 
 ---
 
-## Vercel 배포(중단됨, 보관)
-
-### 1. Vercel 프로젝트 생성
-1. https://vercel.com 로그인
-2. "Add New..." → "Project" 클릭
-3. GitHub 저장소 선택: `JTY9410/scantest`
-4. 브랜치 선택: `cursor/complete-wecar-scan-features-0b37` 또는 `main` (PR 병합 후)
-
-### 2. 환경변수 설정
-
-**Project Settings → Environment Variables** 에서 다음 추가:
-
-#### 필수 환경변수
-
-```
-# App
-APP_ENV=production
-DEBUG=False
-
-# 보안 (강력한 무작위 문자열 생성)
-SECRET_KEY=<openssl rand -base64 32>
-JWT_SECRET=<openssl rand -base64 48>
-ENCRYPTION_KEY=<python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())">
-
-# 데이터베이스 (Supabase Pooled URL)
-SQLALCHEMY_DATABASE_URI=postgresql://postgres.[project-ref]:[password]@aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres?pgbouncer=true
-
-# Rate Limiting
-RATELIMIT_STORAGE_URI=memory://
-ADMIN_LOGIN_RATE_LIMIT=5 per 15 minutes
-
-# Session
-SESSION_COOKIE_SECURE=True
-SESSION_COOKIE_HTTPONLY=True
-SESSION_COOKIE_SAMESITE=Lax
-REMEMBER_COOKIE_SECURE=True
-PERMANENT_SESSION_LIFETIME=43200
-
-# CORS (필요 시)
-CORS_ORIGINS=https://your-domain.vercel.app
-```
-
-#### 선택 환경변수
-
-```
-# 차량정보 API
-CAR_INFO_API_URL=https://api.car-info-service.com/get_car_info
-CAR_INFO_API_KEY=<your-api-key>
-
-# SMS 인증
-SMS_API_KEY=<your-sms-api-key>
-SMS_API_SECRET=<your-sms-api-secret>
-
-# AI 연결 (CAN 분석)
-OPENAI_API_KEY=<your-openai-key>
-
-# 지식베이스 AI 연구 (선택)
-KNOWLEDGE_AI_KEY=<your-ai-key>
-```
-
-### 3. vercel.json 확인
-
-프로젝트 루트의 `vercel.json`:
-
-```json
-{
-  "buildCommand": "pip install -e . && npm ci && npm run build:css",
-  "devCommand": "gunicorn -c gunicorn.conf.py app.wsgi:app",
-  "installCommand": "pip install -e .",
-  "outputDirectory": "app/static",
-  "framework": null,
-  "rewrites": [
-    {
-      "source": "/(.*)",
-      "destination": "/api/index"
-    }
-  ]
-}
-```
-
-### 4. 배포 실행
-
-1. Vercel 대시보드에서 "Deploy" 클릭
-2. 빌드 로그 확인
-3. 배포 완료 시 URL 확인: `https://your-project.vercel.app`
-
-### 5. 배포 후 확인
-
-```bash
-# 헬스체크
-curl https://your-project.vercel.app/api/health
-
-# 관리자 로그인
-open https://your-project.vercel.app/admin/login
-```
-
----
-
 ## 배포 후 설정
 
 ### 1. 관리자 MFA 활성화
@@ -262,16 +163,15 @@ open https://your-project.vercel.app/admin/login
 3. 없으면 `/admin/knowledge/import` → "표준 데이터 시딩" 클릭
 
 ### 4. 커스텀 도메인 설정 (선택)
-1. Vercel Project Settings → Domains
-2. 도메인 추가 (예: `scan.wecar.kr`)
-3. DNS 레코드 설정 (CNAME 또는 A)
+1. DNS A 레코드를 Mac 서버 공인 IP로 설정 (예: `scan.wecar.kr`)
+2. nginx 서버 블록·인증서 설정 후 `PUBLIC_BASE_URL` 지정
 
 ---
 
 ## 모니터링 및 유지보수
 
 ### 1. 로그 확인
-- Vercel 대시보드 → Deployments → 최신 배포 → Logs
+- `docker compose -f compose.yaml -f compose.mac.yaml logs -f web`
 - Supabase 대시보드 → Database → Query 탭 (느린 쿼리 확인)
 
 ### 2. 데이터베이스 백업
@@ -311,12 +211,6 @@ python -m flask db upgrade
 - **에러**: "relation already exists"
   - **해결**: DB 초기화 후 재시도 또는 충돌 마이그레이션 수동 해결
 
-### Vercel 배포 타임아웃
-- **원인**: 빌드 시간 초과 (10분 제한)
-- **해결**: 
-  - 의존성 캐싱 확인
-  - `vercel.json`의 `buildCommand` 최적화
-
 ### Supabase Connection Pooling
 - **증상**: "Too many connections"
 - **해결**:
@@ -342,13 +236,6 @@ python -m flask db upgrade
 - [ ] 관리자 계정 생성
 - [ ] 표준 OBD2 데이터 시딩
 
-### Vercel 배포
-- [ ] GitHub 저장소 연결
-- [ ] 필수 환경변수 설정 (SECRET_KEY, JWT_SECRET, DATABASE_URL 등)
-- [ ] 빌드 및 배포 성공
-- [ ] 헬스체크 확인
-- [ ] 관리자 로그인 확인
-
 ### 배포 후
 - [ ] 관리자 MFA 활성화
 - [ ] DTC 삭제 권한 부여
@@ -364,5 +251,4 @@ python -m flask db upgrade
 - `GAPS.md`: 남은 작업 및 제약사항
 - `pro.md`: 기술개발 정의서
 - `AGENTS.md`: 개발 규칙
-- Vercel 문서: https://vercel.com/docs
 - Supabase 문서: https://supabase.com/docs

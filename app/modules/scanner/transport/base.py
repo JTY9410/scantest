@@ -31,8 +31,8 @@ SERVER_TRANSPORT_BLOCKED = "이 서버에서는 차량 연결을 사용할 수 �
 
 
 def serverless() -> bool:
-    """배포(Vercel 등 서버리스) 환경이면 True. 이 환경은 차량 망에 닿지 않는다."""
-    return os.environ.get("VERCEL") == "1" or bool(os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+    """차량 망에 닿지 않는 서버면 True(VEHICLE_NETWORK_BLOCKED=1). 도커·로컬 기본은 False."""
+    return (os.environ.get("VEHICLE_NETWORK_BLOCKED") or "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def ensure_server_transport_allowed() -> None:

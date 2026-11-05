@@ -55,9 +55,9 @@ def test_can_adapter_test_connection():
 # DoIP 어댑터 테스트
 
 
-def test_doip_adapter_blocks_on_vercel(monkeypatch):
-    """Vercel 환경에서는 DoIP 연결을 차단합니다."""
-    monkeypatch.setenv("VERCEL", "1")
+def test_doip_adapter_blocks_on_blocked_server(monkeypatch):
+    """차량 망 차단 서버에서는 DoIP 연결을 차단합니다."""
+    monkeypatch.setenv("VEHICLE_NETWORK_BLOCKED", "1")
 
     adapter = DoIPAdapter()
     with pytest.raises(TransportError, match="차량 이더넷"):
@@ -223,9 +223,9 @@ def test_doip_blocks_metadata_address():
         adapter.connect({"host": "169.254.169.254", "port": 13400})
 
 
-def test_doip_blocks_on_vercel_deployment(monkeypatch):
-    """Vercel 환경에서 DoIP를 차단합니다."""
-    monkeypatch.setenv("VERCEL", "1")
+def test_doip_blocks_on_blocked_server_deployment(monkeypatch):
+    """차량 망 차단 서버에서 DoIP를 차단합니다."""
+    monkeypatch.setenv("VEHICLE_NETWORK_BLOCKED", "1")
 
     adapter = DoIPAdapter()
     with pytest.raises(TransportError, match="차량 이더넷"):
@@ -233,14 +233,14 @@ def test_doip_blocks_on_vercel_deployment(monkeypatch):
 
 
 def test_ethernet_vehicle_network_blocked_check(monkeypatch):
-    """ethernet.vehicle_network_blocked가 Vercel을 감지합니다."""
+    """ethernet.vehicle_network_blocked가 차단 설정을 감지합니다."""
     from app.modules.scanner.ethernet import vehicle_network_blocked
 
     # 일반 환경
     assert not vehicle_network_blocked()
 
-    # Vercel 환경
-    monkeypatch.setenv("VERCEL", "1")
+    # 차량 망 차단 서버
+    monkeypatch.setenv("VEHICLE_NETWORK_BLOCKED", "1")
     assert vehicle_network_blocked()
 
 

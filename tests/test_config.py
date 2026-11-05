@@ -10,7 +10,7 @@ def test_database_url_prefers_explicit_setting(monkeypatch):
     assert database_url() == "postgresql+psycopg://app@db/app"
 
 
-def test_database_url_converts_vercel_supabase_url(monkeypatch):
+def test_database_url_converts_postgres_scheme_and_drops_supa_param(monkeypatch):
     monkeypatch.setenv(
         "DATABASE_URL",
         "postgres://postgres.ref:p%40ss@pooler.supabase.com:6543/postgres?sslmode=require&supa=base-pooler.x",
@@ -44,7 +44,7 @@ def test_default_engine_keeps_a_checked_pool(monkeypatch):
     assert engine_options() == {"pool_pre_ping": True}
 
 
-def test_serverless_engine_uses_no_pool_and_no_prepared_statements(monkeypatch):
+def test_poolless_engine_uses_no_pool_and_no_prepared_statements(monkeypatch):
     monkeypatch.setenv("DATABASE_POOL", "none")
 
     assert engine_options() == {"poolclass": NullPool, "connect_args": {"prepare_threshold": None}}
@@ -72,3 +72,18 @@ def test_trust_proxy_alias_enables_one_hop(monkeypatch):
     monkeypatch.delenv("PROXY_FIX_HOPS", raising=False)
     monkeypatch.setenv("TRUST_PROXY", "1")
     assert proxy_fix_hops() == 1
+
+
+def test_upload_limit_defaults_to_docker_size(app):
+    """업로드 한도 기본값은 도커 기준 64MB(큰 CAN 기록 허용)."""
+    assert app.config["CANLAB_MAX_UPLOAD_BYTES"] == 64 * 1024 * 1024
+
+
+def test_vehicle_network_is_open_by_default_and_blocked_by_setting(monkeypatch):
+    from app.modules.scanner.transport.base import serverless
+
+    monkeypatch.delenv("VEHICLE_NETWORK_BLOCKED", raising=False)
+    monkeypatch.setenv("VERCEL", "1")  # 예전 플랫폼 변수는 더 이상 영향 없음
+    assert serverless() is False
+    monkeypatch.setenv("VEHICLE_NETWORK_BLOCKED", "1")
+    assert serverless() is True

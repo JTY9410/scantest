@@ -44,8 +44,9 @@ def read_plan() -> list[dict]:
 
 
 def vehicle_network_blocked() -> bool:
-    """배포 서버는 차량 랜에 닿지 않는다."""
-    return os.environ.get("VERCEL") == "1"
+    """차량 랜에 닿지 않는 서버(VEHICLE_NETWORK_BLOCKED=1)에서는 막는다."""
+    from app.modules.scanner.transport.base import serverless
+    return serverless()
 
 
 def check_gateway(host: str | None, port: int | None) -> tuple[str, int]:

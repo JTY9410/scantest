@@ -30,7 +30,7 @@ def database_url() -> str | None:
 
 
 def engine_options() -> dict:
-    """DATABASE_POOL=none: 풀 없이 연결(레거시 서버리스용). Mac Compose 운영은 기본 pool_pre_ping."""
+    """DATABASE_POOL=none: 풀 없이 연결(외부 풀러 사용 시). Mac Compose 운영은 기본 pool_pre_ping."""
     if os.environ.get("DATABASE_POOL") == "none":
         return {"poolclass": NullPool, "connect_args": {"prepare_threshold": None}}
     return {"pool_pre_ping": True}
@@ -116,10 +116,10 @@ class Config:
     PERMANENT_SESSION_LIFETIME = timedelta(hours=8)
 
     AI_TEST_TIMEOUT_SECONDS = 10
-    # 결과지 이미지 판독은 오래 걸린다. Vercel 함수 제한 시간(60초)보다 짧게 둔다.
+    # 결과지 이미지 판독은 오래 걸린다. gunicorn 요청 제한 시간보다 짧게 둔다.
     AI_REQUEST_TIMEOUT_SECONDS = _int("AI_REQUEST_TIMEOUT_SECONDS", 50)
-    # Vercel 요청 본문 한도가 4.5MB라서 그보다 작게 둔다.
-    CANLAB_MAX_UPLOAD_BYTES = _int("CANLAB_MAX_UPLOAD_BYTES", 4 * 1024 * 1024)
+    # 도커(gunicorn) 기준 업로드 한도. 방송 CAN이 많은 28.7MB 기록도 받도록 64MB.
+    CANLAB_MAX_UPLOAD_BYTES = _int("CANLAB_MAX_UPLOAD_BYTES", 64 * 1024 * 1024)
     PAGE_SIZE_DEFAULT = 15
     PAGE_SIZE_MAX = 100
     ADMIN_PAGE_SIZE = 20
@@ -161,7 +161,7 @@ class ProductionConfig(Config):
     DEBUG = False
     # 로컬 Docker(HTTP)는 compose 에서 PREFERRED_URL_SCHEME=http 로 덮어쓴다.
     PREFERRED_URL_SCHEME = os.environ.get("PREFERRED_URL_SCHEME", "https")
-    # Vercel은 HTTPS·Secure 쿠키만 쓴다. Referer를 막는 브라우저·웹뷰에서
+    # HTTPS 운영은 Secure 쿠키만 쓴다. Referer를 막는 브라우저·웹뷰에서
     # Flask-WTF SSL_STRICT가 로그인 POST를 400으로 깨지 않게 토큰 검사만 한다.
     WTF_CSRF_SSL_STRICT = False
 

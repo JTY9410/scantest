@@ -1,6 +1,6 @@
 # 배포 가이드
 
-scantest의 공식 운영 경로는 **Mac 서버 Docker Compose + Compose PostgreSQL**입니다. Vercel 앱과 Supabase DB 운영은 이 프로젝트에서 중단되었습니다.
+scantest의 공식 운영 경로는 **Mac 서버 Docker Compose + Compose PostgreSQL**입니다. Supabase DB 운영은 이 프로젝트에서 중단되었습니다.
 
 ## 공식 운영 경로: Mac Docker Compose
 
@@ -19,7 +19,7 @@ curl http://localhost:${WEB_PORT:-8000}/up
 
 ## 중단된 운영 경로(보관)
 
-아래 Vercel/Supabase 절차는 과거 이력 확인용입니다. 새 배포, 장애 대응, 운영 문서에는 사용하지 않습니다.
+아래 Supabase 절차는 과거 이력 확인용입니다. 새 배포, 장애 대응, 운영 문서에는 사용하지 않습니다.
 
 ## 사전 준비
 
@@ -52,64 +52,6 @@ PROXY_FIX_HOPS=1
 # 선택 (있으면 기능 활성화)
 RATELIMIT_STORAGE_URI=<Redis URL>  # 로그인 속도 제한
 OPENAI_API_KEY=<API 키>  # AI 기능
-```
-
-## Vercel 배포(중단됨, 보관)
-
-### 1. Vercel CLI 설치 (로컬)
-```bash
-npm install -g vercel
-vercel login
-```
-
-### 2. 프로젝트 연결
-```bash
-cd /workspace
-vercel link
-# 팀 선택, 프로젝트 이름 입력
-```
-
-### 3. 환경 변수 설정
-```bash
-# Vercel 대시보드에서 설정하거나 CLI로 설정
-vercel env add SECRET_KEY production
-# 값 입력 (프롬프트)
-vercel env add JWT_SECRET production
-vercel env add ENCRYPTION_KEY production
-vercel env add DATABASE_URL production
-vercel env add DATABASE_URL_DIRECT production
-# ... 나머지 환경 변수
-```
-
-또는 Vercel 대시보드 → Settings → Environment Variables에서 설정
-
-### 4. 마이그레이션 실행
-```bash
-# 로컬에서 Supabase direct connection으로
-export DATABASE_URL="<direct connection string>"
-flask db upgrade
-
-# 또는 Vercel Function으로 실행 (한 번만)
-vercel env pull .env.production
-flask db upgrade
-```
-
-### 5. 배포
-```bash
-# 미리보기 배포
-vercel
-
-# 운영 배포
-vercel --prod
-```
-
-### 6. 초기 관리자 생성
-```bash
-# 로컬에서 DATABASE_URL 설정 후
-flask create-admin --tid wecar --name "관리자 이름"
-# 비밀번호 입력
-
-# 또는 Vercel SSH로 접속 (불가능하면 로컬에서 원격 DB로)
 ```
 
 ## Docker 배포 (자체 호스팅)
@@ -183,12 +125,12 @@ Supabase 대시보드 → Database → Backups:
 
 ### 1. 헬스체크
 ```bash
-curl https://your-domain.vercel.app/up
+curl https://scan.example.com/up
 # Expected: {"status":"ok"}
 ```
 
 ### 2. 관리자 로그인
-1. https://your-domain.vercel.app/admin/ 접속
+1. https://scan.example.com/admin/ 접속
 2. 초기 관리자 계정으로 로그인
 3. MFA 설정 (Settings → 보안)
 4. 다른 관리자 계정 생성 및 권한 부여
@@ -202,7 +144,6 @@ curl https://your-domain.vercel.app/up
 - [ ] API 호출 (`/api/auth/login`, `/api/scanPlan`)
 
 ### 4. 모니터링 설정
-- Vercel: Analytics 탭에서 성능 확인
 - Supabase: Dashboard → Database → Query Performance
 - 에러 추적: Sentry 등 서비스 연동 권장
 
@@ -213,9 +154,8 @@ curl https://your-domain.vercel.app/up
 git commit -m "feat: 새 기능"
 git push origin main
 
-# Vercel이 자동 배포 (GitHub 연동 시)
-# 또는 수동 배포
-vercel --prod
+# GitHub Actions가 이미지를 빌드한다. Mac 서버에서 재빌드:
+docker compose -f compose.yaml -f compose.mac.yaml up -d --build
 ```
 
 ### 2. DB 마이그레이션이 있으면
@@ -223,15 +163,13 @@ vercel --prod
 # 1. 마이그레이션 먼저 실행 (다운타임 최소화)
 flask db upgrade
 
-# 2. 애플리케이션 배포
-vercel --prod
+# 2. 애플리케이션 재기동
+docker compose -f compose.yaml -f compose.mac.yaml up -d --build
 ```
 
 ### 3. 롤백이 필요하면
 ```bash
-# Vercel 대시보드 → Deployments → 이전 배포 선택 → Promote to Production
-# 또는
-vercel rollback
+# 이전 커밋으로 되돌린 뒤 도커 재빌드
 
 # DB 롤백 (주의: 데이터 손실 가능)
 flask db downgrade -1
@@ -258,11 +196,11 @@ flask db upgrade
 
 ### CSRF 토큰 오류
 - `SESSION_COOKIE_SECURE=true` 확인
-- `PROXY_FIX_HOPS=1` 설정 (Vercel 뒤에서)
+- `PROXY_FIX_HOPS=1` 설정 (nginx 뒤에서)
 - 쿠키 SameSite 설정 확인
 
 ### Web Bluetooth 연결 실패
-- HTTPS 필수 (Vercel은 자동)
+- HTTPS 필수 (nginx 인증서)
 - Chrome/Edge 브라우저만 지원
 - 로컬호스트에서는 HTTP도 가능
 

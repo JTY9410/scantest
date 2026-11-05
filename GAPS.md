@@ -97,7 +97,6 @@
 - [ ] 테스트 통과: `python -m pytest -q`
 - [ ] JavaScript 테스트: `node --test tests/js`
 - [ ] Docker 빌드: `docker build -t scantest .`
-- [ ] Vercel 환경 변수 설정 (DEPLOY.md 참조)
 - [ ] Supabase PostgreSQL 연결 확인 (pooled URL for web, direct URL for migrations)
 
 ### 권장
@@ -111,7 +110,7 @@
 
 - `pro.md`: 기술개발 정의서
 - `AGENTS.md`: 작업 규칙
-- `DEPLOY.md`: Vercel + Supabase 배포 가이드
+- `DEPLOY.md`: Mac Docker Compose 배포 가이드
 - `docs/flows/scanner.md`: 스캔 흐름
 - `docs/flows/canlab.md`: CAN 역분석
 - `uploads/wecar_scan_analysis.zip`: WESCAN 앱 분석 보고서 및 commands.json

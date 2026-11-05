@@ -98,7 +98,7 @@ class DoIPAdapter(TransportAdapter):
     """DoIP 전송 어댑터.
 
     이더넷을 통해 차량과 통신합니다.
-    배포 서버(Vercel)에서는 사용할 수 없고, 차량과 같은 망의 로컬 서버에서만 동작합니다.
+    차량 망에 닿지 않는 서버(VEHICLE_NETWORK_BLOCKED=1)에서는 사용할 수 없고, 차량과 같은 망의 로컬 서버에서만 동작합니다.
     """
 
     def __init__(self):
@@ -118,7 +118,7 @@ class DoIPAdapter(TransportAdapter):
         Raises:
             TransportError: 연결 실패 시
         """
-        # Vercel 환경에서는 차량 네트워크에 접근 불가
+        # 차량 망 차단 서버에서는 접근 불가
         # 배포(서버리스) 환경에서는 차량 네트워크에 접근 불가
         if serverless():
             raise TransportError(

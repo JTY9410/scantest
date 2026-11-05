@@ -88,6 +88,6 @@ def test_j2534_log_rejects_writes():
 
 
 def test_deployed_server_does_not_open_the_vehicle_network(monkeypatch):
-    monkeypatch.setenv("VERCEL", "1")
+    monkeypatch.setenv("VEHICLE_NETWORK_BLOCKED", "1")
     with pytest.raises(ServiceError, match="차량 이더넷"):
         check_gateway("192.168.0.20", 13400)

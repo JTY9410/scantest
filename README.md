@@ -75,7 +75,7 @@ docker compose run --rm --no-deps web python -m pytest -q
 
 ## 배포 (Mac 서버 · 공식)
 
-구조: **nginx(https) → 127.0.0.1:포트 → 컨테이너**. Vercel·Supabase는 쓰지 않습니다.  
+구조: **nginx(https) → 127.0.0.1:포트 → 컨테이너**. 외부 호스팅 DB(Supabase)는 쓰지 않습니다.  
 `main` push → 서버 웹훅이 pull·재기동. 서버는 레포의 `compose.prod.yaml`(또는 `compose.yaml`) + **서버 전용** `docker-compose.override.yml`(커밋 금지) + **서버 `.env`** 로 실행합니다. 시크릿은 서버 `.env`에만 둡니다.
 
 ```bash
@@ -122,7 +122,7 @@ dump에는 개인정보가 들어갈 수 있어 **레포에 커밋하지 않습�
 
 ### 중단된 운영 경로
 
-Supabase·Vercel 앱 배포는 공식 경로에서 제외되었습니다.
+Supabase 배포는 공식 경로에서 제외되었습니다.
 
 ## 기능 흐름
 
@@ -137,7 +137,7 @@ Supabase·Vercel 앱 배포는 공식 경로에서 제외되었습니다.
 
 위스캔 스캔 데이터와 리버스 데이터(TRC)를 비교하는 역분석, 스캔 로직 적용, 운영 결과지는 관리자 메뉴 "CAN 분석"(`app/modules/canlab/`)에서 합니다(`docs/flows/canlab.md`). 쌓인 CAN 분석 데이터는 `flask canlab reset`(건수 확인) → `flask canlab reset --yes`로 지웁니다.
 
-실제 차량 데이터(TRC·PDF)는 VIN 같은 차량 정보가 들어 있어 저장소에 넣지 않고 화면에서 올립니다(DB에 저장). 로컬에 둘 때는 git·Docker·Vercel에서 제외되는 `data/`에 둡니다.
+실제 차량 데이터(TRC·PDF)는 VIN 같은 차량 정보가 들어 있어 저장소에 넣지 않고 화면에서 올립니다(DB에 저장). 로컬에 둘 때는 git·Docker에서 제외되는 `data/`에 둡니다.
 
 ## 남은 제약
 
