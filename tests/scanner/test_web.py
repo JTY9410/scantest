@@ -71,6 +71,35 @@ def test_scanner_requires_admin_and_csrf(client, admin_client):
     assert client.application.test_client().get("/admin/scan/").status_code in (302, 401, 403)
 
 
+def test_scan_plan_accepts_csrf_older_than_one_hour(admin_client, monkeypatch):
+    """스캔 화면을 1시간 넘게 열어 둬도 계획 요청이 만료 400이 되지 않는다."""
+    import time
+
+    from itsdangerous import URLSafeTimedSerializer
+
+    csrf_token(admin_client, "/admin/scan/")
+    with admin_client.session_transaction() as sess:
+        raw = sess["csrf_token"]
+    signer = URLSafeTimedSerializer(admin_client.application.secret_key, salt="wtf-csrf-token")
+    past = time.time() - 7200
+    monkeypatch.setattr(time, "time", lambda: past)
+    token = signer.dumps(raw)
+    monkeypatch.undo()
+
+    response = admin_client.post("/admin/scan/plan", json={"car": None}, headers={"X-CSRFToken": token})
+
+    assert response.status_code == 200
+    assert response.get_json()["steps"]
+
+
+def test_json_csrf_failure_returns_json(admin_client):
+    response = admin_client.post("/admin/scan/plan", json={"car": None}, headers={"X-CSRFToken": "bad-token"})
+
+    assert response.status_code == 400
+    assert response.is_json
+    assert "보안 토큰" in response.get_json()["message"]
+
+
 def test_run_then_result_page_shows_wescan_format(admin_client):
     plan = _json(admin_client, "/admin/scan/plan", {"car": DTO}).get_json()
     assert plan["steps"][0]["command"] == "ATRV"

@@ -148,14 +148,23 @@ def _register_errors(app: Flask) -> None:
 
     csrf_refresh = "보안 토큰이 만료되었습니다. 페이지를 새로고침한 뒤 다시 시도하세요."
 
+    def wants_json() -> bool:
+        if request.is_json or request.headers.get("X-CSRFToken") or request.headers.get("X-CSRF-Token"):
+            return True
+        return "application/json" in request.headers.get("Accept", "")
+
     @app.errorhandler(ServiceError)
     def service_error(error: ServiceError):
+        if wants_json():
+            return {"message": error.message}, error.status
         return _error_page(error.status, error.message)
 
     @app.errorhandler(CSRFError)
     def csrf_error(error: CSRFError):
         if request.path.startswith("/api"):
             return handle_http_error(error)
+        if wants_json():
+            return {"message": csrf_refresh}, 400
         return _error_page(400, csrf_refresh)
 
     @app.errorhandler(HTTPException)

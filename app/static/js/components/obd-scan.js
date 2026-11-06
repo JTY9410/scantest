@@ -98,7 +98,22 @@
       });
     }
 
-    async function post(url, body) {
+    async function refreshCsrf() {
+      try {
+        const response = await fetch(`${window.location.pathname}${window.location.search}`, {
+          credentials: "same-origin", cache: "no-store", headers: { Accept: "text/html" },
+        });
+        if (!response.ok || response.url.includes("/admin/login")) return false;
+        const match = (await response.text()).match(/name="csrf_token" value="([^"]+)"/);
+        if (!match || !form.elements.csrf_token) return false;
+        form.elements.csrf_token.value = match[1];
+        return true;
+      } catch {
+        return false;
+      }
+    }
+
+    async function post(url, body, allowRetry = true) {
       const response = await fetch(url, {
         method: "POST",
         credentials: "same-origin",
@@ -112,6 +127,10 @@
         data = { message: response.status === 400
           ? "보안 토큰이 만료되었습니다. 화면을 새로고침하세요"
           : "서버 응답을 읽지 못했습니다" };
+      }
+      if (allowRetry && response.status === 400 && String(data.message || "").includes("보안 토큰")
+          && await refreshCsrf()) {
+        return post(url, body, false);
       }
       if (!response.ok) {
         const error = new Error(`${data.message || "요청 실패"} (HTTP ${response.status})`);

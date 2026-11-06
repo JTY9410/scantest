@@ -127,6 +127,9 @@ class Config:
     REMEMBER_COOKIE_HTTPONLY = True
     REMEMBER_COOKIE_SECURE = SESSION_COOKIE_SECURE
     PERMANENT_SESSION_LIFETIME = timedelta(hours=8)
+    # 기본 1시간이면 스캔 화면을 열어 둔 채 계획 요청이 400이 된다.
+    # 토큰은 로그인 때 세션이 바뀔 때 함께 폐기된다.
+    WTF_CSRF_TIME_LIMIT = None
 
     AI_TEST_TIMEOUT_SECONDS = 10
     # 결과지 이미지 판독은 오래 걸린다. gunicorn 요청 제한 시간보다 짧게 둔다.
