@@ -100,3 +100,21 @@ def test_export_import_json(app):
             ]
         })
         assert imported_count > 0
+
+
+def test_import_json_route_stores_uploaded_file(admin_client):
+    """JSON 파일 가져오기는 파일 내용을 객체로 읽고 초안으로 저장한다."""
+    import io
+    import json
+
+    from tests.conftest import csrf_token
+
+    token = csrf_token(admin_client, "/admin/knowledge/")
+    payload = json.dumps({"commands": [{"command": "0199", "label": "시험 명령", "maker": "현대"}]})
+    response = admin_client.post(
+        "/admin/knowledge/import-json",
+        data={"csrf_token": token, "file": (io.BytesIO(payload.encode()), "knowledge.json")},
+    )
+
+    assert response.status_code == 200, response.get_data(as_text=True)
+    assert response.get_json()["count"] == 1

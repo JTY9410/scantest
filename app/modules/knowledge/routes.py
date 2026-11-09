@@ -1,4 +1,5 @@
 """지식베이스 화면."""
+import json
 import re
 
 from flask import Blueprint, Response, current_app, flash, jsonify, redirect, render_template, request, url_for
@@ -340,8 +341,12 @@ def import_json():
         return jsonify({"error": "파일 이름이 없습니다."}), 400
     
     try:
-        data = file.read().decode("utf-8")
-        parsed = jsonify(data).get_json()
+        parsed = json.loads(file.read().decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return jsonify({"error": "JSON 파일이 아닙니다."}), 400
+    if not isinstance(parsed, dict):
+        return jsonify({"error": "JSON 객체여야 합니다."}), 400
+    try:
         count = importer.import_knowledge_json(parsed)
         return jsonify({"status": "ok", "count": count})
     except Exception as e:
