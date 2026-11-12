@@ -224,12 +224,15 @@ def _parse_pcan_csv(lines: list[str]) -> ParsedTrace:
     frames: list[Frame] = []
     skipped = 0
     status_rows = 0
+    remote_frames = 0
     for row in reader:
         if not row or not any(cell.strip() for cell in row):
             continue
         try:
             if "status" in columns and columns["status"] < len(row) and row[columns["status"]].strip():
-                if _hex_int(row[columns["status"]]) & STATUS_EVENT_BIT:
+                status_val = _hex_int(row[columns["status"]])
+                # Status1 최상위 비트(0x80000000) 또는 어댑터 상태 비트(0x04000205, 0x04000209)
+                if status_val & STATUS_EVENT_BIT or status_val in (0x04000205, 0x04000209):
                     status_rows += 1
                     continue
             if "time" in columns:
@@ -237,6 +240,12 @@ def _parse_pcan_csv(lines: list[str]) -> ParsedTrace:
             else:
                 t_ms = float(row[columns["time_ms"]])
             can_id = _hex_int(row[columns["id"]])
+            
+            # CAN_ID 0x00000000은 어댑터 상태 행
+            if can_id == 0:
+                remote_frames += 1
+                continue
+            
             data = _bytes(row[columns["data"]].replace("-", " "))
             if "dlc" in columns and row[columns["dlc"]].strip().isdigit():
                 data = data[: int(row[columns["dlc"]])]
@@ -254,7 +263,11 @@ def _parse_pcan_csv(lines: list[str]) -> ParsedTrace:
         frames = [Frame(f.t_ms, f.can_id, f.data,
                         "tx" if f.can_id == 0x7DF or (0x700 <= f.can_id <= 0x7F7 and f.can_id + 8 in ids) else "rx")
                   for f in frames]
-    meta = {"STATUS_ROWS": str(status_rows), "DIRECTION": "column" if "dir" in columns else "id_rule"}
+    meta = {
+        "STATUS_ROWS": str(status_rows), 
+        "REMOTE_FRAMES": str(remote_frames),
+        "DIRECTION": "column" if "dir" in columns else "id_rule"
+    }
     return ParsedTrace("pcan_csv", frames, meta, skipped)
 
 

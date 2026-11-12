@@ -243,13 +243,51 @@ def attach_grades(rows: list[dict], result: dict) -> None:
             row["grade"] = max(grades, key=_GRADE_ORDER.get)
 
 
+def count_significant_dtcs(dtcs: list[dict]) -> int:
+    """점검요 판정에 쓸 고장코드 개수: 확정+현재실패 또는 MIL 코드만 센다.
+    
+    상태 0x08 (confirmed만 켜짐, 과거 확정·현재 실패 아님)은 세지 않는다.
+    상태 0x40/0x50 (testNotCompleted만 켜짐, 미완료)은 세지 않는다.
+    incomplete=True인 DTC(멀티프레임 미완성)는 표시만 하고 세지 않는다.
+    """
+    count = 0
+    for dtc in dtcs:
+        # 멀티프레임 미완성 DTC
+        if dtc.get("incomplete"):
+            continue
+        # confirmed + active 또는 MIL
+        if (dtc.get("confirmed") and dtc.get("active")) or dtc.get("mil"):
+            count += 1
+    return count
+
+
 def overall(rows: list[dict], dtc_count: int, *, dtc_read: bool = True) -> str:
-    """종합판정. 측정한 항목이 기준을 벗어나거나 고장코드가 있으면 '점검요',
-    그 밖에 못 읽은 항목이 있으면(또는 고장코드를 읽지 못했으면) '판정보류', 모두 충족하면 '양호'."""
+    """종합판정. 측정한 항목이 기준을 벗어나거나 확정·현재실패 고장코드가 있으면 '점검요',
+    그 밖에 핵심 배터리 항목을 못 읽었으면(또는 고장코드를 읽지 못했으면) '판정보류', 모두 충족하면 '양호'.
+    
+    LDC·인렛·모터 온도 등 부가 항목이 측정불가여도 핵심 배터리 항목(SOH·절연·셀·온도)이
+    읽혔다면 판정보류가 아니라 부분 판정을 내린다.
+    """
     if dtc_count or any(row["result"] == "주의" for row in rows):
         return "점검요"
-    if not dtc_read or any(row["result"] == UNREAD for row in rows):
+    
+    # 핵심 배터리 항목 (EV/HEV 공통)
+    core_battery_items = {"절연 저항", "셀 전압 편차", "모듈 온도 편차"}
+    ev_core_items = core_battery_items | {"배터리 수명 (SOH)"}
+    
+    # 읽은 항목 확인
+    core_unread = [row for row in rows 
+                   if row["item"] in ev_core_items and row["result"] == UNREAD]
+    
+    # 핵심 항목을 못 읽었거나 고장코드를 읽지 못했으면 판정보류
+    if not dtc_read or len(core_unread) > 0:
         return "판정보류"
+    
+    # 부가 항목(LDC·인렛·모터 온도)이 측정불가여도 핵심 항목이 읽혔으면 양호 가능
+    if any(row["result"] == UNREAD for row in rows):
+        # 일부 항목 미측정이지만 핵심은 읽힘 - 양호로 판정 가능
+        return "양호"
+    
     return "양호"
 
 
@@ -435,7 +473,8 @@ def inspection(scan, result: dict) -> dict:
     dtcs = result.get("dtcs") or []
     ecus = _ecus(result)
     dtc_read = bool(dtcs) or any(e["comm_status"] == "success" for e in ecus) or not result.get("steps")
-    verdict = overall(judged, len(dtcs), dtc_read=dtc_read)
+    significant_dtc_count = count_significant_dtcs(dtcs)
+    verdict = overall(judged, significant_dtc_count, dtc_read=dtc_read)
     if kind != "ev":
         soh_note = "하이브리드 차량은 SOH를 판정하지 않습니다." if kind == "hev" else ""
     elif soh is None:
@@ -529,6 +568,7 @@ def inspection(scan, result: dict) -> dict:
         "unread": unread,
         "dtc_clear": not dtcs,
         "dtc_count": len(dtcs),
+        "significant_dtc_count": significant_dtc_count,
         "dtc_read": dtc_read,
         "dtc_rows": dtc_rows(result, group_kind),
         "groups": groups,

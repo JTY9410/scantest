@@ -88,7 +88,11 @@ def _answers(message: Message, service: int) -> bool:
 
 
 def pair_transactions(messages: list[Message]) -> list[Transaction]:
-    """요청 뒤 3초 안의 응답을 짝짓는다. 물리 주소는 요청 ID+8, 7DF는 7E8~7EF 전체를 받는다."""
+    """요청 뒤 3초 안의 응답을 짝짓는다. 물리 주소는 요청 ID+8, 7DF는 7E8~7EF 전체 + 74C 등을 받는다.
+    
+    OBD2 브로드캐스트(7DF)는 요청 PID별로 응답을 짝짓는다. 단순히 서비스 번호만 맞추면
+    3초 창 안의 다른 요청 응답을 가로챌 수 있다.
+    """
     transactions: list[Transaction] = []
     used: set[int] = set()
     for index, message in enumerate(messages):
@@ -97,6 +101,12 @@ def pair_transactions(messages: list[Message]) -> list[Transaction]:
         service = message.payload[0]
         broadcast = message.can_id == 0x7DF
         expected = None if broadcast else message.can_id + 8
+        
+        # 브로드캐스트인 경우 요청 PID/정보 유형 추출 (모드 01·03·07·09·0A)
+        request_pid = None
+        if broadcast and len(message.payload) >= 2:
+            request_pid = message.payload[1]
+        
         tx = Transaction(message.t_ms, message.can_id, expected, service, message.payload)
         for later_index in range(index + 1, len(messages)):
             later = messages[later_index]
@@ -105,8 +115,14 @@ def pair_transactions(messages: list[Message]) -> list[Transaction]:
             if later_index in used or not later.complete or not _answers(later, service):
                 continue
             if broadcast:
-                if not 0x7E8 <= later.can_id <= 0x7EF:
+                # 7E8-7EF 범위 + 74C (충전 인렛) 등 현대/기아 ECU
+                if not ((0x7E8 <= later.can_id <= 0x7EF) or later.can_id == 0x74C):
                     continue
+                # 브로드캐스트 응답은 요청 PID와 일치해야 함 (서비스 번호만으로는 부족)
+                if request_pid is not None and len(later.payload) >= 2:
+                    response_pid = later.payload[1]
+                    if response_pid != request_pid:
+                        continue
             elif later.can_id != expected:
                 continue
             payload = later.payload
@@ -143,7 +159,22 @@ def format_dtc(b1: int, b2: int, b3: int) -> str:
 
 
 def parse_dtcs(tx: Transaction) -> list[dict]:
-    """19 02(상태 마스크로 DTC 읽기) 응답의 DTC 목록."""
+    """19 02(상태 마스크로 DTC 읽기) 응답의 DTC 목록.
+    
+    ISO 14229-1 DTC 상태 바이트 (8비트):
+    - bit7: warningIndicatorRequested (MIL)
+    - bit6: testFailed (진단 테스트 실패, 운전 사이클 이내)
+    - bit5: testFailedSinceLastClear (지운 이후 한 번이라도 실패)
+    - bit4: pendingDTC (테스트 실패했으나 확정 전)
+    - bit3: confirmedDTC (확정된 고장코드)
+    - bit2: testNotCompletedThisOperationCycle (이번 사이클에 테스트 안 함)
+    - bit1: testFailedSinceLastClear (일부 차량에서는 다른 의미)
+    - bit0: testFailedThisOperationCycle (현재 운전 사이클에서 테스트 실패)
+    
+    0x40 / 0x50: testNotCompleted 비트만 켜짐 → 미완료 코드, 고장으로 세지 않음
+    0x08: confirmed만 켜짐 → 과거 확정, 현재 실패 아님
+    0x09: confirmed + active → 확정 + 현재 실패
+    """
     if tx.service != 0x19 or not tx.positive or len(tx.response) < 3 or tx.response[1] != 0x02:
         return []
     from app.modules.canlab.engine.features import flag
@@ -153,11 +184,25 @@ def parse_dtcs(tx: Transaction) -> list[dict]:
     dtcs = []
     for offset in range(0, len(records) - 3, 4):
         b1, b2, b3, status = records[offset : offset + 4]
+        
+        # 상태 비트 분류
+        confirmed = bool(status & 0x08)  # bit3: confirmedDTC
+        active = bool(status & 0x01)  # bit0: testFailedThisOperationCycle
+        pending = bool(status & 0x10)  # bit4: pendingDTC
+        mil = bool(status & 0x80)  # bit7: warningIndicatorRequested
+        not_completed = bool(status & 0x44)  # bit6 또는 bit2: testNotCompleted
+        
+        # 미완료 비트만 켜진 경우 (0x40, 0x50 등) - 고장으로 세지 않음
+        incomplete_only = not_completed and not (confirmed or active or pending or mil)
+        
         row = {
             "code": format_dtc(b1, b2, b3),
             "status": status,
-            "confirmed": bool(status & 0x08),
-            "active": bool(status & 0x01),
+            "confirmed": confirmed,
+            "active": active,
+            "pending": pending,
+            "mil": mil,
+            "incomplete": incomplete_only,
         }
         if show_ftb and (label := fault_type_label(b3)):
             row["fault_type"] = label
@@ -167,6 +212,15 @@ def parse_dtcs(tx: Transaction) -> list[dict]:
 
 
 def find_vin(transactions: list[Transaction]) -> str | None:
+    """VIN 찾기: 22 F190 또는 09 02 응답에서 17자 VIN 추출.
+    
+    멀티프레임 미완성(첫 프레임만 있고 CF 없음)은 VIN으로 쓰지 않는다.
+    BMS F190 응답이 'CVEV-- BMS' 같은 식별 문자열이면 VIN이 아니다.
+    계기판(7C6) VIN을 우선한다.
+    """
+    cluster_vin = None
+    other_vin = None
+    
     for tx in transactions:
         if not tx.positive:
             continue
@@ -175,10 +229,32 @@ def find_vin(transactions: list[Transaction]) -> str | None:
             raw = tx.data
         elif tx.service == 0x09 and len(tx.response) > 2 and tx.response[1] == 0x02:
             raw = tx.response[3:]
-        text = "".join(chr(b) for b in raw if 0x30 <= b <= 0x5A)
-        if len(text) >= 17:
-            return text[-17:]
-    return None
+        else:
+            continue
+        
+        # 출력 가능한 ASCII 문자만 추출 (0x20~0x7E)
+        text = "".join(chr(b) for b in raw if 0x20 <= b <= 0x7E).strip()
+        
+        # 17자 이상이어야 함
+        if len(text) < 17:
+            continue
+        
+        # 'BMS'·'ECU'·'VCU' 등이 포함되면 VIN이 아니라 식별 문자열
+        if any(word in text.upper() for word in ("BMS", "ECU", "VCU", "MCU", "HCU")):
+            continue
+        
+        # VIN 형식 확인: 앞 3자는 WMI (문자+숫자), 전체는 영숫자만
+        candidate = text[:17]
+        if not candidate[:3].isupper() or not candidate.replace(" ", "").isalnum():
+            continue
+        
+        # 계기판(7C6) VIN 우선
+        if tx.request_id == 0x7C6:
+            cluster_vin = candidate
+        elif other_vin is None:
+            other_vin = candidate
+    
+    return cluster_vin or other_vin
 
 
 def mask_vin(vin: str | None) -> str | None:
