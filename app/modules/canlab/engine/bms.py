@@ -135,10 +135,12 @@ NOMINAL_PACKS: dict[tuple[str, int], dict] = {
 }
 
 
-def platform(model_hint: str | None, cell_count: int | None) -> str:
+def platform(model_hint: str | None, cell_count: int | None, cell_incomplete: bool = False) -> str:
     """흡기 온도 오프셋·SOH 등급이 갈리는 플랫폼.
     'egmp'(아이오닉5·6·EV6·GV60), 'niro'(니로EV, 세대 구분 불가), 'hkmc_ev_gen1'(코나EV·아이오닉 일렉트릭·쏘울EV),
-    'porter'(포터·봉고EV), 'hev', 'unknown'."""
+    'porter'(포터·봉고EV), 'hev', 'unknown', 'undetermined'(셀 데이터 불완전).
+    
+    불완전한 셀 데이터로 플랫폼을 확정하지 않는다. VIN WMI·팩 전압·BMS 식별자 등을 우선 사용한다."""
     hint = (model_hint or "").replace(" ", "").upper()
     if any(k in hint for k in ("포터", "PORTER", "봉고", "BONGO")):
         return "porter"
@@ -150,12 +152,20 @@ def platform(model_hint: str | None, cell_count: int | None) -> str:
         return "niro"
     if any(k in hint for k in ("코나", "KONA", "아이오닉일렉트릭", "IONIQELECTRIC", "쏘울", "SOUL")):
         return "hkmc_ev_gen1"
+    
+    # 셀 데이터가 불완전하면 셀 개수로 플랫폼을 확정하지 않음
+    if cell_incomplete:
+        return "undetermined"
+    
     if cell_count == 72:
         return "hev"
     if cell_count == 90:
         return "porter"
     if cell_count == 96:
         return "niro"
+    if cell_count == 93:
+        # 93셀 400V 기아/현대 플랫폼 (2025 모델로 추정, 모델명 미확정)
+        return "kia_hev_400v_93cell"
     if cell_count in (132, 180, 192):
         return "egmp"
     return "unknown"
@@ -178,10 +188,16 @@ def cells(samples: dict) -> dict | None:
         values += [raw * CELL_SCALE for raw in data[4:36] if raw >= CELL_MIN_RAW and raw != 0xFF]
     if not values:
         return None
+    
+    # 전체 6개 PID 중 일부만 있으면 불완전 플래그
+    incomplete = len(found) < len(CELL_PIDS)
+    flags = ["incomplete"] if incomplete else []
+    
     return {
         "count": len(values), "min": round(min(values), 3), "max": round(max(values), 3),
         "avg": round(sum(values) / len(values), 3), "sum_v": round(sum(values), 2),
         "spread_mv": round((max(values) - min(values)) * 1000), "pids": found, "grade": CONFIRMED,
+        "flags": flags,
     }
 
 
@@ -192,7 +208,8 @@ def decode_bms(samples: dict, model_hint: str | None = None) -> dict | None:
     if not rows_0101 and not rows_0105:
         return None
     cell = cells(samples)
-    plat = platform(model_hint, cell["count"] if cell else None)
+    cell_incomplete = cell.get("flags", []) and "incomplete" in cell["flags"] if cell else False
+    plat = platform(model_hint, cell["count"] if cell else None, cell_incomplete)
     latest = {did: rows[-1][1] for (req, did), rows in samples.items() if req == BMS_REQUEST and rows}
     fields = []
     values: dict[str, float] = {}
