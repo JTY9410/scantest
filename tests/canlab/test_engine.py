@@ -53,7 +53,10 @@ def test_dtc_vin_and_ecu_summary(monkeypatch):
     summary = diagnose(load_trace(bms_session(count=1)))
 
     assert summary["vin"] == "TESTVIN0000******"
-    assert summary["dtcs"]["7E4"] == [{"code": "P0A7F00", "status": 9, "confirmed": True, "active": True}]
+    row = summary["dtcs"]["7E4"][0]
+    assert {k: row[k] for k in ("code", "status", "confirmed", "active")} == {
+        "code": "P0A7F00", "status": 9, "confirmed": True, "active": True}
+    assert row["pending"] is False and row["mil"] is False and row["incomplete"] is False
     bms = next(e for e in summary["ecus"] if e["request_id"] == "7E4")
     assert bms["label"] == "BMS(배터리 관리)"
     assert bms["dids"] == ["0101"]

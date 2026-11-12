@@ -7,13 +7,13 @@
 - 변경 사항을 promotion_log에 기록.
 
 Revision ID: fix_bms_0102_formula
-Revises: demote_unverified_unify_nissan
+Revises: add_analysis_run_mode
 """
 import sqlalchemy as sa
 from alembic import op
 
 revision = "fix_bms_0102_formula"
-down_revision = "demote_unverified_unify_nissan"
+down_revision = "add_analysis_run_mode"
 branch_labels = None
 depends_on = None
 
@@ -31,15 +31,39 @@ def upgrade():
     if "knowledge_formulas" not in tables:
         return
 
-    # 7E4 22 0102가 배터리 전압(pack_voltage)으로 매핑된 'verified' 행 찾기
+    # 7E4 22 0102가 팩 전압으로 매핑된 'verified' 행 찾기.
+    # 실제 컬럼은 command/pid/label (request_id/did/field_name 아님).
+    # 운영 DB 예: command=220102, pid=0102, label=배터리 전압, status=verified.
     rows = bind.execute(
         sa.text(
             "SELECT id FROM knowledge_formulas "
-            "WHERE request_id = 2020 AND did = 258 "  # 0x7E4 = 2020, 0x0102 = 258
-            "AND field_name LIKE '%voltage%' "
-            "AND field_name NOT LIKE '%cell%' "
-            "AND status = 'verified'"
-        )
+            "WHERE status = 'verified' "
+            "AND ("
+            "  replace(upper(coalesce(command, '')), ' ', '') LIKE :cmd "
+            "  OR pid = :pid"
+            ") "
+            "AND ("
+            "  label = :pack_label "
+            "  OR detail_name LIKE :pack_detail "
+            "  OR ("
+            "    (label ILIKE :voltage OR label LIKE :voltage_kr) "
+            "    AND coalesce(label, '') NOT ILIKE :cell "
+            "    AND coalesce(label, '') NOT LIKE :cell_kr "
+            "    AND coalesce(detail_name, '') NOT ILIKE :cell "
+            "    AND coalesce(detail_name, '') NOT LIKE :cell_kr"
+            "  )"
+            ")"
+        ),
+        {
+            "cmd": "%220102%",
+            "pid": "0102",
+            "pack_label": "배터리 전압",
+            "pack_detail": "%고전압 배터리 전압%",
+            "voltage": "%voltage%",
+            "voltage_kr": "%전압%",
+            "cell": "%cell%",
+            "cell_kr": "%셀%",
+        },
     ).fetchall()
 
     for (formula_id,) in rows:

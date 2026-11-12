@@ -262,11 +262,11 @@ class TestOdometerCollection:
         
         assert len(odometer_txs) > 0, "주행거리(B002) 응답 없음"
         
-        # 9~11바이트에서 주행거리 추출 (리틀엔디안)
+        # DID 데이터 오프셋 6부터 3바이트 빅엔디안 (00 26 1E = 9758)
         data = odometer_txs[0].data
-        if len(data) >= 11:
-            km = int.from_bytes(data[9:12], "little")
-            assert 9700 < km < 9800, f"주행거리 값 오류: {km}"
+        assert len(data) >= 9, f"B002 데이터 길이 부족: {len(data)} {data.hex()}"
+        km = int.from_bytes(data[6:9], "big")
+        assert km == 9758, f"주행거리 값 오류: {km}"
 
 
 if __name__ == "__main__":

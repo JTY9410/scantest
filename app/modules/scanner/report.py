@@ -276,8 +276,8 @@ def overall(rows: list[dict], dtc_count: int, *, dtc_read: bool = True) -> str:
     ev_core_items = core_battery_items | {"배터리 수명 (SOH)"}
     
     # 읽은 항목 확인
-    core_unread = [row for row in rows 
-                   if row["item"] in ev_core_items and row["result"] == UNREAD]
+    core_unread = [row for row in rows
+                   if row.get("item") in ev_core_items and row["result"] == UNREAD]
     
     # 핵심 항목을 못 읽었거나 고장코드를 읽지 못했으면 판정보류
     if not dtc_read or len(core_unread) > 0:

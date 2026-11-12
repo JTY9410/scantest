@@ -43,15 +43,22 @@ def test_classify_by_ecu_and_manual():
 
 
 def test_overall_rules():
-    ok = {"result": "양호"}
-    unread = {"result": "측정불가"}
-    bad = {"result": "주의"}
-    assert overall([ok, ok], 0) == "양호"
-    assert overall([ok, unread], 0) == "판정보류"
-    assert overall([ok, unread], 1) == "점검요"
-    assert overall([bad, unread], 0) == "점검요"
+    ok = {"item": "절연 저항", "result": "양호"}
+    soh_ok = {"item": "배터리 수명 (SOH)", "result": "양호"}
+    unread_core = {"item": "절연 저항", "result": "측정불가"}
+    unread_aux = {"item": "LDC 출력 전압", "result": "측정불가"}
+    bad = {"item": "절연 저항", "result": "주의"}
+    assert overall([ok, soh_ok], 0) == "양호"
+    # 부가 항목(LDC·인렛)만 측정불가여도 핵심이 읽혔으면 양호
+    assert overall([ok, soh_ok, unread_aux], 0) == "양호"
+    # 핵심 배터리 항목을 못 읽으면 판정보류
+    assert overall([ok, unread_core], 0) == "판정보류"
+    assert overall([ok, unread_aux], 1) == "점검요"
+    assert overall([bad, unread_aux], 0) == "점검요"
     assert overall([], 0) == "양호"
     assert overall([], 0, dtc_read=False) == "판정보류"
+    # item 키가 없는 행에서도 KeyError가 나지 않는다
+    assert overall([{"result": "양호"}], 0) == "양호"
 
 
 def test_type_judgments_items():
