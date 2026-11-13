@@ -26,7 +26,7 @@ def app():
 
 @pytest.fixture(autouse=True)
 def _clean_database(app):
-    """Faster database cleanup using DELETE instead of TRUNCATE for Postgres"""
+    """Fast database cleanup with TRUNCATE CASCADE"""
     yield
     with app.app_context():
         db.session.remove()
@@ -41,14 +41,10 @@ def _clean_database(app):
                 pass
             db.session.commit()
         else:
-            # Postgres: DELETE is faster than TRUNCATE when there are many tests
-            # because it doesn't require exclusive table locks
-            for table in reversed(db.metadata.sorted_tables):
-                db.session.execute(text(f"DELETE FROM {table.name}"))
-            # Reset sequences manually
-            for table in db.metadata.sorted_tables:
-                if hasattr(table.c, 'id') and table.c.id.autoincrement:
-                    db.session.execute(text(f"ALTER SEQUENCE {table.name}_id_seq RESTART WITH 1"))
+            # Postgres: Single TRUNCATE CASCADE is fast and correct
+            # Resets sequences and clears all data atomically
+            tables = ", ".join(t.name for t in db.metadata.sorted_tables)
+            db.session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
             db.session.commit()
     
     limiter.reset()
