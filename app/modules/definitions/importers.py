@@ -616,4 +616,9 @@ def import_definition_folder(base_path: Path, exclude_list: set[str] | None = No
     # 최종 커밋
     db.session.commit()
     
+    # 자동 분류 실행
+    print("\n자동 분류 시작...")
+    from app.modules.definitions.classifier import reclassify_all_definitions
+    reclassify_all_definitions()
+    
     return dict(stats)
