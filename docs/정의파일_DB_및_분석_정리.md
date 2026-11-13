@@ -1,0 +1,388 @@
+# 차량 정의파일 DB 및 분석 시스템
+
+2026-11-13 작성
+
+## 개요
+
+scantest는 차량 OBD2 진단 데이터를 수집·분석하여 WESCAN 스타일의 진단 결과를 생성하는 프로그램입니다. 이 문서는 2026-11-13에 추가된 차량 정의파일(DBC, OBDb, WiCAN, Torque, CanZE) 데이터베이스 통합 및 분석·학습 기능을 설명합니다.
+
+## 프로그램 내용
+
+### 기존 기능
+- OBD2/CAN 스캔 실행 및 저장
+- 고장코드(DTC) 조회 및 삭제 (권한/감사기록)
+- 스캔 이력 관리 및 PDF 보고서 생성
+- 지식베이스 (knowledge_*): 검증된 명령·수식·DTC·용어
+- 역분석 (canlab): 위스캔·리버스 통신기록 비교
+
+### 신규 추가 (2026-11-13)
+- **정의파일 DB 저장**: DBC(477개), OBDb(512개), WiCAN(89개), Torque(48개), CanZE(51개) 파일을 정규화된 DB 테이블에 저장
+- **차량별 정의 매핑**: 제조사·모델·연도별로 적용 가능한 정의 자동 검색
+- **분석 파이프라인**: 스캔 로그 → 차량 매핑 → 신호 디코딩 → 결과 생성
+- **학습 시스템**: 실제 스캔 결과를 누적하여 정의 검증 상태 자동 승격 ('실차대조필요' → 'verified')
+
+## DB 스키마
+
+### definition_sources
+정의파일 출처 메타데이터 (SHA-256, 라이선스, 출처 저장소)
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | INTEGER | PK |
+| source_type | VARCHAR(20) | dbc\|obdb\|wican\|torque\|canze |
+| file_path | VARCHAR(500) | 원본 파일 경로 |
+| sha256 | VARCHAR(64) | 파일 해시 (중복 방지) |
+| file_size | INTEGER | 파일 크기 |
+| origin_repo | VARCHAR(200) | 출처 저장소 |
+| origin_commit | VARCHAR(40) | 커밋 SHA |
+| license | VARCHAR(100) | 라이선스 (예: CC BY-SA 4.0) |
+| license_text | TEXT | 라이선스 전문 |
+| attribution | TEXT | 저작권 고지 |
+| imported_at | DATETIME | import 시각 |
+| notes | TEXT | 비고 |
+
+### vehicle_definitions
+차량-정의파일 매핑
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | INTEGER | PK |
+| source_id | INTEGER | FK → definition_sources.id |
+| maker | VARCHAR(50) | 제조사 (정규화) |
+| model | VARCHAR(100) | 모델 |
+| submodel | VARCHAR(100) | 서브모델 |
+| year_from | INTEGER | 적용 시작 연도 |
+| year_to | INTEGER | 적용 종료 연도 |
+| powertrain | VARCHAR(20) | ev\|hev\|ice |
+| notes | TEXT | 비고 |
+| created_at | DATETIME | 생성 시각 |
+
+### dbc_messages
+DBC CAN 메시지 정의
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | INTEGER | PK |
+| source_id | INTEGER | FK → definition_sources.id |
+| can_id | INTEGER | CAN ID (0x7E4 등) |
+| message_name | VARCHAR(100) | 메시지 이름 |
+| dlc | INTEGER | Data Length Code |
+| sender | VARCHAR(50) | 송신 ECU |
+| comment | TEXT | 설명 |
+
+### dbc_signals
+DBC CAN 신호 (메시지 내 개별 신호)
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | INTEGER | PK |
+| message_id | INTEGER | FK → dbc_messages.id |
+| signal_name | VARCHAR(100) | 신호 이름 |
+| start_bit | INTEGER | 시작 비트 |
+| bit_length | INTEGER | 비트 길이 |
+| byte_order | VARCHAR(10) | little\|big |
+| value_type | VARCHAR(10) | signed\|unsigned |
+| factor | FLOAT | 스케일 계수 |
+| offset | FLOAT | 오프셋 |
+| min_value | FLOAT | 최소값 |
+| max_value | FLOAT | 최대값 |
+| unit | VARCHAR(20) | 단위 |
+| comment | TEXT | 설명 |
+| receivers | VARCHAR(200) | 수신 ECU 목록 |
+
+### diagnostic_commands
+진단 명령 (OBDb, WiCAN, Torque, CanZE 통합)
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | INTEGER | PK |
+| source_id | INTEGER | FK → definition_sources.id |
+| source_type | VARCHAR(20) | obdb\|wican\|torque\|canze |
+| maker | VARCHAR(50) | 제조사 (optional scoping) |
+| model | VARCHAR(100) | 모델 |
+| year_from | INTEGER | 적용 시작 연도 |
+| year_to | INTEGER | 적용 종료 연도 |
+| ecu_address | VARCHAR(10) | ECU 주소 (7E4, 7E0 등) |
+| ecu_name | VARCHAR(100) | ECU 이름 |
+| service | VARCHAR(10) | UDS/OBD 서비스 (22, 01 등) |
+| pid | VARCHAR(20) | PID/DID |
+| command_bytes | VARCHAR(100) | 전체 명령 (예: 22 1050) |
+| label | VARCHAR(200) | 신호 이름 |
+| formula | TEXT | 계산식 (value 치환) |
+| unit | VARCHAR(20) | 단위 |
+| response_start_byte | INTEGER | 응답 시작 바이트 |
+| response_bit_offset | INTEGER | 비트 오프셋 |
+| response_length | INTEGER | 응답 길이 (bits or bytes) |
+| frequency | FLOAT | 조회 빈도 (Hz) |
+| min_value | FLOAT | 최소값 |
+| max_value | FLOAT | 최대값 |
+| notes | TEXT | 비고 |
+| verification_status | VARCHAR(20) | needs_verification\|verified\|failed |
+| verification_count | INTEGER | 검증 시도 횟수 |
+| success_count | INTEGER | 성공 횟수 |
+| failure_count | INTEGER | 실패 횟수 |
+| created_at | DATETIME | 생성 시각 |
+| updated_at | DATETIME | 갱신 시각 |
+
+### scan_observations
+스캔별 정의 적용 관찰 결과 (학습용)
+
+| 컬럼 | 타입 | 설명 |
+|------|------|------|
+| id | INTEGER | PK |
+| scan_id | INTEGER | FK → scans.id |
+| definition_type | VARCHAR(20) | dbc\|diagnostic |
+| definition_id | INTEGER | DbcSignal.id or DiagnosticCommand.id |
+| applied | BOOLEAN | 적용 여부 |
+| success | BOOLEAN | 성공 여부 (NULL = 시도 안 함) |
+| raw_request | VARCHAR(200) | 원시 요청 |
+| raw_response | TEXT | 원시 응답 |
+| decoded_value | VARCHAR(200) | 디코딩된 값 |
+| mismatch_reason | TEXT | 불일치 사유 |
+| observed_at | DATETIME | 관찰 시각 |
+
+## Import 방법
+
+### 1. 마이그레이션 실행
+```bash
+docker compose -f compose.prod.yaml exec web flask db upgrade
+```
+
+또는 로컬:
+```bash
+flask db upgrade
+```
+
+### 2. 정의파일 import
+```bash
+flask definitions import /path/to/차량측정용_정의파일
+```
+
+옵션:
+- `--exclude-file <제외목록.json>`: 제외할 파일 목록 JSON
+
+### 3. Import 통계 확인
+```bash
+flask definitions stats
+```
+
+출력 예시:
+```
+=== Vehicle Definitions Statistics ===
+
+Definition Sources: 1177
+  dbc: 477
+  obdb: 512
+  wican: 89
+  torque: 48
+  canze: 51
+
+Vehicle Mappings: 1050
+DBC Messages: 12500
+DBC Signals: 85000
+Diagnostic Commands: 45000
+
+Diagnostic Commands Verification:
+  Verified: 1200
+  Needs Verification: 43800
+```
+
+## 스캔 분석 흐름
+
+### 1. 차량 매핑
+```python
+from app.modules.definitions.service import find_applicable_definitions
+
+definitions = find_applicable_definitions(scan)
+# → {'dbc_signals': [...], 'diagnostic_commands': [...]}
+```
+
+스캔의 제조사·모델·연도에 맞는 정의를 자동 검색합니다.
+
+### 2. 신호 디코딩 (DBC)
+```python
+from app.modules.definitions.service import decode_signal
+
+for dbc_data in definitions['dbc_signals']:
+    signal = dbc_data['signal']
+    can_id = dbc_data['can_id']
+    
+    # CAN 프레임 매칭
+    if can_frame['id'] == can_id:
+        value = decode_signal(signal, can_frame['data'])
+        # value는 factor/offset 적용된 실제 값
+```
+
+### 3. 진단 명령 응답 해석
+```python
+from app.modules.definitions.service import decode_diagnostic_response
+
+for cmd in definitions['diagnostic_commands']:
+    # ECU에 명령 전송
+    response = send_command(cmd.ecu_address, cmd.command_bytes)
+    
+    # 응답 디코딩
+    decoded_value = decode_diagnostic_response(cmd, response)
+```
+
+### 4. 관찰 기록 (학습)
+```python
+from app.modules.definitions.service import record_observation, update_command_stats
+
+record_observation(
+    scan_id=scan.id,
+    definition_type='diagnostic',
+    definition_id=cmd.id,
+    applied=True,
+    success=(decoded_value is not None),
+    raw_request=cmd.command_bytes,
+    raw_response=response.hex(),
+    decoded_value=decoded_value,
+)
+
+update_command_stats(cmd.id, success=(decoded_value is not None))
+```
+
+## 학습 시스템 동작
+
+### 자동 검증 승격
+- **needs_verification → verified**: 10회 이상 시도, 성공률 80% 이상
+- **needs_verification → failed**: 10회 이상 시도, 성공률 20% 미만
+
+### 학습 요약 조회
+```python
+from app.modules.definitions.service import get_learning_summary
+
+summary = get_learning_summary(command_id)
+# → {'total_observations': 15, 'successful': 14, 'failed': 1, 
+#     'verification_status': 'verified', 'success_rate': 0.93}
+```
+
+### 수동 검증 승격
+관리자가 실차 테스트 후 직접 상태 변경:
+```python
+cmd = DiagnosticCommand.query.get(command_id)
+cmd.verification_status = 'verified'
+db.session.commit()
+```
+
+## WESCAN 스타일 결과 생성
+
+WESCAN 앱과 유사한 진단 결과 구조를 생성합니다:
+
+```python
+def analyze_scan(scan: Scan) -> dict:
+    """WESCAN 스타일 분석 결과 생성."""
+    definitions = find_applicable_definitions(scan)
+    
+    result = {
+        'vehicle': {
+            'maker': scan.car_maker,
+            'model': scan.car_model,
+            'year': scan.car_year,
+            'vin': scan.car_vin,
+        },
+        'battery': {},
+        'powertrain': {},
+        'dtcs': [],
+        'raw_definitions': {
+            'applied_count': len(definitions['diagnostic_commands']),
+            'verified_count': sum(1 for c in definitions['diagnostic_commands'] 
+                                if c.verification_status == 'verified'),
+        }
+    }
+    
+    # 배터리 신호 디코딩
+    for cmd in definitions['diagnostic_commands']:
+        if 'battery' in cmd.label.lower() or 'soc' in cmd.label.lower():
+            # ... 응답 수신 및 디코딩
+            result['battery'][cmd.label] = decoded_value
+    
+    # 파워트레인 신호
+    for cmd in definitions['diagnostic_commands']:
+        if 'motor' in cmd.label.lower() or 'speed' in cmd.label.lower():
+            result['powertrain'][cmd.label] = decoded_value
+    
+    # 고장코드 (기존 로직 유지)
+    result['dtcs'] = scan.scan_codes
+    
+    return result
+```
+
+## 남은 갭 (Known Limitations)
+
+### 1. DBC 파서 제한
+- 현재 구현은 간단한 DBC 구조만 지원
+- 복잡한 multiplexed signal, value table 미지원
+- 향후 cantools 라이브러리 통합 권장
+
+### 2. 진단 명령 formula 보안
+- eval() 사용으로 임의 코드 실행 가능성
+- 프로덕션 환경에서는 safe_eval 또는 AST 파서 필요
+- 현재는 formula 입력을 신뢰할 수 있는 정의파일로 제한
+
+### 3. 실시간 스캔 통합
+- 현재는 분석 함수만 제공, 실시간 스캔 흐름에 미통합
+- scanner/plan.py, scanner/interpret.py와 연계 필요
+- 다음 단계: 스캔 계획 생성 시 verified 정의 자동 포함
+
+### 4. 대용량 데이터 성능
+- 85,000개 신호를 매번 쿼리하면 느림
+- 인덱스 최적화 완료, 추가 캐싱 고려 필요
+- 차량별 정의는 첫 스캔 시 캐시하는 전략 권장
+
+### 5. 충돌 해결
+- 같은 ECU/서비스/PID에 여러 정의가 있을 수 있음
+- 현재는 모두 반환, 우선순위 정책 없음
+- 향후: source_type 우선순위 (obdb > wican > torque > canze)
+
+### 6. 정의파일 갱신
+- import는 SHA-256 중복 체크로 멱등성 보장
+- 정의 내용 변경 시 기존 데이터 migration 없음
+- 향후: version 관리 및 변경 이력 추적
+
+## API 엔드포인트 (예정)
+
+현재는 CLI만 제공, 향후 추가 예정:
+
+```
+GET  /api/definitions/search?maker=<maker>&model=<model>&year=<year>
+  → 차량에 맞는 정의 목록
+
+GET  /api/definitions/diagnostic/<id>
+  → 특정 진단 명령 상세
+
+POST /api/definitions/diagnostic/<id>/verify
+  → 수동 검증 상태 변경 (관리자만)
+
+GET  /api/definitions/learning/<id>
+  → 학습 요약 조회
+
+POST /api/scans/<id>/analyze
+  → 저장된 스캔 재분석 (새 정의 적용)
+```
+
+## 참고 자료
+
+- `AGENTS.md`: 작업 규칙
+- `pro.md`: 기술개발 정의서
+- `DEPLOY.md`: 배포 가이드
+- `GAPS.md`: 알려진 제약과 남은 작업
+- `docs/flows/scanner.md`: 스캔 흐름
+- `app/modules/knowledge/`: 기존 지식베이스 (knowledge_*)
+- `app/modules/canlab/`: CAN 역분석
+
+## 라이선스 고지
+
+이 프로그램에 포함된 정의파일은 다음 출처의 2차 저작물입니다:
+
+- **OBDb** (https://github.com/OBDb): CC BY-SA 4.0
+- **WiCAN** 등 오픈소스 커뮤니티: 각 파일의 라이선스 참조
+- DBC 파일: 출처별 라이선스 (definition_sources.license에 저장)
+
+자세한 라이선스 정보는 `출처목록.json`, `저작권고지` 파일 및 DB의 definition_sources 테이블을 참조하세요.
+
+## 문의
+
+- GitHub Issues: https://github.com/JTY9410/scantest/issues
+- 개발팀: 위카모빌리티

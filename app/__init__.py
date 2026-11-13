@@ -81,6 +81,7 @@ def _import_models() -> None:
     from app.modules.accounts import models as accounts  # noqa: F401
     from app.modules.admin import models as admin  # noqa: F401
     from app.modules.canlab import models as canlab  # noqa: F401
+    from app.modules.definitions import models as definitions  # noqa: F401
     from app.modules.knowledge import models as knowledge  # noqa: F401
     from app.modules.obd import models as obd  # noqa: F401
     from app.modules.reports import models as reports  # noqa: F401
