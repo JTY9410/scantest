@@ -92,6 +92,7 @@ def _import_models() -> None:
 def _register_blueprints(app: Flask) -> None:
     from app.modules.admin.routes import bp as admin_bp
     from app.modules.admin.battery_admin import bp as battery_admin_bp
+    from app.modules.admin.definitions_admin import bp as definitions_admin_bp
     from app.modules.api import bp as api_bp
     from app.modules.auth.routes import bp as auth_bp
     from app.modules.canlab.routes import bp as canlab_bp
@@ -104,7 +105,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.modules.site.routes import bp as public_bp
 
     csrf.exempt(api_bp)
-    for blueprint in (public_bp, api_bp, auth_bp, admin_bp, battery_admin_bp, members_bp, catalog_bp, monitoring_bp,
+    for blueprint in (public_bp, api_bp, auth_bp, admin_bp, battery_admin_bp, definitions_admin_bp, members_bp, catalog_bp, monitoring_bp,
                       obd_bp, canlab_bp, scanner_bp, knowledge_bp):
         app.register_blueprint(blueprint)
 

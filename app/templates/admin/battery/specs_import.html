@@ -1,0 +1,53 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header %}
+{% block title %}배터리 사양 CSV 가져오기{% endblock %}
+
+{% block content %}
+{% call page_header("CSV 가져오기", "배터리 사양 일괄 추가") %}
+  <a class="btn btn-secondary" href="{{ url_for('battery_admin.specs_list') }}">← 목록</a>
+{% endcall %}
+
+<div class="card card-body max-w-2xl mx-auto">
+  <form method="post" enctype="multipart/form-data">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    
+    <div class="mb-4">
+      <label class="label">CSV 파일</label>
+      <input type="file" name="csv_file" accept=".csv" required class="input">
+      <p class="text-sm text-muted mt-2">
+        UTF-8 인코딩, 첫 줄은 헤더
+      </p>
+    </div>
+
+    <div class="mb-4 p-4 bg-surface rounded border border-line">
+      <h3 class="font-medium mb-2">필수 컬럼</h3>
+      <ul class="list-disc list-inside text-sm space-y-1">
+        <li><code>maker</code> - 제조사</li>
+        <li><code>model</code> - 모델명</li>
+        <li><code>source_url</code> - 출처 URL</li>
+      </ul>
+
+      <h3 class="font-medium mb-2 mt-4">선택 컬럼</h3>
+      <ul class="list-disc list-inside text-sm space-y-1">
+        <li><code>trim_grade</code> - 트림/등급</li>
+        <li><code>model_year</code> - 연식 (숫자)</li>
+        <li><code>generation</code> - 세대</li>
+        <li><code>market</code> - 시장 (KR/US/EU 등)</li>
+        <li><code>gross_kwh</code> - 총 용량 (kWh)</li>
+        <li><code>usable_kwh</code> - 사용 가능 용량 (kWh)</li>
+        <li><code>nominal_voltage_v</code> - 공칭 전압 (V)</li>
+        <li><code>capacity_ah</code> - 용량 (Ah)</li>
+        <li><code>cell_chemistry</code> - 셀 화학 (예: NCM811)</li>
+        <li><code>cell_count</code> - 셀 개수</li>
+        <li><code>cell_config</code> - 셀 구성 (예: 96s2p)</li>
+        <li><code>source_note</code> - 출처 메모</li>
+      </ul>
+    </div>
+
+    <div class="flex gap-2">
+      <button type="submit" class="btn btn-primary">가져오기</button>
+      <a href="{{ url_for('battery_admin.specs_list') }}" class="btn">취소</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

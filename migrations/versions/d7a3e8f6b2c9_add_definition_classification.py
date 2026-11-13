@@ -38,15 +38,15 @@ def upgrade():
     op.create_index('ix_diagnostic_commands_ecu_module', 'diagnostic_commands', ['ecu_module'])
     
     # 백필 (deterministic rules)
-    # 1. Powertrain from model names
+    # 1. Powertrain from model names (word boundaries to avoid false matches)
     op.execute("""
         UPDATE vehicle_definitions
         SET powertrain = CASE
-            WHEN model ILIKE '%EV%' OR model ILIKE '%ioniq%' OR model ILIKE '%kona electric%' 
-                OR model ILIKE '%niro ev%' OR model ILIKE '%soul ev%' THEN 'BEV'
-            WHEN model ILIKE '%plug%' OR model ILIKE '%phev%' THEN 'PHEV'
-            WHEN model ILIKE '%hybrid%' OR model ILIKE '%hev%' THEN 'HEV'
-            ELSE 'ICE'
+            WHEN model ~* '\\m(EV6|EV9|IONIQ|KONA ELECTRIC|NIRO EV|SOUL EV|E-GMP|ID\\.4|ID\\.3|MODEL [3SXY]|LEAF|ARIYA|BOLT)\\M' THEN 'BEV'
+            WHEN model ~* '\\m(PLUG-?IN|PHEV|NIRO PLUG|SORENTO PLUG)\\M' THEN 'PHEV'
+            WHEN model ~* '\\m(HYBRID|HEV|PRIUS|CAMRY HYBRID|TUCSON HYBRID)\\M' 
+                AND NOT model ~* '\\m(PLUG)\\M' THEN 'HEV'
+            ELSE 'unknown'
         END
         WHERE powertrain IS NULL
     """)
@@ -71,7 +71,7 @@ def upgrade():
             WHEN service_id IN ('01', '02', '09') THEN 'OBD-II'
             WHEN service_id IN ('10', '11', '14', '19', '22', '27', '2E', '31', '3E') THEN 'UDS'
             WHEN service_id IN ('21', '22', '23', '24') AND mode IS NOT NULL THEN 'KWP2000'
-            ELSE 'UDS'
+            ELSE 'unknown'
         END
         WHERE protocol IS NULL
     """)
