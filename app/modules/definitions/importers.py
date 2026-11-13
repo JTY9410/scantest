@@ -3,6 +3,7 @@ import csv
 import hashlib
 import json
 import re
+import unicodedata
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -587,9 +588,20 @@ def import_definition_folder(base_path: Path, exclude_list: set[str] | None = No
             else:
                 stats['torque_imported'] += 1
     
-    # CanZE CSV 파일
-    canze_dir = base_path / '05_CanZE_조회필드'
-    if canze_dir.exists():
+    # CanZE CSV 파일 (Unicode 정규화 문제 해결: NFD/NFC)
+    # 한글 경로가 NFD/NFC로 인코딩되어 있을 수 있으므로 glob으로 찾기
+    canze_dirs = list(base_path.glob('*CanZE*'))
+    if not canze_dirs:
+        # NFC/NFD 정규화하여 시도
+        for item in base_path.iterdir():
+            normalized = unicodedata.normalize('NFC', str(item.name))
+            if 'CanZE' in normalized or '05_' in str(item.name):
+                canze_dirs.append(item)
+                break
+    
+    for canze_dir in canze_dirs:
+        if not canze_dir.is_dir():
+            continue
         for csv_file in canze_dir.rglob('*.csv'):
             if csv_file.name in exclude_list:
                 continue

@@ -133,15 +133,30 @@ def register_cli(app: Flask) -> None:
     definitions = AppGroup("definitions", help="차량 정의파일 관리")
 
     @definitions.command("import")
-    @click.argument("folder_path", type=click.Path(exists=True))
+    @click.argument("folder_path", type=click.Path(exists=True), required=False)
     @click.option("--exclude-file", type=click.Path(exists=True), help="제외목록 JSON 파일")
-    def import_definitions_cmd(folder_path: str, exclude_file: str | None) -> None:
-        """정의파일 폴더를 DB로 import합니다."""
+    def import_definitions_cmd(folder_path: str | None, exclude_file: str | None) -> None:
+        """정의파일 폴더를 DB로 import합니다.
+        
+        DEFINITIONS_DIR 환경변수를 설정하면 folder_path 생략 가능:
+          export DEFINITIONS_DIR=/definitions
+          flask definitions import
+        """
         from pathlib import Path
         from app.modules.definitions.importers import import_definition_folder
         import json
-
+        import os
+        
+        if not folder_path:
+            folder_path = os.environ.get('DEFINITIONS_DIR')
+            if not folder_path:
+                click.echo("Error: folder_path required or set DEFINITIONS_DIR")
+                raise click.Abort()
+        
         base_path = Path(folder_path)
+        if not base_path.exists():
+            click.echo(f"Error: {base_path} does not exist")
+            raise click.Abort()
         exclude_list = set()
         if exclude_file:
             with open(exclude_file, 'r', encoding='utf-8') as f:
