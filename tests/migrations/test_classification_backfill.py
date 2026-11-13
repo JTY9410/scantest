@@ -49,8 +49,8 @@ def test_classification_migration_backfill():
     db_url = url.set(database=test_db_name).render_as_string(hide_password=False)
     
     # Set environment variable so migrations use the correct database
-    old_db_url = os.environ.get("TEST_DATABASE_URL")
-    os.environ["TEST_DATABASE_URL"] = db_url
+    old_db_url = os.environ.get("TEST_MIGRATION_DATABASE_URL")
+    os.environ["TEST_MIGRATION_DATABASE_URL"] = db_url
     
     try:
         engine = create_engine(db_url)
@@ -89,14 +89,14 @@ def test_classification_migration_backfill():
             """))
             
             conn.execute(text("""
-                INSERT INTO dbc_signals (id, message_id, signal_name, start_bit, bit_length, byte_order, value_type, factor, offset)
+                INSERT INTO dbc_signals (id, message_id, signal_name, start_bit, bit_length, byte_order, value_type, factor, "offset")
                 VALUES
-                (9001, 9001, 'Battery_SOC', 0, 16, 'little', 'unsigned', 0.1, 0),
-                (9002, 9001, 'Battery_SOH', 16, 16, 'little', 'unsigned', 0.1, 0),
-                (9003, 9001, 'Cell_Voltage_01', 32, 16, 'little', 'unsigned', 0.001, 0),
-                (9004, 9001, 'Pack_Voltage', 48, 16, 'little', 'unsigned', 0.1, 0),
-                (9005, 9002, 'Motor_Torque', 0, 16, 'little', 'signed', 0.1, 0),
-                (9006, 9002, 'Vehicle_Speed', 16, 16, 'little', 'unsigned', 0.01, 0)
+                (9001, 9001, 'SOC', 0, 16, 'little', 'unsigned', 0.1, 0),
+                (9002, 9001, 'SOH', 16, 16, 'little', 'unsigned', 0.1, 0),
+                (9003, 9001, 'Cell volt 01', 32, 16, 'little', 'unsigned', 0.001, 0),
+                (9004, 9001, 'Pack voltage', 48, 16, 'little', 'unsigned', 0.1, 0),
+                (9005, 9002, 'Motor torque', 0, 16, 'little', 'signed', 0.1, 0),
+                (9006, 9002, 'Vehicle speed', 16, 16, 'little', 'unsigned', 0.01, 0)
             """))
             
             conn.execute(text("""
@@ -132,18 +132,18 @@ def test_classification_migration_backfill():
             result = conn.execute(text("SELECT signal_name, protocol, ecu_module, signal_category FROM dbc_signals WHERE id BETWEEN 9001 AND 9006 ORDER BY id"))
             signals = {row[0]: {'protocol': row[1], 'ecu': row[2], 'category': row[3]} for row in result}
             
-            assert signals['Battery_SOC']['protocol'] == 'CAN'
-            assert signals['Battery_SOC']['ecu'] == 'BMS'
-            assert signals['Battery_SOC']['category'] == 'battery_soc'
-            assert signals['Battery_SOH']['ecu'] == 'BMS'
-            assert signals['Battery_SOH']['category'] == 'battery_soh'
-            assert signals['Cell_Voltage_01']['ecu'] == 'BMS'
-            assert signals['Cell_Voltage_01']['category'] == 'cell_voltage'
-            assert signals['Pack_Voltage']['ecu'] == 'BMS'
-            assert signals['Pack_Voltage']['category'] == 'battery_voltage'
-            assert signals['Motor_Torque']['ecu'] == 'MCU'
-            assert signals['Motor_Torque']['category'] == 'drive_torque'
-            assert signals['Vehicle_Speed']['category'] == 'drive_speed'
+            assert signals['SOC']['protocol'] == 'CAN'
+            assert signals['SOC']['ecu'] == 'BMS'
+            assert signals['SOC']['category'] == 'battery_soc'
+            assert signals['SOH']['ecu'] == 'BMS'
+            assert signals['SOH']['category'] == 'battery_soh'
+            assert signals['Cell volt 01']['ecu'] == 'BMS'
+            assert signals['Cell volt 01']['category'] == 'cell_voltage'
+            assert signals['Pack voltage']['ecu'] == 'BMS'
+            assert signals['Pack voltage']['category'] == 'battery_voltage'
+            assert signals['Motor torque']['ecu'] == 'MCU'
+            assert signals['Motor torque']['category'] == 'drive_torque'
+            assert signals['Vehicle speed']['category'] == 'drive_speed'
             
             result = conn.execute(text("SELECT label, protocol, ecu_module FROM diagnostic_commands WHERE id BETWEEN 9001 AND 9004 ORDER BY id"))
             commands = {row[0]: {'protocol': row[1], 'ecu': row[2]} for row in result}
@@ -157,17 +157,27 @@ def test_classification_migration_backfill():
             assert commands['Engine RPM']['protocol'] == 'OBD-II'
             assert commands['Engine RPM']['ecu'] == 'ECM'
             
-            command.upgrade(config, "head")
             conn.close()
+            
+            # Close any remaining connections from Flask-SQLAlchemy
+            db.session.remove()
+            db.engine.dispose()
         
         engine.dispose()
     finally:
         if old_db_url:
-            os.environ["TEST_DATABASE_URL"] = old_db_url
-        elif "TEST_DATABASE_URL" in os.environ:
-            del os.environ["TEST_DATABASE_URL"]
+            os.environ["TEST_MIGRATION_DATABASE_URL"] = old_db_url
+        elif "TEST_MIGRATION_DATABASE_URL" in os.environ:
+            del os.environ["TEST_MIGRATION_DATABASE_URL"]
     
+    # Terminate any remaining connections before dropping
     admin_engine = create_engine(admin_db_url, isolation_level="AUTOCOMMIT")
     with admin_engine.connect() as admin_conn:
+        admin_conn.execute(text(f"""
+            SELECT pg_terminate_backend(pg_stat_activity.pid)
+            FROM pg_stat_activity
+            WHERE pg_stat_activity.datname = '{test_db_name}'
+            AND pid <> pg_backend_pid()
+        """))
         admin_conn.execute(text(f"DROP DATABASE IF EXISTS {test_db_name}"))
     admin_engine.dispose()

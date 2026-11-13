@@ -16,6 +16,13 @@ logger = logging.getLogger('alembic.env')
 
 
 def get_engine():
+    # Support test migration database override for migration testing
+    import os
+    test_migration_url = os.environ.get('TEST_MIGRATION_DATABASE_URL')
+    if test_migration_url:
+        from sqlalchemy import create_engine
+        return create_engine(test_migration_url)
+    
     try:
         # this works with Flask-SQLAlchemy<3 and Alchemical
         return current_app.extensions['migrate'].db.get_engine()
@@ -25,6 +32,12 @@ def get_engine():
 
 
 def get_engine_url():
+    # Support test migration database override for migration testing
+    import os
+    test_migration_url = os.environ.get('TEST_MIGRATION_DATABASE_URL')
+    if test_migration_url:
+        return test_migration_url.replace('%', '%%')
+    
     try:
         return get_engine().url.render_as_string(hide_password=False).replace(
             '%', '%%')
