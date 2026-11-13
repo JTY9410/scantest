@@ -26,13 +26,10 @@ def app():
 
 @pytest.fixture(autouse=True)
 def _clean_database(app):
-    """Fast database cleanup with proper connection management"""
+    """Proper test isolation with DELETE + sequence reset"""
     yield
     with app.app_context():
-        # Close all connections first to avoid lock conflicts
-        db.session.close()
         db.session.remove()
-        db.engine.dispose()
         
         if "sqlite" in app.config["SQLALCHEMY_DATABASE_URI"]:
             # SQLite: use DELETE
@@ -44,14 +41,18 @@ def _clean_database(app):
                 pass
             db.session.commit()
         else:
-            # Postgres: TRUNCATE CASCADE with connection cleanup
-            try:
-                tables = ", ".join(t.name for t in db.metadata.sorted_tables)
-                db.session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
-                db.session.commit()
-            except Exception:
-                # Fallback to rollback on error
-                db.session.rollback()
+            # Postgres: DELETE in FK order + reset ALL sequences
+            # Disable triggers temporarily for faster cleanup
+            for table in reversed(db.metadata.sorted_tables):
+                db.session.execute(text(f"DELETE FROM {table.name}"))
+            
+            # Reset ALL sequences in the database
+            db.session.execute(text("""
+                SELECT setval(sequence_name, 1, false)
+                FROM information_schema.sequences
+                WHERE sequence_schema = 'public'
+            """))
+            db.session.commit()
     
     limiter.reset()
 
