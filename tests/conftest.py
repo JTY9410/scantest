@@ -26,26 +26,30 @@ def app():
 
 @pytest.fixture(autouse=True)
 def _clean_database(app):
-    """Transaction-based test isolation: 각 테스트를 트랜잭션으로 감싸고 롤백"""
+    """Faster database cleanup using DELETE instead of TRUNCATE for Postgres"""
+    yield
     with app.app_context():
-        # 외부 트랜잭션 시작
-        connection = db.engine.connect()
-        transaction = connection.begin()
+        db.session.remove()
         
-        # 기존 세션을 이 연결에 바인딩
-        # Flask-SQLAlchemy의 세션을 직접 교체
-        old_session = db.session
-        db.session = db._make_scoped_session({"bind": connection})
-        
-        yield
-        
-        # 테스트 후 트랜잭션 롤백 (매우 빠름)
-        db.session.close()
-        transaction.rollback()
-        connection.close()
-        
-        # 원래 세션 복원
-        db.session = old_session
+        if "sqlite" in app.config["SQLALCHEMY_DATABASE_URI"]:
+            # SQLite: use DELETE
+            for table in reversed(db.metadata.sorted_tables):
+                db.session.execute(text(f"DELETE FROM {table.name}"))
+            try:
+                db.session.execute(text("DELETE FROM sqlite_sequence"))
+            except Exception:
+                pass
+            db.session.commit()
+        else:
+            # Postgres: DELETE is faster than TRUNCATE when there are many tests
+            # because it doesn't require exclusive table locks
+            for table in reversed(db.metadata.sorted_tables):
+                db.session.execute(text(f"DELETE FROM {table.name}"))
+            # Reset sequences manually
+            for table in db.metadata.sorted_tables:
+                if hasattr(table.c, 'id') and table.c.id.autoincrement:
+                    db.session.execute(text(f"ALTER SEQUENCE {table.name}_id_seq RESTART WITH 1"))
+            db.session.commit()
     
     limiter.reset()
 
