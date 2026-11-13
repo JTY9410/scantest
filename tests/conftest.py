@@ -40,8 +40,21 @@ def _clean_database(app):
                 pass  # Table doesn't exist yet
             db.session.commit()
         else:
-            # 남은 세션이 잠금을 쥐고 있으면 무기한 기다리지 말고 실패로 드러낸다
-            db.session.execute(text("SET LOCAL lock_timeout = '30s'"))
+            # 긴 테스트 런에서 잠금 충돌을 방지하기 위해:
+            # 1. 유휴 연결 종료
+            # 2. 잠금 타임아웃 증가
+            db.session.execute(text("""
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = current_database()
+                  AND pid <> pg_backend_pid()
+                  AND state = 'idle'
+                  AND state_change < NOW() - INTERVAL '5 seconds'
+            """))
+            db.session.commit()
+            
+            # 더 긴 타임아웃으로 TRUNCATE 시도
+            db.session.execute(text("SET LOCAL lock_timeout = '120s'"))
             tables = ", ".join(t.name for t in db.metadata.sorted_tables)
             db.session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
             db.session.commit()
