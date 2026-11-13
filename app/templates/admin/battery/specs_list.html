@@ -1,0 +1,95 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, empty %}
+{% block title %}배터리 사양 관리{% endblock %}
+
+{% block content %}
+{% call page_header("배터리 사양 관리", "차종별 배터리 원본 사양") %}
+  <a class="btn btn-primary" href="{{ url_for('battery_admin.spec_create') }}">+ 사양 추가</a>
+{% endcall %}
+
+<div class="card card-body">
+  <form method="get" class="mb-4 flex gap-2">
+    <input type="text" name="maker" value="{{ current_maker }}" placeholder="제조사" class="input flex-1">
+    <input type="text" name="model" value="{{ current_model }}" placeholder="모델명" class="input flex-1">
+    <button type="submit" class="btn btn-secondary">검색</button>
+    <a href="{{ url_for('battery_admin.specs_list') }}" class="btn">초기화</a>
+  </form>
+
+  <div class="mb-4">
+    <p class="text-sm text-muted">총 <strong>{{ total_count }}</strong>개 사양</p>
+    {% if makers %}
+    <div class="mt-2 flex flex-wrap gap-2">
+      {% for maker, count in makers %}
+      <a href="{{ url_for('battery_admin.specs_list', maker=maker) }}" 
+         class="px-2 py-1 rounded text-sm bg-surface border border-line hover:border-line-strong">
+        {{ maker }} ({{ count }})
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  {% if specs %}
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="border-b border-line">
+        <tr class="text-left text-sm text-muted">
+          <th class="pb-2">제조사</th>
+          <th class="pb-2">모델</th>
+          <th class="pb-2">트림/등급</th>
+          <th class="pb-2">연식</th>
+          <th class="pb-2">용량 (kWh)</th>
+          <th class="pb-2">셀 화학</th>
+          <th class="pb-2">출처</th>
+          <th class="pb-2"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for spec in specs %}
+        <tr class="border-b border-line hover:bg-surface-hover">
+          <td class="py-2">{{ spec.maker }}</td>
+          <td>{{ spec.model }}</td>
+          <td>{{ spec.trim_grade or '-' }}</td>
+          <td>{{ spec.model_year or '-' }}</td>
+          <td>
+            {% if spec.usable_kwh %}{{ "%.1f"|format(spec.usable_kwh) }}{% else %}-{% endif %}
+            {% if spec.gross_kwh %}<span class="text-xs text-muted">({{ "%.1f"|format(spec.gross_kwh) }})</span>{% endif %}
+          </td>
+          <td>{{ spec.cell_chemistry or '-' }}</td>
+          <td>
+            {% if spec.source_type == 'manufacturer' %}
+            <span class="px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">제조사</span>
+            {% else %}
+            <span class="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">서드파티</span>
+            {% endif %}
+          </td>
+          <td class="text-right">
+            <a href="{{ url_for('battery_admin.spec_detail', spec_id=spec.id) }}" class="text-sm text-primary hover:underline">상세</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if pagination.pages > 1 %}
+  <div class="mt-4 flex justify-center gap-2">
+    {% if pagination.has_prev %}
+    <a href="{{ url_for('battery_admin.specs_list', page=pagination.prev_num, maker=current_maker, model=current_model) }}" 
+       class="btn btn-sm">이전</a>
+    {% endif %}
+    <span class="px-3 py-1">{{ pagination.page }} / {{ pagination.pages }}</span>
+    {% if pagination.has_next %}
+    <a href="{{ url_for('battery_admin.specs_list', page=pagination.next_num, maker=current_maker, model=current_model) }}" 
+       class="btn btn-sm">다음</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% else %}
+  {% call empty("배터리 사양이 없습니다") %}
+    <a href="{{ url_for('battery_admin.spec_create') }}" class="btn btn-primary">사양 추가하기</a>
+  {% endcall %}
+  {% endif %}
+</div>
+{% endblock %}

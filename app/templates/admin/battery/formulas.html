@@ -1,0 +1,80 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, empty %}
+{% block title %}학습 공식 관리{% endblock %}
+
+{% block content %}
+{% call page_header("학습 공식 관리", "SOH 추정 공식 버전 관리") %}{% endcall %}
+
+<div class="card card-body">
+  <div class="mb-4">
+    <p class="text-sm text-muted">활성 공식: <strong>{{ active_count }}</strong>개 / 전체 <strong>{{ formulas|length }}</strong>개</p>
+  </div>
+
+  {% if formulas %}
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="border-b border-line">
+        <tr class="text-left text-sm text-muted">
+          <th class="pb-2">방법</th>
+          <th class="pb-2">버전</th>
+          <th class="pb-2">MAE</th>
+          <th class="pb-2">샘플 수</th>
+          <th class="pb-2">훈련 일시</th>
+          <th class="pb-2">상태</th>
+          <th class="pb-2"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for formula in formulas %}
+        <tr class="border-b border-line hover:bg-surface-hover">
+          <td class="py-2 font-medium">{{ formula.method }}</td>
+          <td>{{ formula.version }}</td>
+          <td>{{ "%.2f"|format(formula.mae) }}%</td>
+          <td>{{ formula.sample_count }}</td>
+          <td class="text-sm text-muted">{{ formula.trained_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          <td>
+            {% if formula.is_active %}
+            <span class="px-2 py-0.5 rounded text-xs bg-green-100 text-green-800">활성</span>
+            {% else %}
+            <span class="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-600">비활성</span>
+            {% endif %}
+          </td>
+          <td class="text-right">
+            <button onclick="toggleFormula({{ formula.id }})" class="text-sm text-primary hover:underline">
+              {% if formula.is_active %}비활성화{% else %}활성화{% endif %}
+            </button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  {% call empty("학습된 공식이 없습니다") %}
+    <p class="text-sm text-muted">flask battery retrain 명령으로 공식을 학습하세요.</p>
+  {% endcall %}
+  {% endif %}
+</div>
+
+<script>
+async function toggleFormula(id) {
+  try {
+    const res = await fetch(`/admin/battery/formulas/${id}/toggle`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': '{{ csrf_token() }}'
+      }
+    });
+    const data = await res.json();
+    if (data.success) {
+      location.reload();
+    } else {
+      alert(data.error || '오류가 발생했습니다');
+    }
+  } catch (e) {
+    alert('오류가 발생했습니다');
+  }
+}
+</script>
+{% endblock %}

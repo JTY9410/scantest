@@ -37,6 +37,7 @@ class BatterySpec(db.Model):
     # 출처 (필수)
     source_url: Mapped[str] = mapped_column(Text, nullable=False)  # 공식 스펙시트, ev-database.org 등
     source_note: Mapped[str | None] = mapped_column(Text)  # 추가 메모
+    source_type: Mapped[str | None] = mapped_column(String(20))  # 'manufacturer' or 'third_party'
     
     # 메타데이터
     verified_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)

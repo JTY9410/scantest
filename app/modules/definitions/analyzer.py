@@ -25,6 +25,7 @@ from app.modules.definitions.wescan_grades import compute_wescan_grades
 from app.modules.definitions.verification import update_verification_metrics
 from app.modules.scans.models import Scan
 from app.core.formulas import safe_eval
+from app.modules.battery.soh_calculator import SOHCalculator
 
 
 def analyze_scan_with_definitions(scan: Scan) -> dict[str, Any]:
@@ -227,7 +228,27 @@ def analyze_scan_with_definitions(scan: Scan) -> dict[str, Any]:
     # 7. WESCAN 등급 (기존 scanner/report.py 로직 사용)
     result['wescan_grades'] = compute_wescan_grades(result)
     
-    # 8. verification_metrics 자동 업데이트
+    # 8. SOH 계산 (다중 방법, 우선순위 순)
+    soh_results = SOHCalculator.calculate(result, scan.id if scan.id else None)
+    if soh_results:
+        result['soh_results'] = [
+            {
+                'soh_pct': r.soh_pct,
+                'method': r.method,
+                'method_label_ko': r.method_label_ko,
+                'confidence': r.confidence,
+                'calculation_details': r.calculation_details
+            }
+            for r in soh_results
+        ]
+        # 가장 신뢰도 높은 결과를 battery에도 추가
+        if soh_results:
+            best = soh_results[0]
+            result['battery']['soh_pct'] = best.soh_pct
+            result['battery']['soh_method'] = best.method_label_ko
+            result['battery']['soh_confidence'] = best.confidence
+    
+    # 9. verification_metrics 자동 업데이트
     update_verification_metrics(scan.id)
     
     db.session.commit()

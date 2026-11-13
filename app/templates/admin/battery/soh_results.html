@@ -1,0 +1,92 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, empty %}
+{% block title %}SOH 계산 결과{% endblock %}
+
+{% block content %}
+{% call page_header("SOH 계산 결과", "스캔별 SOH 추정 결과 및 학습 데이터") %}{% endcall %}
+
+<div class="card card-body">
+  <div class="mb-4">
+    <form method="get" class="flex gap-2">
+      <select name="method" class="input">
+        <option value="">전체 방법</option>
+        <option value="bms_direct" {% if current_method == 'bms_direct' %}selected{% endif %}>BMS 직접 읽기</option>
+        <option value="capacity_based_ah" {% if current_method == 'capacity_based_ah' %}selected{% endif %}>용량 기반 (Ah)</option>
+        <option value="capacity_based_kwh" {% if current_method == 'capacity_based_kwh' %}selected{% endif %}>용량 기반 (kWh)</option>
+        <option value="coulomb_counting" {% if current_method == 'coulomb_counting' %}selected{% endif %}>Coulomb Counting</option>
+        <option value="energy_counting" {% if current_method == 'energy_counting' %}selected{% endif %}>Energy Counting</option>
+      </select>
+      <button type="submit" class="btn btn-secondary">필터</button>
+      <a href="{{ url_for('battery_admin.soh_results_list') }}" class="btn">초기화</a>
+    </form>
+  </div>
+
+  {% if method_stats %}
+  <div class="mb-6 grid gap-4 md:grid-cols-3">
+    {% for stat in method_stats %}
+    <div class="rounded border border-line p-4">
+      <p class="text-sm text-muted">{{ stat.method }}</p>
+      <p class="mt-1 text-2xl font-bold">{{ stat.count }}개</p>
+      <p class="mt-2 text-sm">
+        평균 SOH: {{ "%.1f"|format(stat.avg_soh) if stat.avg_soh else '-' }}%<br>
+        평균 신뢰도: {{ "%.2f"|format(stat.avg_confidence) if stat.avg_confidence else '-' }}<br>
+        평균 오차: {{ "%.1f"|format(stat.avg_error) if stat.avg_error else '-' }}%
+      </p>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if results %}
+  <div class="overflow-x-auto">
+    <table class="w-full">
+      <thead class="border-b border-line">
+        <tr class="text-left text-sm text-muted">
+          <th class="pb-2">Scan ID</th>
+          <th class="pb-2">방법</th>
+          <th class="pb-2">SOH</th>
+          <th class="pb-2">신뢰도</th>
+          <th class="pb-2">BMS SOH</th>
+          <th class="pb-2">오차</th>
+          <th class="pb-2">계산 일시</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in results %}
+        <tr class="border-b border-line hover:bg-surface-hover">
+          <td class="py-2">#{{ r.scan_id }}</td>
+          <td>{{ r.method }}</td>
+          <td class="font-medium">{{ "%.1f"|format(r.soh_pct) }}%</td>
+          <td>{{ "%.2f"|format(r.confidence) if r.confidence else '-' }}</td>
+          <td>{{ "%.1f"|format(r.bms_soh_pct) if r.bms_soh_pct else '-' }}%</td>
+          <td>
+            {% if r.error_pct %}
+            <span class="{% if r.error_pct|abs < 5 %}text-green-600{% elif r.error_pct|abs < 10 %}text-yellow-600{% else %}text-red-600{% endif %}">
+              {{ "%+.1f"|format(r.error_pct) }}%
+            </span>
+            {% else %}-{% endif %}
+          </td>
+          <td class="text-sm text-muted">{{ r.computed_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% if pagination.pages > 1 %}
+  <div class="mt-4 flex justify-center gap-2">
+    {% if pagination.has_prev %}
+    <a href="{{ url_for('battery_admin.soh_results_list', page=pagination.prev_num, method=current_method) }}" class="btn btn-sm">이전</a>
+    {% endif %}
+    <span class="px-3 py-1">{{ pagination.page }} / {{ pagination.pages }}</span>
+    {% if pagination.has_next %}
+    <a href="{{ url_for('battery_admin.soh_results_list', page=pagination.next_num, method=current_method) }}" class="btn btn-sm">다음</a>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% else %}
+  {% call empty("SOH 결과가 없습니다") %}{% endcall %}
+  {% endif %}
+</div>
+{% endblock %}
