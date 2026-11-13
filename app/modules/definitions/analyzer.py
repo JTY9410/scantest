@@ -57,6 +57,24 @@ def analyze_scan_with_definitions(scan: Scan) -> dict[str, Any]:
         }
     }
     
+    # 1. 차량 정의 조회 (제조사 매칭)
+    # DiagnosticCommand는 maker/model 필드로 직접 매칭
+    query = db.session.query(DiagnosticCommand).filter(
+        DiagnosticCommand.maker == scan.car_maker
+    )
+    
+    # 모델이 지정된 경우 추가 필터링 (NULL이거나 일치하는 것)
+    if scan.car_model:
+        query = query.filter(
+            db.or_(
+                DiagnosticCommand.model == None,
+                DiagnosticCommand.model == scan.car_model
+            )
+        )
+    
+    commands = query.all()
+    result['definitions_applied']['total_commands'] = len(commands)
+    
     # raw 데이터에서 CAN 프레임 추출
     can_frames = []
     if scan.raw and isinstance(scan.raw, dict):
@@ -67,32 +85,15 @@ def analyze_scan_with_definitions(scan: Scan) -> dict[str, Any]:
     
     result['definitions_applied']['frames_processed'] = len(can_frames)
     
-    # 1. 요청/응답 프레임 그룹화 (타임스탬프 기준)
+    # 2. 요청/응답 프레임 그룹화 (타임스탬프 기준)
     request_response_groups = group_request_responses(can_frames)
     
-    # 2. ISO-TP 재조립
+    # 3. ISO-TP 재조립
     for group in request_response_groups:
         reassembled = reassemble_isotp_frames(group['responses'])
         if reassembled:
             result['definitions_applied']['isotp_reassembled'] += len(reassembled)
             group['reassembled'] = reassembled
-    
-    # 3. 차량 정의 조회 (제조사 매칭)
-    # DiagnosticCommand와 VehicleDefinition은 vehicle_definition_id FK로 연결
-    vehicle_defs = db.session.query(VehicleDefinition).filter_by(
-        maker=scan.car_maker
-    ).all()
-    
-    vehicle_def_ids = [vd.id for vd in vehicle_defs]
-    
-    if vehicle_def_ids:
-        commands = db.session.query(DiagnosticCommand).filter(
-            DiagnosticCommand.vehicle_definition_id.in_(vehicle_def_ids)
-        ).all()
-    else:
-        commands = []
-    
-    result['definitions_applied']['total_commands'] = len(commands)
     
     # 4. 각 그룹 디코딩
     for group in request_response_groups:
