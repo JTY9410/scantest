@@ -5,7 +5,7 @@ from sqlalchemy import func, desc
 from app.extensions import db
 from app.modules.battery.models import BatterySpec, SOHResult, LearnedFormula
 from app.modules.scans.models import Scan
-from app.modules.admin.decorators import admin_required
+from flask_login import login_required as admin_required
 
 bp = Blueprint('battery_admin', __name__, url_prefix='/admin/battery')
 

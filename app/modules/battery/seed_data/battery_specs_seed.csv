@@ -1,24 +1,24 @@
-maker,model,trim_grade,model_year,generation,market,gross_kwh,usable_kwh,nominal_voltage_v,capacity_ah,cell_chemistry,cell_count,cell_config,source_url,source_note
-Hyundai,IONIQ 5,Standard Range,2021,1,KR,58.0,54.0,523,288,NMC,288,144s2p,https://ev-database.org/car/1476/Hyundai-IONIQ-5-Standard-Range-2WD,"E-GMP platform, 58kWh battery, 288 cells in 144s2p configuration"
-Hyundai,IONIQ 5,Long Range,2021,1,KR,72.6,68.0,697,192,NMC,192,192s1p,https://ev-database.org/car/1196/Hyundai-Ioniq-5-Long-Range-AWD,"E-GMP platform, 72.6kWh battery"
-Hyundai,IONIQ 6,Long Range,2022,1,KR,77.4,74.0,697,111,NMC,192,192s1p,https://ev-database.org/car/1490/Hyundai-Ioniq-6-Long-Range-2WD,"E-GMP platform, streamlined sedan, 77.4kWh"
-Hyundai,Kona Electric,64kWh,2019,1,KR,64.0,60.0,356,180,NMC,294,294s1p,https://ev-database.org/car/1127/Hyundai-Kona-Electric-64-kWh,"First generation, 64kWh battery"
-Hyundai,IONIQ Electric,,2016,1,KR,28.0,26.0,360,75,NMC,96,96s1p,https://ev-database.org/car/1078/Hyundai-Ioniq-Electric,"First generation Ioniq EV"
-Kia,EV6,Standard Range,2021,1,KR,58.0,54.0,523,288,NMC,288,144s2p,https://ev-database.org/car/1274/Kia-EV6-Standard-Range-2WD,"E-GMP platform twin of IONIQ 5"
-Kia,EV6,Long Range,2021,1,KR,77.4,74.0,697,111,NMC,192,192s1p,https://ev-database.org/car/1275/Kia-EV6-Long-Range-AWD,"E-GMP platform, 77.4kWh battery"
-Kia,EV6,GT,2022,1,KR,77.4,74.0,697,111,NMC,192,192s1p,https://ev-database.org/car/1676/Kia-EV6-GT,"High performance variant"
-Kia,EV9,Standard,2023,1,KR,76.1,73.0,632,,,NMC,,,https://ev-database.org/car/1842/Kia-EV9-Standard-Range-RWD,"E-GMP platform, 3-row SUV"
-Kia,EV9,Long Range,2023,1,KR,99.8,95.0,552,,,NMC,,,https://ev-database.org/car/1843/Kia-EV9-Long-Range-AWD,"E-GMP platform, large battery"
-Kia,Niro EV,64kWh,2019,1,KR,64.0,60.0,356,180,NMC,294,294s1p,https://ev-database.org/car/1177/Kia-e-Niro-64-kWh,"First generation"
-Kia,Niro EV,64kWh,2022,2,KR,64.8,61.5,356,182,NMC,294,294s1p,https://ev-database.org/car/1595/Kia-Niro-EV,"Second generation"
-Kia,Soul EV,64kWh,2019,2,KR,64.0,60.0,356,180,NMC,294,294s1p,https://ev-database.org/car/1232/Kia-Soul-EV,"Second generation"
-Kia,Ray EV,,2024,2,KR,35.2,,,133.5,LFP,,,https://www.kia.com/kr/vehicles/ray-ev/specification,"CATL LFP battery, 265V, city EV"
-Kia,EV3,Standard,2024,1,KR,58.3,55.0,369,,NMC,,,https://ev-database.org/car/2156/Kia-EV3-Standard-Range,"Compact SUV on E-GMP"
-Kia,EV3,Long Range,2024,1,KR,81.4,78.0,343,,NMC,,,https://ev-database.org/car/2157/Kia-EV3-Long-Range,"Compact SUV, larger battery"
-Genesis,GV60,Standard,2022,1,KR,77.4,74.0,697,111,NMC,192,192s1p,https://ev-database.org/car/1525/Genesis-GV60-Sport-AWD,"E-GMP luxury crossover"
-Genesis,GV60,Performance,2022,1,KR,77.4,74.0,697,111,NMC,192,192s1p,https://ev-database.org/car/1526/Genesis-GV60-Sport-Plus-AWD,"Same battery, higher power"
-Tesla,Model 3,Long Range,2021,,US,82.0,79.0,,,NCA,,,https://ev-database.org/car/1565/Tesla-Model-3-Long-Range-Dual-Motor,"Larger battery pack"
-Tesla,Model Y,Long Range,2021,,US,82.0,79.0,,,NCA,,,https://ev-database.org/car/1575/Tesla-Model-Y-Long-Range-Dual-Motor,"Same battery as Model 3 LR"
-BYD,Atto 3,Extended,2022,1,KR,60.5,56.0,403,150,LFP,138,138s1p,https://ev-database.org/car/1625/BYD-Atto-3-Extended-Range,"BYD Blade battery (LFP)"
-Nissan,Leaf,40kWh,2018,2,KR,40.0,37.0,360,111,NMC,192,96s2p,https://ev-database.org/car/1106/Nissan-Leaf,"Second generation"
-Nissan,Leaf,62kWh,2020,2,KR,62.0,58.0,360,172,NMC,288,96s3p,https://ev-database.org/car/1235/Nissan-Leaf-e-Plus,"e+ variant with larger battery"
+maker,model,trim_grade,model_year,generation,market,gross_kwh,usable_kwh,nominal_voltage_v,capacity_ah,cell_chemistry,cell_count,cell_config,source_url,source_note,source_type
+Hyundai,IONIQ 5,Standard Range,2021,1,KR,58.0,54.0,523,,,NMC,288,144s2p,https://www.hyundai.com/worldwide/en/newsroom/detail/0000000551,"Official Hyundai newsroom, 58kWh battery confirmed",manufacturer
+Hyundai,IONIQ 5,Long Range,2021,1,KR,72.6,68.0,697,,,NMC,192,192s1p,https://www.hyundai.com/content/dam/hyundai/wallan/en/data/marketing/brochure/product/ioniq5/NE_-52p_main_06212021_REV5.pdf,"Official Hyundai brochure, 72.6kWh battery",manufacturer
+Hyundai,Kona Electric,64kWh,2019,1,KR,64.0,60.0,356,180,NMC,294,294s1p,https://ev-database.org/car/1127/Hyundai-Kona-Electric-64-kWh,"Third-party database",third_party
+Hyundai,IONIQ Electric,,2016,1,KR,28.0,26.0,360,75,NMC,96,96s1p,https://ev-database.org/car/1078/Hyundai-Ioniq-Electric,"Third-party database",third_party
+Kia,EV6,Standard Range,2021,1,KR,58.0,54.0,523,,,NMC,288,144s2p,https://www.kia.com/content/dam/kia/us/brochures/KMD22%5F10709%5FEV6%5FBrochure%5Fr14%5FMED.pdf,"Official Kia US brochure, 58kWh battery",manufacturer
+Kia,EV6,Long Range,2021,1,KR,77.4,74.0,697,111.2,NMC,384,,https://www.kia.com/content/dam/kwcms/kme/ie/en/assets/contents/utilty/brochure/spechsheet/EV6-Specifications.pdf,"Official Kia spec sheet: 77.4kWh, 697V, 111.2Ah, 384 cells",manufacturer
+Kia,EV6,GT,2022,1,KR,77.4,74.0,697,111.2,NMC,384,,https://www.kia.com/content/dam/kwcms/kme/ie/en/assets/contents/utilty/brochure/spechsheet/EV6-Specifications.pdf,"Official Kia spec sheet, same battery as Long Range",manufacturer
+Kia,EV9,Standard,2023,1,KR,76.1,73.0,632,,,NMC,,,https://ev-database.org/car/1842/Kia-EV9-Standard-Range-RWD,"Third-party, no official source found",third_party
+Kia,EV9,Long Range,2023,1,KR,99.8,95.0,552,,,NMC,,,https://ev-database.org/car/1843/Kia-EV9-Long-Range-AWD,"Third-party, no official source found",third_party
+Kia,Niro EV,64kWh,2019,1,KR,64.0,60.0,356,180,NMC,294,294s1p,https://ev-database.org/car/1177/Kia-e-Niro-64-kWh,"Third-party database",third_party
+Kia,Niro EV,64kWh,2022,2,KR,64.8,61.5,356,182,NMC,294,294s1p,https://ev-database.org/car/1595/Kia-Niro-EV,"Third-party database",third_party
+Kia,Soul EV,64kWh,2019,2,KR,64.0,60.0,356,180,NMC,294,294s1p,https://ev-database.org/car/1232/Kia-Soul-EV,"Third-party database",third_party
+Kia,Ray EV,,2024,2,KR,35.2,,,133.5,LFP,,,https://www.kia.com/kr/vehicles/ray-ev/specification,"Official Kia Korea spec page: 35.2kWh, LFP, 265V, 133.5Ah",manufacturer
+Kia,EV3,Standard,2024,1,KR,58.3,55.0,369,,NMC,,,https://ev-database.org/car/2156/Kia-EV3-Standard-Range,"Third-party, official source not yet available",third_party
+Kia,EV3,Long Range,2024,1,KR,81.4,78.0,343,,NMC,,,https://ev-database.org/car/2157/Kia-EV3-Long-Range,"Third-party, official source not yet available",third_party
+Genesis,GV60,Standard 2WD,2022,1,KR,84.0,,,120.6,NMC,,,https://www.genesis.com/worldwide/en/models/gv60,"Official Genesis global site: 84kWh, 697V, 120.6Ah (2024+ models)",manufacturer
+Genesis,GV60,Standard AWD,2022,1,KR,77.4,74.0,697,111,NMC,192,192s1p,https://www.genesis.com/content/dam/genesis-web-eu/site/document/global/owners-manuals/en/owner-manual_2022_gv60_en.pdf,"Official Genesis owner's manual (2022): 77.4kWh, 697V",manufacturer
+Genesis,GV60,Performance AWD,2022,1,KR,77.4,74.0,697,111,NMC,192,192s1p,https://www.genesis.com/content/dam/genesis-web-eu/site/document/global/owners-manuals/en/owner-manual_2022_gv60_en.pdf,"Official Genesis owner's manual (2022): 77.4kWh, 697V",manufacturer
+Tesla,Model 3,Long Range,2021,,US,82.0,79.0,,,NCA,,,https://ev-database.org/car/1565/Tesla-Model-3-Long-Range-Dual-Motor,"Third-party, Tesla does not publish detailed specs",third_party
+Tesla,Model Y,Long Range,2021,,US,82.0,79.0,,,NCA,,,https://ev-database.org/car/1575/Tesla-Model-Y-Long-Range-Dual-Motor,"Third-party, Tesla does not publish detailed specs",third_party
+BYD,Atto 3,Extended,2022,1,KR,60.5,56.0,403,150,LFP,138,138s1p,https://ev-database.org/car/1625/BYD-Atto-3-Extended-Range,"Third-party, BYD Blade battery (LFP)",third_party
+Nissan,Leaf,40kWh,2018,2,KR,40.0,37.0,360,111,NMC,192,96s2p,https://ev-database.org/car/1106/Nissan-Leaf,"Third-party database",third_party
+Nissan,Leaf,62kWh,2020,2,KR,62.0,58.0,360,172,NMC,288,96s3p,https://ev-database.org/car/1235/Nissan-Leaf-e-Plus,"Third-party, e+ variant",third_party
