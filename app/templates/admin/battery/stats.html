@@ -1,0 +1,70 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header %}
+{% block title %}배터리 통계{% endblock %}
+
+{% block content %}
+{% call page_header("배터리 통계", "SOH 학습 및 분석 통계") %}{% endcall %}
+
+<div class="grid gap-6 md:grid-cols-2">
+  <div class="card card-body">
+    <h2 class="mb-4 text-lg font-semibold">배터리 사양</h2>
+    <dl class="space-y-3">
+      <div class="flex justify-between">
+        <dt class="text-muted">총 사양 수</dt>
+        <dd class="font-bold">{{ spec_count }}개</dd>
+      </div>
+      {% for maker, count in spec_by_maker %}
+      <div class="flex justify-between text-sm">
+        <dt class="text-muted">{{ maker }}</dt>
+        <dd>{{ count }}개</dd>
+      </div>
+      {% endfor %}
+    </dl>
+  </div>
+
+  <div class="card card-body">
+    <h2 class="mb-4 text-lg font-semibold">SOH 결과</h2>
+    <dl class="space-y-3">
+      <div class="flex justify-between">
+        <dt class="text-muted">총 결과 수</dt>
+        <dd class="font-bold">{{ soh_count }}개</dd>
+      </div>
+      <div class="flex justify-between">
+        <dt class="text-muted">Ground Truth 있음</dt>
+        <dd>{{ ground_truth_count }}개</dd>
+      </div>
+    </dl>
+  </div>
+
+  <div class="card card-body">
+    <h2 class="mb-4 text-lg font-semibold">학습 공식</h2>
+    <dl class="space-y-3">
+      <div class="flex justify-between">
+        <dt class="text-muted">총 공식 수</dt>
+        <dd class="font-bold">{{ formula_count }}개</dd>
+      </div>
+      <div class="flex justify-between">
+        <dt class="text-muted">활성 공식</dt>
+        <dd>{{ active_formula_count }}개</dd>
+      </div>
+    </dl>
+  </div>
+
+  <div class="card card-body">
+    <h2 class="mb-4 text-lg font-semibold">방법별 성능</h2>
+    <div class="space-y-4">
+      {% for perf in method_performance %}
+      <div>
+        <p class="text-sm font-medium">{{ perf.method }}</p>
+        <div class="mt-1 flex gap-4 text-sm text-muted">
+          <span>{{ perf.count }}개</span>
+          {% if perf.avg_soh %}<span>평균 SOH: {{ "%.1f"|format(perf.avg_soh) }}%</span>{% endif %}
+          {% if perf.avg_conf %}<span>신뢰도: {{ "%.2f"|format(perf.avg_conf) }}</span>{% endif %}
+          {% if perf.avg_error %}<span class="{% if perf.avg_error|abs < 5 %}text-green-600{% else %}text-red-600{% endif %}">오차: {{ "%+.1f"|format(perf.avg_error) }}%</span>{% endif %}
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

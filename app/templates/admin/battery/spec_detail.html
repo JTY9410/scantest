@@ -1,0 +1,79 @@
+{% extends "layouts/admin.html" %}
+{% block title %}{{ spec.maker }} {{ spec.model }} 사양{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex items-center justify-between">
+  <div>
+    <h1 class="text-2xl font-bold">{{ spec.maker }} {{ spec.model }}</h1>
+    {% if spec.trim_grade %}<p class="text-muted">{{ spec.trim_grade }}</p>{% endif %}
+  </div>
+  <div class="flex gap-2">
+    <a href="{{ url_for('battery_admin.spec_edit', spec_id=spec.id) }}" class="btn btn-secondary">수정</a>
+    <a href="{{ url_for('battery_admin.specs_list') }}" class="btn">목록</a>
+  </div>
+</div>
+
+<div class="grid gap-6 md:grid-cols-2">
+  <div class="card card-body">
+    <h2 class="mb-4 text-lg font-semibold">기본 정보</h2>
+    <dl class="space-y-2">
+      <div><dt class="text-sm text-muted">제조사</dt><dd class="font-medium">{{ spec.maker }}</dd></div>
+      <div><dt class="text-sm text-muted">모델</dt><dd class="font-medium">{{ spec.model }}</dd></div>
+      {% if spec.trim_grade %}<div><dt class="text-sm text-muted">트림/등급</dt><dd>{{ spec.trim_grade }}</dd></div>{% endif %}
+      {% if spec.model_year %}<div><dt class="text-sm text-muted">연식</dt><dd>{{ spec.model_year }}</dd></div>{% endif %}
+      {% if spec.generation %}<div><dt class="text-sm text-muted">세대</dt><dd>{{ spec.generation }}</dd></div>{% endif %}
+      {% if spec.market %}<div><dt class="text-sm text-muted">시장</dt><dd>{{ spec.market }}</dd></div>{% endif %}
+    </dl>
+  </div>
+
+  <div class="card card-body">
+    <h2 class="mb-4 text-lg font-semibold">배터리 제원</h2>
+    <dl class="space-y-2">
+      {% if spec.gross_kwh %}<div><dt class="text-sm text-muted">총 용량</dt><dd class="font-medium">{{ "%.1f"|format(spec.gross_kwh) }} kWh</dd></div>{% endif %}
+      {% if spec.usable_kwh %}<div><dt class="text-sm text-muted">사용 가능 용량</dt><dd class="font-medium">{{ "%.1f"|format(spec.usable_kwh) }} kWh</dd></div>{% endif %}
+      {% if spec.nominal_voltage_v %}<div><dt class="text-sm text-muted">공칭 전압</dt><dd>{{ "%.0f"|format(spec.nominal_voltage_v) }} V</dd></div>{% endif %}
+      {% if spec.capacity_ah %}<div><dt class="text-sm text-muted">용량 (Ah)</dt><dd>{{ "%.1f"|format(spec.capacity_ah) }} Ah</dd></div>{% endif %}
+      {% if spec.cell_chemistry %}<div><dt class="text-sm text-muted">셀 화학</dt><dd>{{ spec.cell_chemistry }}</dd></div>{% endif %}
+      {% if spec.cell_count %}<div><dt class="text-sm text-muted">셀 개수</dt><dd>{{ spec.cell_count }}</dd></div>{% endif %}
+      {% if spec.cell_config %}<div><dt class="text-sm text-muted">셀 구성</dt><dd>{{ spec.cell_config }}</dd></div>{% endif %}
+    </dl>
+  </div>
+</div>
+
+<div class="mt-6 card card-body">
+  <h2 class="mb-4 text-lg font-semibold">출처 정보</h2>
+  <dl class="space-y-2">
+    <div>
+      <dt class="text-sm text-muted">출처 타입</dt>
+      <dd class="mt-1">
+        {% if spec.source_type == 'manufacturer' %}
+        <span class="px-2 py-1 rounded text-sm bg-green-100 text-green-800">제조사 공식 출처</span>
+        {% else %}
+        <span class="px-2 py-1 rounded text-sm bg-gray-100 text-gray-600">서드파티 출처</span>
+        {% endif %}
+      </dd>
+    </div>
+    <div>
+      <dt class="text-sm text-muted">출처 URL</dt>
+      <dd class="mt-1"><a href="{{ spec.source_url }}" target="_blank" class="text-primary hover:underline break-all">{{ spec.source_url }}</a></dd>
+    </div>
+    {% if spec.source_note %}
+    <div>
+      <dt class="text-sm text-muted">추가 메모</dt>
+      <dd class="mt-1">{{ spec.source_note }}</dd>
+    </div>
+    {% endif %}
+    <div>
+      <dt class="text-sm text-muted">검증 일시</dt>
+      <dd class="mt-1">{{ spec.verified_at.strftime('%Y-%m-%d %H:%M') if spec.verified_at else '-' }}</dd>
+    </div>
+  </dl>
+</div>
+
+{% if usage_count > 0 %}
+<div class="mt-6 card card-body">
+  <h2 class="mb-4 text-lg font-semibold">사용 통계</h2>
+  <p>이 사양은 <strong>{{ usage_count }}</strong>개의 SOH 계산에서 사용되었습니다.</p>
+</div>
+{% endif %}
+{% endblock %}
