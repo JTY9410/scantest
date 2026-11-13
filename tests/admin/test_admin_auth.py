@@ -43,10 +43,6 @@ def test_production_sends_hsts_when_secure_cookie_enabled(app, client):
     assert response.headers["Strict-Transport-Security"].startswith("max-age=")
 
 
-@pytest.mark.skipif(
-    "not config.getoption('--csrf-enabled', default=False)",
-    reason="CSRF disabled in test config"
-)
 def test_login_requires_csrf_token(client, make_user):
     make_user("wecar", type="admin", password=ADMIN_PASSWORD)
 
@@ -55,10 +51,6 @@ def test_login_requires_csrf_token(client, make_user):
     assert response.status_code == 400
 
 
-@pytest.mark.skipif(
-    "not config.getoption('--csrf-enabled', default=False)",
-    reason="CSRF disabled in test config"
-)
 def test_https_login_accepts_origin_when_referrer_missing(client, make_user):
     """일부 브라우저·웹뷰는 POST에 Referer를 빼 Origin만 보낸다. 로그인 400을 막는다."""
     make_user("wecar", type="admin", password=ADMIN_PASSWORD)
@@ -77,11 +69,6 @@ def test_https_login_accepts_origin_when_referrer_missing(client, make_user):
     assert "아이디 또는 비밀번호가 올바르지 않습니다." in response.get_data(as_text=True)
 
 
-
-@pytest.mark.skipif(
-    "not config.getoption('--csrf-enabled', default=False)",
-    reason="CSRF disabled in test config"
-)
 def test_https_login_works_without_referrer_or_origin(app, client, make_user):
     """운영(HTTPS)에서는 Referer/Origin이 없어도 CSRF 토큰만 맞으면 로그인 검사를 한다."""
     app.config["WTF_CSRF_SSL_STRICT"] = False
@@ -102,10 +89,6 @@ def test_https_login_works_without_referrer_or_origin(app, client, make_user):
 
 
 
-@pytest.mark.skipif(
-    "not config.getoption('--csrf-enabled', default=False)",
-    reason="CSRF disabled in test config"
-)
 def test_csrf_error_explains_refresh(client, make_user):
     make_user("wecar", type="admin", password=ADMIN_PASSWORD)
 

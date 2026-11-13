@@ -161,7 +161,6 @@ class DevelopmentConfig(Config):
 class TestingConfig(Config):
     APP_ENV = "testing"
     TESTING = True
-    WTF_CSRF_ENABLED = False  # Disable CSRF in tests for easier testing
     SECRET_KEY = "test-secret-key"
     JWT_SECRET = "test-jwt-secret-with-enough-length-for-hs256"
     ENCRYPTION_KEY = Fernet.generate_key().decode()
