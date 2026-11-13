@@ -10,8 +10,13 @@ Priority order for powertrain determination:
 4. vPIC API (NHTSA) - fallback for VIN
 5. Model name/path tokens - heuristic
 6. BMS evidence - heuristic
+
+Unicode Handling:
+- macOS file names use NFD (decomposed Hangul: 공 = ㄱㅗㅇ)
+- All text inputs are normalized to NFC (composed) for consistent matching
 """
 import re
+import unicodedata
 from typing import Optional, Tuple, Dict, Any
 from sqlalchemy import text
 
@@ -20,9 +25,16 @@ from app.utils.vin_decoder import decode_powertrain_from_vin, validate_vin
 
 
 def normalize_text(text: Optional[str]) -> str:
-    """Normalize text for matching: lowercase, remove special chars, split tokens."""
+    """Normalize text for matching: NFC Unicode, lowercase, remove special chars.
+    
+    Critical: macOS file names use NFD (decomposed Hangul: 공용 = ㄱㅗㅇㅇㅛㅇ),
+    so we normalize to NFC (composed: 공용) for consistent literal matching.
+    """
     if not text:
         return ""
+    
+    # Unicode NFC normalization (composed form)
+    text = unicodedata.normalize('NFC', text)
     
     # Lowercase
     text = text.lower()
@@ -60,7 +72,7 @@ BEV_SPECIFIC_TOKENS = {
     'bolt', 'bolteuc', 'bolt ev', 'hummer', 'lyriq', 'equinox', 'blazer', 'silverado',
     
     # Ford
-    'mache', 'mustangmache', 'lightning', 'f150lightning', 'etransit',  # BEV-only nameplates
+    'mache', 'mustangmache', 'machE', 'lightning', 'f150lightning', 'etransit',  # BEV-only nameplates
     
     # VW Group
     'id3', 'id4', 'id5', 'id7', 'buzz', 'enyaq', 'born',  # VW/Skoda/Cupra BEVs
@@ -141,7 +153,7 @@ BEV_COMBINATIONS = [
     {'ioniq', 'electric'},  # Ioniq Electric (but not just Ioniq)
     {'ioniq', '5'}, {'ioniq', '6'}, {'ioniq', '7'}, {'ioniq', '9'},  # IONIQ-5/6/7/9
     {'gv70', 'electric'}, {'g80', 'electrified'}, {'gv80', 'electrified'},
-    {'mustang', 'mache'},
+    {'mustang', 'mache'}, {'mustang', 'mach', 'e'},  # Mustang Mach-E
     {'f150', 'lightning'},
     {'macan', 'electric'},
     {'xc40', 'bev'},
@@ -200,6 +212,14 @@ NOT_VEHICLE_MAKERS = {
 
 def is_not_vehicle(maker: Optional[str], model: Optional[str], file_path: Optional[str]) -> bool:
     """Check if this is an ECU vendor, protocol, or shared definitions, not a vehicle."""
+    # Normalize inputs for consistent Unicode matching (NFD → NFC)
+    if maker:
+        maker = unicodedata.normalize('NFC', maker)
+    if model:
+        model = unicodedata.normalize('NFC', model)
+    if file_path:
+        file_path = unicodedata.normalize('NFC', file_path)
+    
     # Check file path patterns
     if file_path:
         file_lower = file_path.lower()
@@ -290,6 +310,17 @@ def classify_vehicle_powertrain(
     Returns:
         (powertrain, source, confidence)
     """
+    # Normalize all text inputs to NFC (composed) for consistent Unicode matching
+    # macOS file names use NFD (decomposed Hangul), but Python literals are NFC
+    if maker:
+        maker = unicodedata.normalize('NFC', maker)
+    if model:
+        model = unicodedata.normalize('NFC', model)
+    if submodel:
+        submodel = unicodedata.normalize('NFC', submodel)
+    if file_path:
+        file_path = unicodedata.normalize('NFC', file_path)
+    
     # Priority 1: VIN-based (if available and database accessible)
     if vin and validate_vin(vin):
         try:

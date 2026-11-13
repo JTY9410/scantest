@@ -4,7 +4,7 @@ API documentation: https://vpic.nhtsa.dot.gov/api/
 Privacy: VINs are submitted to NHTSA's public API; results are cached locally.
 """
 from typing import Optional, Literal
-import requests
+import httpx
 from datetime import datetime, timedelta
 from sqlalchemy import text
 
@@ -95,7 +95,7 @@ def decode_vin_vpic(vin: str, db_connection) -> tuple[Optional[PowertrainType], 
     # Call vPIC API
     try:
         url = VPIC_API_URL.format(vin=vin)
-        response = requests.get(url, timeout=VPIC_TIMEOUT)
+        response = httpx.get(url, timeout=VPIC_TIMEOUT)
         response.raise_for_status()
         
         data = response.json()
@@ -159,11 +159,11 @@ def decode_vin_vpic(vin: str, db_connection) -> tuple[Optional[PowertrainType], 
         
         return (powertrain, 'vpic', confidence)
     
-    except requests.exceptions.Timeout:
+    except httpx.TimeoutException:
         return ('unknown', 'vpic_timeout', 0.0)
-    except requests.exceptions.ConnectionError:
+    except (httpx.ConnectError, httpx.NetworkError):
         return ('unknown', 'vpic_offline', 0.0)
-    except requests.exceptions.HTTPError as e:
+    except httpx.HTTPStatusError as e:
         if e.response and e.response.status_code == 404:
             return ('unknown', 'vpic_not_found', 0.0)
         return ('unknown', 'vpic_error', 0.0)

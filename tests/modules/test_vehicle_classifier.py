@@ -133,17 +133,17 @@ def test_classify_real_formats():
     )
     assert pt7 == 'not_vehicle', f"Expected not_vehicle for OBD2 protocol, got {pt7}"
     
-    # Real format 8: Shared folder (공용) - this is tricky, depends on content
-    # 'Hyundai_Kia_Genesis_공용' is a shared definitions folder, not a vendor
-    # Should not be classified as not_vehicle
+    # Real format 8: Shared folder (공용) - shared/common protocol definitions
+    # 'Hyundai_Kia_Genesis_공용' is a shared definitions folder
+    # Should be classified as not_vehicle per user requirement (Message 8)
     pt8, src8, conf8 = classify_vehicle_powertrain(
         maker='Hyundai_Kia_Genesis_공용',
         model='Common Commands',
         submodel=None,
         file_path='02_OBDb/Hyundai_Kia_Genesis/common.json'
     )
-    # This should be unknown (no clear BEV/PHEV/HEV indicators)
-    assert pt8 == 'unknown', f"Expected unknown for shared folder, got {pt8}"
+    # Shared protocol folders should be not_vehicle
+    assert pt8 == 'not_vehicle', f"Expected not_vehicle for shared folder, got {pt8}"
     
     # Real format 9: Kia Ray EV from Torque
     pt9, src9, conf9 = classify_vehicle_powertrain(
@@ -316,6 +316,9 @@ def test_production_regression_cases(maker, model, submodel, file_path, expected
     # Mixed powertrain → unknown
     (None, 'Hyundai: Ioniq Hybrid EV (2016-2019)', None, None, 'unknown', 'Mixed Hybrid+EV'),
     
+    # Ford Mustang-Mach-E (hyphenated) → BEV
+    ('Ford', 'Mustang-Mach-E', None, None, 'BEV', 'Ford Mustang Mach-E'),
+    
     # BEV-only nameplates
     ('Subaru', 'Solterra', None, None, 'BEV', 'Subaru Solterra'),
     ('Toyota', 'bZ4X', None, None, 'BEV', 'Toyota bZ4X'),
@@ -328,11 +331,11 @@ def test_production_regression_cases(maker, model, submodel, file_path, expected
     ('Rivian', 'R1T', None, None, 'BEV', 'Rivian R1T'),
     ('Lucid', 'Air', None, None, 'BEV', 'Lucid Air'),
     
-    # Shared/common definitions → not_vehicle
-    ('Volkswagen_Group_공용', None, None, None, 'not_vehicle', 'VW Group shared'),
-    ('GM_공용', None, None, None, 'not_vehicle', 'GM shared'),
-    ('Hyundai_Kia_Genesis_공용', None, None, None, 'not_vehicle', 'HKG shared'),
-    ('Honda_Acura_공용', None, None, None, 'not_vehicle', 'Honda/Acura shared'),
+    # Shared/common definitions → not_vehicle (NFC composed)
+    ('Volkswagen_Group_공용', None, None, None, 'not_vehicle', 'VW Group shared NFC'),
+    ('GM_공용', None, None, None, 'not_vehicle', 'GM shared NFC'),
+    ('Hyundai_Kia_Genesis_공용', None, None, None, 'not_vehicle', 'HKG shared NFC'),
+    ('Honda_Acura_공용', None, None, None, 'not_vehicle', 'Honda/Acura shared NFC'),
     
     # ECU vendor → not_vehicle
     ('MECTRONIK', None, None, None, 'not_vehicle', 'MECTRONIK ECU vendor'),
@@ -341,3 +344,29 @@ def test_production_regression_2(maker, model, submodel, file_path, expected_pt,
     """Additional regression tests from 2026-11-13 22:28 report."""
     pt, src, conf = classify_vehicle_powertrain(maker, model, submodel, file_path)
     assert pt == expected_pt, f"{description}: expected {expected_pt}, got {pt} (source: {src})"
+
+
+def test_unicode_nfd_normalization():
+    """Test Unicode NFD (decomposed) normalization for macOS file names.
+    
+    macOS uses NFD for Korean text: 공용 = ㄱㅗㅇㅇㅛㅇ (decomposed jamo)
+    The classifier must normalize to NFC for literal matching to work.
+    """
+    import unicodedata
+    
+    # NFD (decomposed) - as macOS stores it
+    maker_nfd = unicodedata.normalize('NFD', 'Hyundai_Kia_Genesis_공용')
+    
+    # NFC (composed) - as Python literal strings are
+    maker_nfc = 'Hyundai_Kia_Genesis_공용'
+    
+    # Verify they're different byte sequences but same visual appearance
+    assert maker_nfd != maker_nfc, "NFD and NFC should be different byte sequences"
+    assert unicodedata.normalize('NFC', maker_nfd) == maker_nfc
+    
+    # Both should classify as not_vehicle
+    pt_nfd, _, _ = classify_vehicle_powertrain(maker_nfd, None, None, None)
+    pt_nfc, _, _ = classify_vehicle_powertrain(maker_nfc, None, None, None)
+    
+    assert pt_nfd == 'not_vehicle', f"NFD input should be not_vehicle, got {pt_nfd}"
+    assert pt_nfc == 'not_vehicle', f"NFC input should be not_vehicle, got {pt_nfc}"
