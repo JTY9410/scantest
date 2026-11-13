@@ -75,10 +75,10 @@ def test_analyzer_includes_soh_results(app):
             if 'soh_pct' in result['battery']:
                 assert 'soh_method' in result['battery']
                 assert 'soh_confidence' in result['battery']
-        
-        # 가장 높은 신뢰도 순으로 정렬되어야 함
-        if len(result['soh_results']) > 1:
-            assert result['soh_results'][0]['confidence'] >= result['soh_results'][1]['confidence']
+            
+            # 가장 높은 신뢰도 순으로 정렬되어야 함
+            if len(result['soh_results']) > 1:
+                assert result['soh_results'][0]['confidence'] >= result['soh_results'][1]['confidence']
 
 
 def test_analyzer_ev6_fixture_soh(app):
