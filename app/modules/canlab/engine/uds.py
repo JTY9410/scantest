@@ -225,7 +225,7 @@ def find_vin(transactions: list[Transaction]) -> str | None:
         if not tx.positive:
             continue
         raw = b""
-        if tx.service == 0x22 and tx.did == 0xF190:
+        if tx.service == 0x22 and tx.did in (0xF190, 0x1586):
             raw = tx.data
         elif tx.service == 0x09 and len(tx.response) > 2 and tx.response[1] == 0x02:
             raw = tx.response[3:]

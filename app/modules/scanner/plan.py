@@ -53,9 +53,9 @@ RESTRICTED_MANUFACTURERS = {
     "TESLA": "Tesla Model S/X는 CAN 게이트웨이 보호로 인해 OBD2 포트를 통한 제한적인 진단만 가능합니다. "
              "표준 OBD2 명령어(모드 01, 03, 07, 09 일부)만 응답하며, 배터리 BMS 데이터는 접근할 수 없습니다. "
              "Model 3/Y는 WESCAN에서 지원하는 명령어로 배터리 데이터를 읽을 수 있습니다.",
-    "BYD": "BYD 차량(2020년 이후)은 강화된 게이트웨이 보안으로 인해 표준 OBD2 명령어 외에는 제한적입니다. "
-           "BMS 데이터 접근이 어려우며, BYD 전용 진단 장비가 필요할 수 있습니다. "
-           "LFP 배터리 특성상 SOC/SOH 추정이 더 어렵습니다.",
+    "BYD": "아토3 로그(2026-11-06, 7,709km)에서는 BMS 7E7이 22 1586(차대번호)에 응답했습니다. "
+           "셀 전압 126개와 주행거리는 요청이 아니라 방송 ID 644에 있습니다. "
+           "이 배치가 다른 BYD에도 같은지는 이 로그 한 대로는 확인하지 못했습니다.",
     "POLESTAR": "Polestar 2는 WESCAN에서 배터리 진단을 지원합니다. "
                 "Polestar 1은 강화된 보안이 적용되어 제조사 전용 명령어가 제한됩니다.",
     "VOLVO": "Volvo 전기차(XC40/C40 Recharge)는 VIDA 전용 진단 시스템이 필요합니다. "
@@ -101,6 +101,13 @@ def _blocked(command: str) -> bool:
 
 def _maker(car: dict | None) -> str:
     return str((car or {}).get("diag_company") or "").upper()
+
+
+BYD = ("BYD", "비야디")
+
+
+def _is_byd(car: dict | None) -> bool:
+    return any(name in _maker(car) for name in BYD)
 
 
 def _is_hkmc(car: dict | None) -> bool:
@@ -220,6 +227,11 @@ def build_plan(car: dict | None = None, *, expand: bool = False) -> dict:
             add("uds", f"{name} 고장 당시 데이터(19 04)", "1904", expand="dtcs", limit=SNAPSHOT_LIMIT, **common)
         for did, (_, label) in ECU_IDENT_DIDS.items():
             add("uds", f"{name} {label}(22 {did})", f"22{did}", **common)
+
+    if _is_byd(car):
+        # 아토3 로그: BMS 차대번호는 F190이 아니라 7E7 22 1586. 셀·주행거리는 방송 644라 이 요청으로는 안 읽힌다.
+        add("maker", "BMS 차대번호(22 1586)", "221586", header="7E7",
+            timeout=UDS_TIMEOUT_MS, optional=True, bus="can")
 
     if _is_hkmc_electrified(car):
         for did in obdb.plan_dids(car):

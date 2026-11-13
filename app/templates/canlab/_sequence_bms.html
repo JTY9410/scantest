@@ -2,6 +2,32 @@
 {% from "components/ui.html" import badge %}
 {% set seq = dataset.summary.sequence %}
 {% set b = dataset.summary.bms %}
+{% set atto = dataset.summary.atto3 %}
+{% if atto %}
+<section class="card mt-6 overflow-hidden" aria-labelledby="atto3-title">
+  <div class="card-body pb-0">
+    <h2 id="atto3-title" class="text-lg font-bold">BYD Atto 3 <span class="text-muted text-sm">{{ atto.grade }}</span></h2>
+    <p class="mt-1 text-sm text-muted">{{ atto.note }}</p>
+    <dl class="dl mt-3">
+      {% if atto.vin %}<dt>차대번호(22 1586)</dt><dd class="mono">{{ atto.vin }}</dd>{% endif %}
+      {% if atto.odometer_km is not none %}<dt>주행거리</dt><dd class="tabular-nums">{{ "{:,}".format(atto.odometer_km) }} km</dd>{% endif %}
+      {% if atto.cells %}<dt>셀</dt><dd class="tabular-nums">{{ atto.cells.count }}개 · 최저 {{ atto.cells.min_mv }} mV · 최고 {{ atto.cells.max_mv }} mV · 편차 {{ atto.cells.spread_mv }} mV · 합계 {{ atto.cells.sum_v }} V</dd>{% endif %}
+    </dl>
+  </div>
+  {% if atto.cells %}
+  <details class="card-body"><summary class="cursor-pointer text-sm font-semibold">셀 {{ atto.cells.count }}개 펼치기</summary>
+    <table class="rtable mt-3">
+      <thead><tr><th scope="col" class="num">번호</th><th scope="col" class="num">전압(mV)</th></tr></thead>
+      <tbody>
+        {% for cell in atto.cells["values"] %}
+        <tr><td class="num">{{ cell.no }}</td><td class="num tabular-nums">{{ cell.mv }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </details>
+  {% endif %}
+</section>
+{% endif %}
 {% if b %}
 <section class="card mt-6 overflow-hidden" aria-labelledby="bms-title">
   <div class="card-body pb-0">

@@ -100,6 +100,13 @@ def diagnose(trace: Trace) -> dict:
         ),
     }
     try:
+        from app.modules.canlab.engine.byd_atto3 import decode as decode_atto3
+
+        if atto3 := decode_atto3(getattr(trace, "frames", None), trace.transactions):
+            result["atto3"] = atto3
+    except Exception:
+        pass
+    try:
         from app.modules.scanner.security.status import analyze_security_trace
         result["security"] = analyze_security_trace(trace.transactions)
     except Exception:

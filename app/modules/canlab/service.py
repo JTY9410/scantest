@@ -138,6 +138,7 @@ def _trace_summary(trace: Trace, model_hint: str | None = None) -> dict:
         "commands": extract_commands(trace),
         "sequence": sequence.command_sequence(trace.transactions),
         "bms": bms.decode_bms(trace.samples, model_hint),
+        "atto3": diagnosis.get("atto3"),
         "status_rows": int((trace.meta or {}).get("STATUS_ROWS") or 0),
     }
 

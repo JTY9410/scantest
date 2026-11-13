@@ -104,6 +104,10 @@
   <div class="card-body pb-0">
     <h2 id="dtc-title" class="text-lg font-bold">고장코드</h2>
     <p class="mt-1 text-sm text-muted">차대번호 <span class="mono">{{ report.diagnosis.vin or "기록 없음" }}</span> · 고장코드 조회 제어기 {{ report.diagnosis.dtc_checked_ecus|length }}곳 · 요청·응답 {{ report.diagnosis.transaction_count }}건</p>
+    {% if report.diagnosis.atto3 %}
+    {% set atto = report.diagnosis.atto3 %}
+    <p class="mt-2 text-sm">Atto 3 · {% if atto.odometer_km is not none %}주행거리 {{ "{:,}".format(atto.odometer_km) }} km{% endif %}{% if atto.cells %} · 셀 {{ atto.cells.count }}개 {{ atto.cells.min_mv }}–{{ atto.cells.max_mv }} mV{% endif %}</p>
+    {% endif %}
   </div>
   {% set dtc_rows = [] %}
   {% for ecu, codes in report.diagnosis.dtcs.items() %}{% for d in codes %}{% do dtc_rows.append((ecu, d)) %}{% endfor %}{% endfor %}
