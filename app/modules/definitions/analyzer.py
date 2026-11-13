@@ -17,10 +17,8 @@ from app.modules.definitions.decoder import (
     reassemble_isotp_frames,
     decode_mode01_response,
     decode_mode09_response,
-    decode_uds22_response,
-    decode_kwp21_response,
-    apply_formula,
-    extract_bits,
+    decode_uds_response,
+    is_valid_value,
 )
 from app.modules.scans.models import Scan
 from app.core.formulas import safe_eval
@@ -149,53 +147,36 @@ def analyze_scan_with_definitions(scan: Scan) -> dict[str, Any]:
                         db.session.add(obs)
                 
                 # UDS 0x22: ReadDataByIdentifier
-                elif mode == 0x22 and pid_or_did is not None:
-                    did = (pid_or_did << 8) | request_data[3] if len(request_data) >= 4 else 0
-                    decoded_values = decode_uds22_response(response_bytes, did)
+                elif mode == 0x22:
+                    decoded_values = decode_uds_response(response_bytes)
                     if decoded_values:
-                        # BMS 데이터는 battery로
-                        for key, value in decoded_values.items():
-                            if 'bms' in key or 'cell' in key or 'soc' in key or 'soh' in key:
+                        # 유효성 검사 결과 분리
+                        valid_values = {k: v for k, v in decoded_values.items() if not k.endswith('_invalid')}
+                        invalid_values = {k: v for k, v in decoded_values.items() if k.endswith('_invalid')}
+                        
+                        # 유효한 값만 결과에 추가
+                        for key, value in valid_values.items():
+                            if 'soc' in key or 'soh' in key or 'voltage' in key or 'current' in key or 'temp' in key or 'cell' in key or 'kwh' in key:
                                 result['battery'][key] = value
                             else:
                                 result['vehicle_info'][key] = value
                         
-                        result['definitions_applied']['successful_decodes'] += 1
+                        if valid_values:
+                            result['definitions_applied']['successful_decodes'] += 1
+                        if invalid_values:
+                            result['definitions_applied']['failed_decodes'] += 1
                         
+                        # 유효/무효 모두 기록 (학습용)
                         obs = ScanObservation(
                             scan_id=scan.id,
                             definition_type='diagnostic',
                             definition_id=0,
                             applied=True,
-                            success=True,
+                            success=len(valid_values) > 0,
                             raw_request=group['request']['data'],
                             raw_response=response_bytes.hex(),
                             decoded_value=str(decoded_values),
-                        )
-                        db.session.add(obs)
-                
-                # KWP2000 0x21: ReadDataByLocalId
-                elif mode == 0x21 and pid_or_did is not None:
-                    decoded_values = decode_kwp21_response(response_bytes, pid_or_did)
-                    if decoded_values:
-                        # BMS 데이터는 battery로
-                        for key, value in decoded_values.items():
-                            if 'bms' in key or 'cell' in key or 'soc' in key or 'soh' in key:
-                                result['battery'][key] = value
-                            else:
-                                result['vehicle_info'][key] = value
-                        
-                        result['definitions_applied']['successful_decodes'] += 1
-                        
-                        obs = ScanObservation(
-                            scan_id=scan.id,
-                            definition_type='diagnostic',
-                            definition_id=0,
-                            applied=True,
-                            success=True,
-                            raw_request=group['request']['data'],
-                            raw_response=response_bytes.hex(),
-                            decoded_value=str(decoded_values),
+                            mismatch_reason=f"Invalid: {list(invalid_values.keys())}" if invalid_values else None,
                         )
                         db.session.add(obs)
     

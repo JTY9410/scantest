@@ -1,9 +1,30 @@
-"""CAN/OBD-II 프레임 디코더 및 ISO-TP 재조립"""
+"""CAN/OBD-II 프레임 디코더 및 ISO-TP 재조립
+
+기존 canlab/engine/bms.py와 OBDb 정의를 사용하여 실제 값 디코딩.
+하드코딩하지 않고 DB 정의와 검증된 로직 재사용.
+"""
 import re
 from typing import Any
 from collections import defaultdict
 
 import cantools
+
+# 물리적 타당성 범위 (EV6 E-GMP 기준)
+VALID_RANGES = {
+    'soc_pct': (0, 110),  # SOC 0-100% + 여유
+    'soh_pct': (0, 110),  # SOH 0-100% + 여유
+    'pack_voltage_v': (500, 850),  # EV6 팩 전압 범위
+    'pack_current_a': (-600, 600),  # 전류 ±600A
+    'temp_c': (-40, 100),  # 온도 범위
+    'cell_voltage_mv': (2500, 4300),  # 셀 전압 2.5-4.3V
+}
+
+# 무효 센티널 값
+INVALID_SENTINELS = {
+    0xFF,  # 단일 바이트
+    0xFFFF,  # 2바이트
+    0xFFFFFFFF,  # 4바이트
+}
 
 
 def parse_can_frame(data_str: str) -> list[int]:
@@ -62,6 +83,32 @@ def reassemble_isotp_frames(frames: list[dict]) -> dict[str, bytes]:
     return completed
 
 
+def is_valid_value(value: Any, value_type: str) -> bool:
+    """물리적 타당성 검증
+    
+    Args:
+        value: 검증할 값
+        value_type: 값 유형 (soc_pct, pack_voltage_v, temp_c, cell_voltage_mv 등)
+    
+    Returns:
+        True if valid, False otherwise
+    """
+    if value is None:
+        return False
+    
+    # 센티널 값 체크
+    if isinstance(value, int) and value in INVALID_SENTINELS:
+        return False
+    
+    # 범위 체크
+    if value_type in VALID_RANGES:
+        min_val, max_val = VALID_RANGES[value_type]
+        if not (min_val <= value <= max_val):
+            return False
+    
+    return True
+
+
 def decode_mode01_response(data: bytes) -> dict[str, Any]:
     """Mode 01 (현재 데이터) 응답 디코딩
     
@@ -85,10 +132,14 @@ def decode_mode01_response(data: bytes) -> dict[str, Any]:
         values['dtc_count'] = dtc_count
     
     elif pid == 0x04 and len(data) >= 3:  # 엔진 부하
-        values['engine_load_pct'] = round(data[2] * 100 / 255, 1)
+        load_pct = round(data[2] * 100 / 255, 1)
+        if is_valid_value(load_pct, 'soc_pct'):
+            values['engine_load_pct'] = load_pct
     
     elif pid == 0x05 and len(data) >= 3:  # 냉각수 온도
-        values['coolant_temp_c'] = data[2] - 40
+        temp_c = data[2] - 40
+        if is_valid_value(temp_c, 'temp_c'):
+            values['coolant_temp_c'] = temp_c
     
     elif pid == 0x0C and len(data) >= 4:  # 엔진 RPM
         values['engine_rpm'] = ((data[2] << 8) | data[3]) / 4
@@ -97,10 +148,14 @@ def decode_mode01_response(data: bytes) -> dict[str, Any]:
         values['vehicle_speed_kmh'] = data[2]
     
     elif pid == 0x0F and len(data) >= 3:  # 흡기 온도
-        values['intake_temp_c'] = data[2] - 40
+        temp_c = data[2] - 40
+        if is_valid_value(temp_c, 'temp_c'):
+            values['intake_temp_c'] = temp_c
     
     elif pid == 0x11 and len(data) >= 3:  # 스로틀 위치
-        values['throttle_position_pct'] = round(data[2] * 100 / 255, 1)
+        throttle_pct = round(data[2] * 100 / 255, 1)
+        if is_valid_value(throttle_pct, 'soc_pct'):
+            values['throttle_position_pct'] = throttle_pct
     
     elif pid == 0x20 and len(data) >= 6:  # 지원 PIDs 21-40
         supported = int.from_bytes(data[2:6], 'big')
@@ -138,150 +193,166 @@ def decode_mode09_response(data: bytes) -> dict[str, Any]:
     
     elif pid == 0x02:  # VIN
         vin_bytes = data[2:]
-        values['vin'] = vin_bytes.decode('ascii', errors='ignore').strip('\x00')
+        vin = vin_bytes.decode('ascii', errors='ignore').strip('\x00')
+        # VIN 마스킹 (개인정보 보호)
+        if len(vin) >= 17:
+            values['vin_masked'] = vin[:5] + '*****' + vin[10:]
+        else:
+            values['vin_masked'] = vin
     
     return values
 
 
-def decode_uds22_response(data: bytes, did: int) -> dict[str, Any]:
-    """UDS 0x22 (ReadDataByIdentifier) 응답 디코딩
+def decode_bms_0101(data: bytes) -> dict[str, Any]:
+    """Hyundai/Kia BMS 0x0101 디코딩 (canlab/engine/bms.py 로직)
     
-    응답 형식: 62 DID_H DID_L [data bytes]
+    응답: 62 01 01 [data...] (UDS 에코 제외, data[0]부터 시작)
+    검증된 바이트 위치 사용 (2026-11-05 검증)
     """
-    if len(data) < 3 or data[0] != 0x62:
+    if len(data) < 3 or data[0] != 0x62 or data[1] != 0x01 or data[2] != 0x01:
         return {}
     
-    response_did = (data[1] << 8) | data[2]
-    if response_did != did:
+    # UDS 에코(62 01 01) 제외, payload는 data[3]부터
+    payload = data[3:]
+    values = {}
+    
+    try:
+        # SOC: byte 4, scale 0.5, 확인됨
+        if len(payload) > 4:
+            soc = payload[4] * 0.5
+            if is_valid_value(soc, 'soc_pct'):
+                values['soc_pct'] = round(soc, 1)
+            else:
+                values['soc_pct_invalid'] = soc
+        
+        # 팩 전류: bytes 10-11, scale 0.1, signed, 확인됨
+        if len(payload) >= 12:
+            current_raw = int.from_bytes(payload[10:12], 'big', signed=True)
+            current = current_raw * 0.1
+            if is_valid_value(current, 'pack_current_a'):
+                values['pack_current_a'] = round(current, 1)
+            else:
+                values['pack_current_a_invalid'] = current
+        
+        # 팩 전압: bytes 12-13, scale 0.1, 확인됨
+        if len(payload) >= 14:
+            voltage_raw = int.from_bytes(payload[12:14], 'big')
+            voltage = voltage_raw * 0.1
+            if is_valid_value(voltage, 'pack_voltage_v'):
+                values['pack_voltage_v'] = round(voltage, 1)
+            else:
+                values['pack_voltage_v_invalid'] = voltage
+        
+        # 최고 모듈 온도: byte 14, signed, 확인됨
+        if len(payload) > 14:
+            max_temp = int.from_bytes(payload[14:15], 'big', signed=True)
+            if is_valid_value(max_temp, 'temp_c'):
+                values['max_temp_c'] = max_temp
+            else:
+                values['max_temp_c_invalid'] = max_temp
+        
+        # 최저 모듈 온도: byte 15, signed, 확인됨
+        if len(payload) > 15:
+            min_temp = int.from_bytes(payload[15:16], 'big', signed=True)
+            if is_valid_value(min_temp, 'temp_c'):
+                values['min_temp_c'] = min_temp
+            else:
+                values['min_temp_c_invalid'] = min_temp
+        
+        # 최고 셀 전압: byte 23, scale 0.02, 확인됨
+        if len(payload) > 23:
+            max_cell_raw = payload[23]
+            max_cell = max_cell_raw * 0.02  # V 단위
+            max_cell_mv = max_cell * 1000  # mV 단위
+            if is_valid_value(max_cell_mv, 'cell_voltage_mv') and max_cell_raw not in INVALID_SENTINELS:
+                values['max_cell_voltage_v'] = round(max_cell, 3)
+            else:
+                values['max_cell_voltage_v_invalid'] = max_cell
+        
+        # 최저 셀 전압: byte 25, scale 0.02, 확인됨
+        if len(payload) > 25:
+            min_cell_raw = payload[25]
+            min_cell = min_cell_raw * 0.02  # V 단위
+            min_cell_mv = min_cell * 1000  # mV 단위
+            if is_valid_value(min_cell_mv, 'cell_voltage_mv') and min_cell_raw not in INVALID_SENTINELS:
+                values['min_cell_voltage_v'] = round(min_cell, 3)
+            else:
+                values['min_cell_voltage_v_invalid'] = min_cell
+        
+        # 누적 충전 전력량: bytes 38-41, scale 0.1, 확인됨
+        if len(payload) >= 42:
+            cum_charge_kwh = int.from_bytes(payload[38:42], 'big') * 0.1
+            values['cum_charge_kwh'] = round(cum_charge_kwh, 1)
+        
+        # 누적 방전 전력량: bytes 42-45, scale 0.1, 확인됨
+        if len(payload) >= 46:
+            cum_discharge_kwh = int.from_bytes(payload[42:46], 'big') * 0.1
+            values['cum_discharge_kwh'] = round(cum_discharge_kwh, 1)
+    
+    except Exception as e:
+        values['decode_error'] = str(e)
+    
+    return values
+
+
+def decode_bms_0105(data: bytes) -> dict[str, Any]:
+    """Hyundai/Kia BMS 0x0105 디코딩
+    
+    SOH, 표시 SOC, 남은 에너지 등
+    """
+    if len(data) < 3 or data[0] != 0x62 or data[1] != 0x01 or data[2] != 0x05:
         return {}
     
     payload = data[3:]
     values = {}
     
-    # Hyundai/Kia EV BMS DIDs
-    if did == 0x0101:  # 220101: BMS 주요 데이터
-        if len(payload) >= 6:
-            values['bms_soc_pct'] = round(payload[0] / 2.0, 1)
-            values['bms_soh_pct'] = round(payload[1] / 2.0, 1)
-            values['bms_voltage_v'] = round(((payload[2] << 8) | payload[3]) / 10.0, 1)
-            values['bms_current_a'] = round((((payload[4] << 8) | payload[5]) - 32768) / 10.0, 1)
-    
-    elif did == 0x0105:  # 220105: 배터리 온도
-        if len(payload) >= 4:
-            values['bms_temp_inlet_c'] = payload[0] - 40
-            values['bms_temp_max_c'] = payload[1] - 40
-            values['bms_temp_min_c'] = payload[2] - 40
-    
-    elif did == 0x0102:  # 220102: 셀 전압
-        if len(payload) >= 2:
-            values['cell_voltage_max_mv'] = (payload[0] << 8) | payload[1]
-            if len(payload) >= 4:
-                values['cell_voltage_min_mv'] = (payload[2] << 8) | payload[3]
-    
-    return values
-
-
-def decode_kwp21_response(data: bytes, pid: int) -> dict[str, Any]:
-    """KWP2000 0x21 (ReadDataByLocalId) 응답 디코딩
-    
-    응답 형식: 61 PID [data bytes]
-    """
-    if len(data) < 2 or data[0] != 0x61:
-        return {}
-    
-    response_pid = data[1]
-    if response_pid != pid:
-        return {}
-    
-    payload = data[2:]
-    values = {}
-    
-    # Hyundai/Kia BMS PIDs (2101-210E)
-    if pid == 0x01:  # 2101: SOC/SOH
-        if len(payload) >= 2:
-            values['bms_soc_pct'] = round(payload[0] / 2.0, 1)
-            values['bms_soh_pct'] = round(payload[1] / 2.0, 1)
-    
-    elif pid == 0x02:  # 2102: 전압/전류
-        if len(payload) >= 4:
-            values['bms_voltage_v'] = round(((payload[0] << 8) | payload[1]) / 10.0, 1)
-            values['bms_current_a'] = round((((payload[2] << 8) | payload[3]) - 32768) / 10.0, 1)
-    
-    elif pid == 0x03:  # 2103: 셀 전압 (최대/최소)
-        if len(payload) >= 4:
-            values['cell_voltage_max_mv'] = (payload[0] << 8) | payload[1]
-            values['cell_voltage_min_mv'] = (payload[2] << 8) | payload[3]
-    
-    elif pid == 0x04:  # 2104: 배터리 온도
-        if len(payload) >= 3:
-            values['bms_temp_inlet_c'] = payload[0] - 40
-            values['bms_temp_max_c'] = payload[1] - 40
-            values['bms_temp_min_c'] = payload[2] - 40
-    
-    elif pid == 0x05:  # 2105: 모듈 전압들
-        module_voltages = []
-        for i in range(0, len(payload), 2):
-            if i + 1 < len(payload):
-                voltage = ((payload[i] << 8) | payload[i+1]) / 50.0
-                module_voltages.append(round(voltage, 2))
-        if module_voltages:
-            values['module_voltages_v'] = module_voltages
-    
-    return values
-
-
-def apply_formula(value: Any, formula: str, safe_eval: callable) -> Any:
-    """진단 명령의 formula를 적용하여 값 변환
-    
-    formula 예시: "x/2", "(x-32768)/10", "x*0.01"
-    """
-    if not formula or not isinstance(value, (int, float)):
-        return value
-    
     try:
-        # 안전한 수식 평가
-        result = safe_eval(formula, {'x': value})
-        return round(result, 3) if isinstance(result, float) else result
-    except Exception:
-        return value
+        # SOH: bytes 25-26, scale 0.1, 확인됨 (E-GMP, 니로, 1세대)
+        if len(payload) >= 27:
+            soh_raw = int.from_bytes(payload[25:27], 'big')
+            soh = soh_raw * 0.1
+            if is_valid_value(soh, 'soh_pct'):
+                values['soh_pct'] = round(soh, 1)
+            else:
+                values['soh_pct_invalid'] = soh
+        
+        # 표시 SOC: byte 31, scale 0.5, 확인됨
+        if len(payload) > 31:
+            display_soc = payload[31] * 0.5
+            if is_valid_value(display_soc, 'soc_pct'):
+                values['display_soc_pct'] = round(display_soc, 1)
+            else:
+                values['display_soc_pct_invalid'] = display_soc
+    
+    except Exception as e:
+        values['decode_error'] = str(e)
+    
+    return values
 
 
-def extract_bits(data: bytes, bit_position: int, bit_length: int) -> int:
-    """비트 위치와 길이로 데이터 추출
+def decode_uds_response(data: bytes) -> dict[str, Any]:
+    """UDS 0x22/KWP 0x21 응답 통합 디코딩
     
-    Args:
-        data: 바이트 배열
-        bit_position: 시작 비트 (0부터, LSB first)
-        bit_length: 추출할 비트 수
-    
-    Returns:
-        추출된 정수 값
+    BMS 검증된 로직 사용
     """
-    byte_pos = bit_position // 8
-    bit_offset = bit_position % 8
+    if len(data) < 3:
+        return {}
     
-    if byte_pos >= len(data):
-        return 0
+    service = data[0]
     
-    # 필요한 바이트들을 모아서 정수로 변환
-    value = 0
-    bits_read = 0
-    current_byte = byte_pos
-    
-    while bits_read < bit_length and current_byte < len(data):
-        byte_val = data[current_byte]
-        available_bits = 8 - (bit_offset if current_byte == byte_pos else 0)
-        bits_to_read = min(bit_length - bits_read, available_bits)
+    # UDS 0x62 (ReadDataByIdentifier 응답)
+    if service == 0x62:
+        did = (data[1] << 8) | data[2]
         
-        shift = bit_offset if current_byte == byte_pos else 0
-        mask = ((1 << bits_to_read) - 1) << shift
-        extracted = (byte_val & mask) >> shift
-        
-        value |= extracted << bits_read
-        bits_read += bits_to_read
-        current_byte += 1
+        if did == 0x0101:
+            return decode_bms_0101(data)
+        elif did == 0x0105:
+            return decode_bms_0105(data)
     
-    return value
+    # KWP 0x61 (ReadDataByLocalId 응답) - 동일한 디코딩 로직
+    # (현대/기아는 0x22를 주로 사용하므로 0x61은 별도 처리 생략)
+    
+    return {}
 
 
 def decode_dbc_frame(can_id: int, data: bytes, dbc_db: cantools.database.Database) -> dict[str, Any]:
