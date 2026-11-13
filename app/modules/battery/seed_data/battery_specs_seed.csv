@@ -1,7 +1,7 @@
 maker,model,trim_grade,model_year,generation,market,gross_kwh,usable_kwh,nominal_voltage_v,capacity_ah,cell_chemistry,cell_count,cell_config,source_url,source_note,source_type
 Hyundai,IONIQ 5,Standard Range,2021,1,KR,58.0,54.0,523,,,NMC,288,144s2p,https://www.hyundai.com/worldwide/en/newsroom/detail/0000000551,"Official Hyundai newsroom, 58kWh battery confirmed",manufacturer
 Hyundai,IONIQ 5,Long Range,2021,1,KR,72.6,68.0,697,,,NMC,192,192s1p,https://www.hyundai.com/content/dam/hyundai/wallan/en/data/marketing/brochure/product/ioniq5/NE_-52p_main_06212021_REV5.pdf,"Official Hyundai brochure, 72.6kWh battery",manufacturer
-Hyundai,Kona Electric,64kWh,2019,1,KR,64.0,60.0,356,180,NMC,294,294s1p,https://ev-database.org/car/1127/Hyundai-Kona-Electric-64-kWh,"Third-party database",third_party
+Hyundai,Kona Electric,64kWh,2019,1,KR,64.0,,356,180,NMC,,,https://www.hyundai.com/content/dam/hyundai/au/en/models/kona-electric/docs/Hyundai_Kona_Electric_Specifications_Sheet.pdf,"Official Hyundai spec sheet: 64kWh, 356V, 180Ah",manufacturer
 Hyundai,IONIQ Electric,,2016,1,KR,28.0,26.0,360,75,NMC,96,96s1p,https://ev-database.org/car/1078/Hyundai-Ioniq-Electric,"Third-party database",third_party
 Kia,EV6,Standard Range,2021,1,KR,58.0,54.0,523,,,NMC,288,144s2p,https://www.kia.com/content/dam/kia/us/brochures/KMD22%5F10709%5FEV6%5FBrochure%5Fr14%5FMED.pdf,"Official Kia US brochure, 58kWh battery",manufacturer
 Kia,EV6,Long Range,2021,1,KR,77.4,74.0,697,111.2,NMC,384,,https://www.kia.com/content/dam/kwcms/kme/ie/en/assets/contents/utilty/brochure/spechsheet/EV6-Specifications.pdf,"Official Kia spec sheet: 77.4kWh, 697V, 111.2Ah, 384 cells",manufacturer
@@ -9,7 +9,7 @@ Kia,EV6,GT,2022,1,KR,77.4,74.0,697,111.2,NMC,384,,https://www.kia.com/content/da
 Kia,EV9,Standard,2023,1,KR,76.1,73.0,632,,,NMC,,,https://ev-database.org/car/1842/Kia-EV9-Standard-Range-RWD,"Third-party, no official source found",third_party
 Kia,EV9,Long Range,2023,1,KR,99.8,95.0,552,,,NMC,,,https://ev-database.org/car/1843/Kia-EV9-Long-Range-AWD,"Third-party, no official source found",third_party
 Kia,Niro EV,64kWh,2019,1,KR,64.0,60.0,356,180,NMC,294,294s1p,https://ev-database.org/car/1177/Kia-e-Niro-64-kWh,"Third-party database",third_party
-Kia,Niro EV,64kWh,2022,2,KR,64.8,61.5,356,182,NMC,294,294s1p,https://ev-database.org/car/1595/Kia-Niro-EV,"Third-party database",third_party
+Kia,Niro EV,64.8kWh,2022,2,KR,64.8,,358,180.9,NMC,,,https://www.kia.com/content/dam/kwcms/kme/be/price-specs/my23/KIA_Niro-EV_Pricelist_MY23_BFR.pdf,"Official Kia spec sheet: 64.8kWh, 358V, 180.9Ah, 443kg battery",manufacturer
 Kia,Soul EV,64kWh,2019,2,KR,64.0,60.0,356,180,NMC,294,294s1p,https://ev-database.org/car/1232/Kia-Soul-EV,"Third-party database",third_party
 Kia,Ray EV,,2024,2,KR,35.2,,,133.5,LFP,,,https://www.kia.com/kr/vehicles/ray-ev/specification,"Official Kia Korea spec page: 35.2kWh, LFP, 265V, 133.5Ah",manufacturer
 Kia,EV3,Standard,2024,1,KR,58.3,55.0,369,,NMC,,,https://ev-database.org/car/2156/Kia-EV3-Standard-Range,"Third-party, official source not yet available",third_party
