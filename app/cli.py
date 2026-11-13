@@ -214,3 +214,7 @@ def register_cli(app: Flask) -> None:
         click.echo(f"  Needs Verification: {needs_verification}")
 
     app.cli.add_command(definitions)
+    
+    # Battery management commands
+    from app.modules.battery.cli import battery
+    app.cli.add_command(battery)
