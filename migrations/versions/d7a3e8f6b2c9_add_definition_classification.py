@@ -51,16 +51,10 @@ def upgrade():
     """)
     
     # 2. Protocol from source type or file path
+    # DBC 신호는 CAN 메시지의 일부이므로 모두 CAN 프로토콜
     op.execute("""
         UPDATE dbc_signals
-        SET protocol = CASE
-            WHEN EXISTS (
-                SELECT 1 FROM definition_sources ds 
-                WHERE ds.id = dbc_signals.source_id 
-                AND (ds.source_type = 'dbc' OR ds.file_path LIKE '%.dbc')
-            ) THEN 'CAN'
-            ELSE 'CAN'
-        END
+        SET protocol = 'CAN'
         WHERE protocol IS NULL
     """)
     
