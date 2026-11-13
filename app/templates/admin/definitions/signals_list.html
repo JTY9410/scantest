@@ -1,5 +1,5 @@
 {% extends "layouts/admin.html" %}
-{% from "components/ui.html" import page_header, empty, pagination as render_pagination %}
+{% from "components/ui.html" import page_header, empty, pager as render_pagination %}
 {% block title %}DBC 신호 관리{% endblock %}
 
 {% block content %}
@@ -67,7 +67,7 @@
       </tbody>
     </table>
   </div>
-  {{ render_pagination(pagination, 'definitions_admin.signals_list', protocol=current_protocol, ecu_module=current_ecu_module, signal_category=current_signal_category, search=current_search) }}
+  {{ render_pagination(pagination, 'definitions_admin.signals_list', {'protocol': current_protocol, 'ecu_module': current_ecu_module, 'signal_category': current_signal_category, 'search': current_search}) }}
   {% else %}
   {{ empty("신호 정의가 없습니다") }}
   {% endif %}

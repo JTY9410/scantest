@@ -1,5 +1,5 @@
 {% extends "layouts/admin.html" %}
-{% from "components/ui.html" import page_header, empty, pagination as render_pagination %}
+{% from "components/ui.html" import page_header, empty, pager as render_pagination %}
 {% block title %}차량 정의 관리{% endblock %}
 
 {% block content %}
@@ -59,7 +59,7 @@
       </tbody>
     </table>
   </div>
-  {{ render_pagination(pagination, 'definitions_admin.vehicles_list', maker=current_maker, model=current_model, powertrain=current_powertrain) }}
+  {{ render_pagination(pagination, 'definitions_admin.vehicles_list', {'maker': current_maker, 'model': current_model, 'powertrain': current_powertrain}) }}
   {% else %}
   {{ empty("차량 정의가 없습니다") }}
   {% endif %}

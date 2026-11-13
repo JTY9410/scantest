@@ -179,7 +179,7 @@ def commands_list():
     search = request.args.get('search', '')
     
     query = db.session.query(DiagnosticCommand).order_by(
-        DiagnosticCommand.service_id, DiagnosticCommand.pid
+        DiagnosticCommand.service, DiagnosticCommand.pid
     )
     
     if protocol:
@@ -189,9 +189,9 @@ def commands_list():
     if search:
         query = query.filter(
             or_(
-                DiagnosticCommand.signal_name.like(f'%{search}%'),
-                DiagnosticCommand.unit_name.like(f'%{search}%'),
-                DiagnosticCommand.description.like(f'%{search}%')
+                DiagnosticCommand.label.like(f'%{search}%'),
+                DiagnosticCommand.unit.like(f'%{search}%'),
+                DiagnosticCommand.notes.like(f'%{search}%')
             )
         )
     

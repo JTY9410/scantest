@@ -51,6 +51,8 @@ def sample_definition(app):
             signal_name='SOC',
             start_bit=0,
             bit_length=16,
+            byte_order='little',
+            value_type='unsigned',
             protocol='CAN',
             ecu_module='BMS',
             signal_category='battery_soc',
@@ -61,10 +63,13 @@ def sample_definition(app):
         # 진단 명령
         command = DiagnosticCommand(
             source_id=source.id,
-            service_id='22',
+            source_type='obdb',
+            service='22',
             pid='0105',
-            signal_name='Battery_SOC',
-            unit_name='%',
+            command_bytes='22 0105',
+            label='Battery_SOC',
+            unit='%',
+            ecu_name='BMS',
             protocol='UDS',
             ecu_module='BMS'
         )

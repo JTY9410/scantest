@@ -1,5 +1,5 @@
 {% extends "layouts/admin.html" %}
-{% from "components/ui.html" import page_header, empty, pagination as render_pagination %}
+{% from "components/ui.html" import page_header, empty, pager as render_pagination %}
 {% block title %}진단 명령 관리{% endblock %}
 
 {% block content %}
@@ -45,20 +45,20 @@
         {% for cmd in commands %}
         <tr>
           <td class="font-mono text-sm">
-            {{ cmd.service_id }}
+            {{ cmd.service }}
             {% if cmd.pid %}{{ cmd.pid }}{% endif %}
           </td>
           <td><span class="badge">{{ cmd.protocol or '-' }}</span></td>
           <td><span class="badge">{{ cmd.ecu_module or '-' }}</span></td>
-          <td class="text-sm">{{ cmd.signal_name or '-' }}</td>
-          <td class="text-sm">{{ cmd.unit_name or '-' }}</td>
-          <td class="text-sm text-muted">{{ cmd.description | truncate(50) if cmd.description else '-' }}</td>
+          <td class="text-sm">{{ cmd.label or '-' }}</td>
+          <td class="text-sm">{{ cmd.unit or '-' }}</td>
+          <td class="text-sm text-muted">{{ cmd.notes | truncate(50) if cmd.notes else '-' }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  {{ render_pagination(pagination, 'definitions_admin.commands_list', protocol=current_protocol, ecu_module=current_ecu_module, search=current_search) }}
+  {{ render_pagination(pagination, 'definitions_admin.commands_list', {'protocol': current_protocol, 'ecu_module': current_ecu_module, 'search': current_search}) }}
   {% else %}
   {{ empty("진단 명령 정의가 없습니다") }}
   {% endif %}
