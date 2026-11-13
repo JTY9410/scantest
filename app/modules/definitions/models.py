@@ -84,7 +84,7 @@ class DbcMessage(db.Model):
                                           nullable=False, index=True)
     
     # DBC 메시지 정보
-    can_id: Mapped[int] = mapped_column(nullable=False)  # CAN ID (e.g., 0x7E4)
+    can_id: Mapped[int] = mapped_column(db.BigInteger, nullable=False)  # CAN ID (29-bit extended)
     message_name: Mapped[str] = mapped_column(String(100), nullable=False)
     dlc: Mapped[int] = mapped_column(nullable=False)  # Data Length Code
     sender: Mapped[str | None] = mapped_column(String(50))
