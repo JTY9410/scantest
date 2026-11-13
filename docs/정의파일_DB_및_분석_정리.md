@@ -496,3 +496,59 @@ POST /api/scans/<id>/analyze
 
 - GitHub Issues: https://github.com/JTY9410/scantest/issues
 - 개발팀: 위카모빌리티
+
+---
+
+## SOH (State of Health) 계산 방법
+
+배터리 상태 추정을 위해 다음 7가지 방법을 우선순위 순으로 적용합니다.
+
+### Method 0: BMS 직접 읽기 (bms_direct)
+- **설명**: BMS가 제공하는 SOH 값을 직접 읽기
+- **데이터**: `7E4 22 0105` 응답의 byte 25-26, scale 0.1
+- **신뢰도**: 0.95 (가장 높음)
+- **전제조건**: BMS가 SOH를 계산하고 제공해야 함
+- **제약**: 일부 구형 차량은 미지원
+
+### Method 1: 현재 용량 기반 (capacity_based_ah / capacity_based_kwh)
+- **설명**: 현재 용량 / 원래 용량 × 100
+- **데이터**: BMS 현재 용량 (Ah/kWh) + DB battery_specs 원래 용량
+- **신뢰도**: 0.90
+- **전제조건**: BMS 현재 용량 + 해당 차종 사양 DB 등록
+- **제약**: 완충 상태 측정 시 정확도 향상
+
+### Method 2: Coulomb Counting (coulomb_counting)
+- **설명**: 누적 충·방전 Ah로부터 열화 추정
+- **공식**: `SOH = 100 - (degradation × (cum_charge + cum_discharge) / (2 × original_capacity))`
+- **degradation 계수**: NMC: 0.10, LFP: 0.05, NCA: 0.12 (% / 1000 사이클)
+- **신뢰도**: 0.75
+- **제약**: 온도, 충전 속도 영향 미반영
+
+### Method 3: Energy Counting (energy_counting)
+- **설명**: 누적 kWh로부터 열화 추정
+- **신뢰도**: 0.70
+- **제약**: Method 2와 유사
+
+### Method 4: OCV-SOC 일관성 (ocv_soc_consistency)
+- **설명**: 휴지 기간 OCV와 SOC 관계로부터 열화 판단
+- **신뢰도**: unrated (전제조건 충족 시에만 의미)
+- **전제조건**: 30분 이상 휴지, SOC-OCV 기준 커브
+- **제약**: 휴지 조건 충족 어려움, 온도 보정 필요
+
+### Method 5: 내부 저항 기반 (resistance_based)
+- **설명**: 전류 스텝 시 ΔV/ΔI로 내부 저항 계산
+- **신뢰도**: unrated
+- **전제조건**: 충분한 전류 변화 (>10A), 동기화 샘플링
+- **제약**: 동적 데이터 필요, 정적 스캔 부적합
+
+### Method 6: 누적 처리량 휴리스틱 (throughput_heuristic)
+- **설명**: 누적 처리량/주행 시간 기반 단순 추정
+- **신뢰도**: 0.50 (폴백)
+- **제약**: 사용 패턴 차이 미반영, 정확도 낮음
+
+### 연속 학습 (Continuous Learning)
+- 모든 SOH 결과를 `soh_results` 테이블에 저장
+- BMS SOH를 ground truth로 사용하여 오차 학습
+- `LearnedFormula`에 방법별 보정 공식 저장 (Ridge Regression)
+- 자동 재훈련 임계값: Method 0: 50개, Method 1: 30개, Method 2-3: 40개, Method 4-5: 20개, Method 6: 10개
+
