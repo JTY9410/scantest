@@ -26,38 +26,25 @@ def app():
 
 @pytest.fixture(autouse=True)
 def _clean_database(app):
-    """Proper test isolation with DELETE + sequence reset"""
     yield
     with app.app_context():
-        # Rollback any pending transactions first
-        db.session.rollback()
         db.session.remove()
-        
+        # SQLite doesn't support TRUNCATE, use DELETE instead
         if "sqlite" in app.config["SQLALCHEMY_DATABASE_URI"]:
-            # SQLite: use DELETE
             for table in reversed(db.metadata.sorted_tables):
                 db.session.execute(text(f"DELETE FROM {table.name}"))
+            # Reset SQLite sequences (only if table exists)
             try:
                 db.session.execute(text("DELETE FROM sqlite_sequence"))
             except Exception:
-                pass
+                pass  # Table doesn't exist yet
             db.session.commit()
         else:
-            # Postgres: DELETE in FK order + reset ALL sequences
-            for table in reversed(db.metadata.sorted_tables):
-                db.session.execute(text(f"DELETE FROM {table.name}"))
-            
-            # Reset ALL sequences in the database (cast to text for setval)
-            db.session.execute(text("""
-                SELECT setval(sequence_name::text, 1, false)
-                FROM information_schema.sequences
-                WHERE sequence_schema = 'public'
-            """))
+            # Set short lock timeout to avoid hanging on locks
+            db.session.execute(text("SET LOCAL lock_timeout = '30s'"))
+            tables = ", ".join(t.name for t in db.metadata.sorted_tables)
+            db.session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
             db.session.commit()
-        
-        # Clean up session state
-        db.session.remove()
-    
     limiter.reset()
 
 
