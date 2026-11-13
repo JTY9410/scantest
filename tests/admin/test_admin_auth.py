@@ -43,7 +43,8 @@ def test_production_sends_hsts_when_secure_cookie_enabled(app, client):
     assert response.headers["Strict-Transport-Security"].startswith("max-age=")
 
 
-def test_login_requires_csrf_token(client, make_user):
+def test_login_requires_csrf_token(app, client, make_user):
+    app.config["WTF_CSRF_ENABLED"] = True
     make_user("wecar", type="admin", password=ADMIN_PASSWORD)
 
     response = client.post("/admin/login", data={"tid": "wecar", "password": ADMIN_PASSWORD})
@@ -51,8 +52,9 @@ def test_login_requires_csrf_token(client, make_user):
     assert response.status_code == 400
 
 
-def test_https_login_accepts_origin_when_referrer_missing(client, make_user):
+def test_https_login_accepts_origin_when_referrer_missing(app, client, make_user):
     """일부 브라우저·웹뷰는 POST에 Referer를 빼 Origin만 보낸다. 로그인 400을 막는다."""
+    app.config["WTF_CSRF_ENABLED"] = True
     make_user("wecar", type="admin", password=ADMIN_PASSWORD)
     base = "https://admin.test"
     html = client.get("/admin/login", base_url=base).get_data(as_text=True)
@@ -71,6 +73,7 @@ def test_https_login_accepts_origin_when_referrer_missing(client, make_user):
 
 def test_https_login_works_without_referrer_or_origin(app, client, make_user):
     """운영(HTTPS)에서는 Referer/Origin이 없어도 CSRF 토큰만 맞으면 로그인 검사를 한다."""
+    app.config["WTF_CSRF_ENABLED"] = True
     app.config["WTF_CSRF_SSL_STRICT"] = False
     make_user("wecar", type="admin", password=ADMIN_PASSWORD)
     base = "https://admin.test"
@@ -89,7 +92,8 @@ def test_https_login_works_without_referrer_or_origin(app, client, make_user):
 
 
 
-def test_csrf_error_explains_refresh(client, make_user):
+def test_csrf_error_explains_refresh(app, client, make_user):
+    app.config["WTF_CSRF_ENABLED"] = True
     make_user("wecar", type="admin", password=ADMIN_PASSWORD)
 
     response = client.post("/admin/login", data={"tid": "wecar", "password": ADMIN_PASSWORD})
