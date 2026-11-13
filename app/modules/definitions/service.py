@@ -141,6 +141,8 @@ def decode_signal(signal: DbcSignal, raw_bytes: bytes) -> float | None:
 
 def decode_diagnostic_response(command: DiagnosticCommand, response_bytes: bytes) -> Any:
     """진단 명령 응답 디코딩."""
+    from app.modules.definitions.formula_eval import evaluate_formula
+    
     try:
         if command.formula:
             # 응답에서 값 추출
@@ -154,14 +156,12 @@ def decode_diagnostic_response(command: DiagnosticCommand, response_bytes: bytes
                         byteorder='big'
                     )
                     
-                    # formula 적용 (간단한 eval, 보안 주의)
-                    formula = command.formula.replace('value', str(raw_value))
-                    formula = formula.replace('val{', '').replace('}', '')  # Torque 포맷
-                    
+                    # 안전한 formula 평가
                     try:
-                        result = eval(formula, {"__builtins__": {}}, {})
+                        result = evaluate_formula(command.formula, {"value": raw_value})
                         return result
-                    except Exception:
+                    except ValueError:
+                        # formula 평가 실패 시 raw 값 반환
                         return raw_value
             
             return None

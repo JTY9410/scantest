@@ -246,15 +246,8 @@ def import_obdb_file(file_path: Path, vehicle_info: dict[str, Any] | None = None
 
 def _build_formula_from_fmt(fmt: dict) -> str:
     """OBDb fmt에서 계산식 생성."""
-    # 간단한 변환: len, div, mul, add, sign 등
-    if 'div' in fmt:
-        return f"value / {fmt['div']}"
-    elif 'mul' in fmt:
-        return f"value * {fmt['mul']}"
-    elif 'add' in fmt:
-        return f"value + {fmt['add']}"
-    else:
-        return "value"
+    from app.modules.definitions.formula_eval import parse_obdb_formula
+    return parse_obdb_formula(fmt)
 
 
 def import_wican_file(file_path: Path, vehicle_info: dict[str, Any] | None = None,
