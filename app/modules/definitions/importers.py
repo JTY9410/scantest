@@ -7,6 +7,8 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
+import cantools
+
 from app.core.time import utcnow
 from app.extensions import db
 from app.modules.definitions.models import (
@@ -101,57 +103,52 @@ def import_dbc_file(file_path: Path, vehicle_info: dict[str, Any] | None = None,
             )
             db.session.add(signal)
     
-    db.session.commit()
     return source
 
 
 def parse_dbc_file(file_path: Path) -> list[dict[str, Any]]:
-    """DBC 파일 파싱 (simplified parser)."""
+    """DBC 파일 파싱 (cantools 사용, strict=False로 관대하게)."""
     messages = []
-    current_message = None
     
-    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-        for line in f:
-            line = line.strip()
-            
-            # Message: BO_ <ID> <Name>: <DLC> <Sender>
-            msg_match = re.match(r'BO_\s+(\d+)\s+(\w+):\s*(\d+)\s+(\w+)', line)
-            if msg_match:
-                if current_message:
-                    messages.append(current_message)
-                can_id = int(msg_match.group(1))
-                current_message = {
-                    'can_id': can_id,
-                    'name': msg_match.group(2),
-                    'dlc': int(msg_match.group(3)),
-                    'sender': msg_match.group(4),
-                    'signals': [],
-                }
-                continue
-            
-            # Signal: SG_ <Name> : <StartBit>|<Length>@<ByteOrder><ValueType> (<Factor>,<Offset>) [<Min>|<Max>] "<Unit>" <Receivers>
-            sig_match = re.match(
-                r'SG_\s+(\w+)\s*:\s*(\d+)\|(\d+)@([01])([+-])\s*\(([^,]+),([^)]+)\)\s*\[([^|]+)\|([^\]]+)\]\s*"([^"]*)"(?:\s+(.+))?',
-                line
-            )
-            if sig_match and current_message:
-                signal = {
-                    'name': sig_match.group(1),
-                    'start_bit': int(sig_match.group(2)),
-                    'bit_length': int(sig_match.group(3)),
-                    'byte_order': 'little' if sig_match.group(4) == '1' else 'big',
-                    'value_type': 'signed' if sig_match.group(5) == '-' else 'unsigned',
-                    'factor': float(sig_match.group(6)),
-                    'offset': float(sig_match.group(7)),
-                    'min': float(sig_match.group(8)),
-                    'max': float(sig_match.group(9)),
-                    'unit': sig_match.group(10) or None,
-                    'receivers': sig_match.group(11).strip() if sig_match.group(11) else None,
-                }
-                current_message['signals'].append(signal)
+    # 여러 인코딩 시도
+    for encoding in ['utf-8', 'latin-1', 'cp1252', 'iso-8859-1']:
+        try:
+            db_obj = cantools.database.load_file(str(file_path), encoding=encoding, strict=False)
+            break
+        except (UnicodeDecodeError, Exception) as e:
+            if encoding == 'iso-8859-1':  # 마지막 시도
+                raise ValueError(f"DBC parsing failed with all encodings: {e}")
+            continue
     
-    if current_message:
-        messages.append(current_message)
+    for message in db_obj.messages:
+        msg_data = {
+            'can_id': message.frame_id,
+            'name': message.name,
+            'dlc': message.length,
+            'sender': ','.join(message.senders) if message.senders else None,
+            'comment': message.comment,
+            'signals': [],
+        }
+        
+        for signal in message.signals:
+            # multiplexed signal은 선택적 지원 (multiplexer_signal이 있으면 스킵 또는 포함)
+            sig_data = {
+                'name': signal.name,
+                'start_bit': signal.start,
+                'bit_length': signal.length,
+                'byte_order': 'little' if signal.byte_order == 'little_endian' else 'big',
+                'value_type': 'signed' if signal.is_signed else 'unsigned',
+                'factor': signal.scale,
+                'offset': signal.offset,
+                'min': signal.minimum,
+                'max': signal.maximum,
+                'unit': signal.unit,
+                'comment': signal.comment,
+                'receivers': ','.join(signal.receivers) if signal.receivers else None,
+            }
+            msg_data['signals'].append(sig_data)
+        
+        messages.append(msg_data)
     
     return messages
 
@@ -240,7 +237,6 @@ def import_obdb_file(file_path: Path, vehicle_info: dict[str, Any] | None = None
                 )
                 db.session.add(cmd)
     
-    db.session.commit()
     return source
 
 
@@ -324,7 +320,6 @@ def import_wican_file(file_path: Path, vehicle_info: dict[str, Any] | None = Non
         )
         db.session.add(cmd)
     
-    db.session.commit()
     return source
 
 
@@ -413,11 +408,10 @@ def import_torque_csv(file_path: Path, vehicle_info: dict[str, Any] | None = Non
                     success_count=0,
                     failure_count=0,
                     created_at=utcnow(),
-                    updated_at=utcnow(),
-                )
-                db.session.add(cmd)
+                updated_at=utcnow(),
+            )
+            db.session.add(cmd)
     
-    db.session.commit()
     return source
 
 
@@ -507,8 +501,19 @@ def import_canze_csv(file_path: Path, vehicle_info: dict[str, Any] | None = None
                     )
                     db.session.add(cmd)
     
-    db.session.commit()
     return source
+
+
+def _import_with_savepoint(import_func, *args, **kwargs):
+    """파일 import를 savepoint로 감싸서 실패 시 세션을 오염시키지 않음."""
+    savepoint = db.session.begin_nested()
+    try:
+        result = import_func(*args, **kwargs)
+        savepoint.commit()
+        return result, None
+    except Exception as e:
+        savepoint.rollback()
+        return None, str(e)
 
 
 def import_definition_folder(base_path: Path, exclude_list: set[str] | None = None) -> dict:
@@ -522,16 +527,17 @@ def import_definition_folder(base_path: Path, exclude_list: set[str] | None = No
         for dbc_file in dbc_dir.rglob('*.dbc'):
             if dbc_file.name in exclude_list:
                 continue
-            try:
-                # 경로에서 제조사 추출
-                maker = dbc_file.parent.name if dbc_file.parent != dbc_dir else None
-                vehicle_info = {'maker': maker} if maker else None
-                
-                import_dbc_file(dbc_file, vehicle_info)
-                stats['dbc_imported'] += 1
-            except Exception as e:
-                print(f"Failed to import {dbc_file}: {e}")
+            
+            # 경로에서 제조사 추출
+            maker = dbc_file.parent.name if dbc_file.parent != dbc_dir else None
+            vehicle_info = {'maker': maker} if maker else None
+            
+            _, error = _import_with_savepoint(import_dbc_file, dbc_file, vehicle_info)
+            if error:
+                print(f"Failed to import {dbc_file}: {error}")
                 stats['dbc_failed'] += 1
+            else:
+                stats['dbc_imported'] += 1
     
     # OBDb JSON 파일
     for obdb_dir in base_path.iterdir():
@@ -539,18 +545,19 @@ def import_definition_folder(base_path: Path, exclude_list: set[str] | None = No
             for json_file in obdb_dir.rglob('*.json'):
                 if json_file.name in exclude_list:
                     continue
-                try:
-                    # 경로에서 제조사/모델 추출
-                    parts = json_file.parts
-                    maker = parts[-3] if len(parts) >= 3 else None
-                    model = parts[-2] if len(parts) >= 2 and parts[-2] != obdb_dir.name else None
-                    
-                    vehicle_info = {'maker': maker, 'model': model} if (maker or model) else None
-                    import_obdb_file(json_file, vehicle_info)
-                    stats['obdb_imported'] += 1
-                except Exception as e:
-                    print(f"Failed to import {json_file}: {e}")
+                
+                # 경로에서 제조사/모델 추출
+                parts = json_file.parts
+                maker = parts[-3] if len(parts) >= 3 else None
+                model = parts[-2] if len(parts) >= 2 and parts[-2] != obdb_dir.name else None
+                
+                vehicle_info = {'maker': maker, 'model': model} if (maker or model) else None
+                _, error = _import_with_savepoint(import_obdb_file, json_file, vehicle_info)
+                if error:
+                    print(f"Failed to import {json_file}: {error}")
                     stats['obdb_failed'] += 1
+                else:
+                    stats['obdb_imported'] += 1
     
     # WiCAN profile.json 파일
     wican_dir = base_path / '03_WiCAN_PID'
@@ -558,12 +565,13 @@ def import_definition_folder(base_path: Path, exclude_list: set[str] | None = No
         for profile_file in wican_dir.rglob('profile.json'):
             if profile_file.name in exclude_list:
                 continue
-            try:
-                import_wican_file(profile_file)
-                stats['wican_imported'] += 1
-            except Exception as e:
-                print(f"Failed to import {profile_file}: {e}")
+            
+            _, error = _import_with_savepoint(import_wican_file, profile_file)
+            if error:
+                print(f"Failed to import {profile_file}: {error}")
                 stats['wican_failed'] += 1
+            else:
+                stats['wican_imported'] += 1
     
     # Torque CSV 파일
     torque_dir = base_path / '04_Torque_PID'
@@ -571,12 +579,13 @@ def import_definition_folder(base_path: Path, exclude_list: set[str] | None = No
         for csv_file in torque_dir.rglob('*.csv'):
             if csv_file.name in exclude_list:
                 continue
-            try:
-                import_torque_csv(csv_file)
-                stats['torque_imported'] += 1
-            except Exception as e:
-                print(f"Failed to import {csv_file}: {e}")
+            
+            _, error = _import_with_savepoint(import_torque_csv, csv_file)
+            if error:
+                print(f"Failed to import {csv_file}: {error}")
                 stats['torque_failed'] += 1
+            else:
+                stats['torque_imported'] += 1
     
     # CanZE CSV 파일
     canze_dir = base_path / '05_CanZE_조회필드'
@@ -584,11 +593,15 @@ def import_definition_folder(base_path: Path, exclude_list: set[str] | None = No
         for csv_file in canze_dir.rglob('*.csv'):
             if csv_file.name in exclude_list:
                 continue
-            try:
-                import_canze_csv(csv_file)
-                stats['canze_imported'] += 1
-            except Exception as e:
-                print(f"Failed to import {csv_file}: {e}")
+            
+            _, error = _import_with_savepoint(import_canze_csv, csv_file)
+            if error:
+                print(f"Failed to import {csv_file}: {error}")
                 stats['canze_failed'] += 1
+            else:
+                stats['canze_imported'] += 1
+    
+    # 최종 커밋
+    db.session.commit()
     
     return dict(stats)

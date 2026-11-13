@@ -53,7 +53,7 @@ class VehicleDefinition(db.Model):
     
     # 차량 정보
     maker: Mapped[str | None] = mapped_column(String(50))
-    model: Mapped[str | None] = mapped_column(String(100))
+    model: Mapped[str | None] = mapped_column(Text)
     submodel: Mapped[str | None] = mapped_column(String(100))
     year_from: Mapped[int | None]
     year_to: Mapped[int | None]
@@ -85,9 +85,9 @@ class DbcMessage(db.Model):
     
     # DBC 메시지 정보
     can_id: Mapped[int] = mapped_column(db.BigInteger, nullable=False)  # CAN ID (29-bit extended)
-    message_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    message_name: Mapped[str] = mapped_column(Text, nullable=False)
     dlc: Mapped[int] = mapped_column(nullable=False)  # Data Length Code
-    sender: Mapped[str | None] = mapped_column(String(50))
+    sender: Mapped[str | None] = mapped_column(String(100))
     
     # 메타데이터
     comment: Mapped[str | None] = mapped_column(Text)
@@ -108,7 +108,7 @@ class DbcSignal(db.Model):
                                             nullable=False, index=True)
     
     # 신호 정보
-    signal_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    signal_name: Mapped[str] = mapped_column(Text, nullable=False)
     start_bit: Mapped[int] = mapped_column(nullable=False)
     bit_length: Mapped[int] = mapped_column(nullable=False)
     byte_order: Mapped[str] = mapped_column(String(10), nullable=False)  # little|big
@@ -119,11 +119,11 @@ class DbcSignal(db.Model):
     offset: Mapped[float] = mapped_column(default=0.0, nullable=False)
     min_value: Mapped[float | None]
     max_value: Mapped[float | None]
-    unit: Mapped[str | None] = mapped_column(String(20))
+    unit: Mapped[str | None] = mapped_column(String(50))
     
     # 메타데이터
     comment: Mapped[str | None] = mapped_column(Text)
-    receivers: Mapped[str | None] = mapped_column(String(200))  # comma-separated ECU names
+    receivers: Mapped[str | None] = mapped_column(Text)  # comma-separated ECU names
     
     __table_args__ = (
         Index("ix_dbc_signals_message", "message_id"),
@@ -143,21 +143,21 @@ class DiagnosticCommand(db.Model):
     
     # 차량 범위 (optional scoping)
     maker: Mapped[str | None] = mapped_column(String(50))
-    model: Mapped[str | None] = mapped_column(String(100))
+    model: Mapped[str | None] = mapped_column(Text)
     year_from: Mapped[int | None]
     year_to: Mapped[int | None]
     
     # 명령 정보
     ecu_address: Mapped[str | None] = mapped_column(String(10))  # 7E4, 7E0 등
-    ecu_name: Mapped[str | None] = mapped_column(String(100))
+    ecu_name: Mapped[str | None] = mapped_column(Text)
     service: Mapped[str] = mapped_column(String(10), nullable=False)  # 22, 01 등
-    pid: Mapped[str] = mapped_column(String(20), nullable=False)  # DID/PID
+    pid: Mapped[str] = mapped_column(String(50), nullable=False)  # DID/PID
     command_bytes: Mapped[str] = mapped_column(String(100), nullable=False)  # 전체 명령 (22 1050)
     
     # 응답 해석
-    label: Mapped[str] = mapped_column(String(200), nullable=False)
+    label: Mapped[str] = mapped_column(Text, nullable=False)
     formula: Mapped[str | None] = mapped_column(Text)  # 계산식
-    unit: Mapped[str | None] = mapped_column(String(20))
+    unit: Mapped[str | None] = mapped_column(String(50))
     
     # 응답 위치 (OBDb, CanZE 등)
     response_start_byte: Mapped[int | None]
