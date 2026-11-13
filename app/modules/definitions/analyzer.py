@@ -20,6 +20,9 @@ from app.modules.definitions.decoder import (
     decode_uds_response,
     is_valid_value,
 )
+from app.modules.definitions.dbc_decoder import decode_broadcast_frames
+from app.modules.definitions.wescan_grades import compute_wescan_grades
+from app.modules.definitions.verification import update_verification_metrics
 from app.modules.scans.models import Scan
 from app.core.formulas import safe_eval
 
@@ -180,7 +183,37 @@ def analyze_scan_with_definitions(scan: Scan) -> dict[str, Any]:
                         )
                         db.session.add(obs)
     
-    # 5. DTC (기존 로직)
+    # 5. DBC 브로드캐스트 프레임 디코딩
+    broadcast_decoded = decode_broadcast_frames(can_frames, scan.car_maker, scan.car_model)
+    result['broadcast_signals'] = {}
+    
+    for can_id, signals in broadcast_decoded.items():
+        for signal_name, signal_info in signals.items():
+            if signal_info['valid']:
+                result['broadcast_signals'][signal_name] = {
+                    'value': signal_info['value'],
+                    'unit': signal_info['unit'],
+                    'can_id': signal_info['can_id'],
+                    'message': signal_info['message_name'],
+                }
+                result['definitions_applied']['successful_decodes'] += 1
+                
+                # ScanObservation 기록
+                obs = ScanObservation(
+                    scan_id=scan.id,
+                    definition_type='dbc',
+                    definition_id=0,  # DBC signal
+                    applied=True,
+                    success=True,
+                    raw_request=None,
+                    raw_response=f"CAN {signal_info['can_id']}",
+                    decoded_value=f"{signal_name}={signal_info['value']} {signal_info['unit'] or ''}",
+                )
+                db.session.add(obs)
+            else:
+                result['definitions_applied']['failed_decodes'] += 1
+    
+    # 6. DTC (기존 로직)
     result['dtcs'] = [
         {
             'code': sc.code.code,
@@ -189,6 +222,12 @@ def analyze_scan_with_definitions(scan: Scan) -> dict[str, Any]:
         }
         for sc in scan.scan_codes
     ] if scan.scan_codes else []
+    
+    # 7. WESCAN 등급 (기존 scanner/report.py 로직 사용)
+    result['wescan_grades'] = compute_wescan_grades(result)
+    
+    # 8. verification_metrics 자동 업데이트
+    update_verification_metrics(scan.id)
     
     db.session.commit()
     

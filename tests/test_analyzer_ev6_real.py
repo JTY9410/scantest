@@ -75,6 +75,23 @@ def test_analyzer_ev6_real_decode(app):
         
         print(f"\nDTCs: {len(result.get('dtcs', []))}")
         
+        # Broadcast signals
+        broadcast = result.get('broadcast_signals', {})
+        print(f"\nBroadcast Signals: {len(broadcast)} decoded")
+        if broadcast:
+            print("\nSample Broadcast Signals:")
+            for sig_name, sig_info in list(broadcast.items())[:5]:
+                print(f"  - {sig_name}: {sig_info['value']} {sig_info.get('unit', '')} (CAN {sig_info['can_id']})")
+        
+        # WESCAN grades
+        grades = result.get('wescan_grades', [])
+        print(f"\nWESCAN Grades: {len(grades)} items")
+        if grades:
+            print("\nWESCAN Grade Details:")
+            for grade in grades:
+                print(f"  - {grade['item']}: {grade['value']} {grade['unit']} → {grade['result']}")
+                print(f"    기준: {grade['standard']}")
+        
         # ScanObservation 통계
         observations = db.session.query(ScanObservation).filter_by(scan_id=scan.id).all()
         print(f"\n=== Scan Observations ===")

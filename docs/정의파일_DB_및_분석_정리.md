@@ -19,7 +19,11 @@ scantest는 차량 OBD2 진단 데이터를 수집·분석하여 WESCAN 스타�
 - **정의파일 DB 저장**: DBC(477개), OBDb(512개), WiCAN(89개), Torque(48개), CanZE(51개) 파일을 정규화된 DB 테이블에 저장
 - **차량별 정의 매핑**: 제조사·모델·연도별로 적용 가능한 정의 자동 검색
 - **분석 파이프라인**: 스캔 로그 → 차량 매핑 → 신호 디코딩 → 결과 생성
-- **학습 시스템**: 실제 스캔 결과를 누적하여 정의 검증 상태 자동 승격 ('실차대조필요' → 'verified')
+- **학습 시스템**: 실제 스캔 결과를 누적하여 정의 검증 상태 자동 승격 ('needs_verification' → 'verified')
+- **DBC 브로드캐스트 디코딩** (2026-11-13 추가): 주기적 CAN 프레임을 DBC 정의로 디코딩 (비트 추출, 스케일, 타당성 검증)
+- **WESCAN 등급 자동 생성** (2026-11-13 추가): 기존 threshold 로직 재사용하여 배터리 수명, 절연, 편차, DTC 등급 자동 계산
+- **Verification Metrics 자동 업데이트** (2026-11-13 추가): 분석 저장 시 명령 검증 상태 자동 승격/강등 (10회 이상, 80%/20% 기준)
+- **다양한 차종 지원** (2026-11-13 추가): Hyundai/Kia E-GMP (Ioniq 5/6, EV6, GV60), Kona EV, Niro EV, 범용 ICE (J1979 Mode 01)
 
 ## DB 스키마
 
@@ -187,7 +191,7 @@ Diagnostic Commands Verification:
   Needs Verification: 43800
 ```
 
-## 스캔 분석 흐름
+## 스캔 분석 흐름 (업데이트: 2026-11-13)
 
 ### 1. 차량 매핑
 ```python
@@ -225,7 +229,62 @@ for cmd in definitions['diagnostic_commands']:
     decoded_value = decode_diagnostic_response(cmd, response)
 ```
 
-### 4. 관찰 기록 (학습)
+### 4. DBC 브로드캐스트 프레임 디코딩 (신규: 2026-11-13)
+```python
+from app.modules.definitions.dbc_decoder import decode_broadcast_frames
+
+# 요청-응답이 아닌 주기적 CAN 프레임 디코딩
+can_frames = [
+    {'can_id': '0x100', 'data': '01 02 03 04 05 06 07 08', 'timestamp': 1.0},
+    # ...
+]
+
+decoded = decode_broadcast_frames(can_frames, maker='Kia', model='EV6')
+# → {0x100: {'Battery_Voltage': {'value': 704.2, 'unit': 'V', 'valid': True}}}
+```
+
+비트 추출 및 변환:
+- `start_bit`, `bit_length`로 정확한 위치 추출
+- `byte_order` (little/big endian) 지원
+- `value_type` (signed/unsigned) 지원
+- `factor`, `offset` 적용
+- 물리적 타당성 검증 (범위, 센티널 필터링)
+
+### 5. WESCAN 등급 자동 계산 (신규: 2026-11-13)
+```python
+from app.modules.definitions.wescan_grades import compute_wescan_grades
+
+grades = compute_wescan_grades(analyzer_result)
+# [
+#   {'item': '배터리 수명 (SOH)', 'standard': 'SOH 80% 이상 시 양호', 
+#    'value': 96.7, 'unit': '%', 'result': '양호'},
+#   {'item': '셀 전압 편차', 'standard': '셀 전압 최대-최소 차이 1.0V 이하 시 양호',
+#    'value': 0.0, 'unit': 'V', 'result': '양호'},
+#   ...
+# ]
+```
+
+기존 threshold 재사용 (scanner/report.py):
+- SOH >= 80%: 양호
+- 절연 저항 >= 500 kΩ: 양호
+- 셀 전압 편차 <= 1.0V: 양호
+- 모듈 온도 편차 <= 20°C: 양호
+- DTC 0개: 양호
+
+### 6. Verification Metrics 자동 업데이트 (신규: 2026-11-13)
+```python
+from app.modules.definitions.verification import update_verification_metrics
+
+stats = update_verification_metrics(scan_id)
+# → {'promoted': 3, 'demoted': 0, 'unchanged': 10}
+```
+
+자동 승격/강등 규칙:
+- **10회 이상 시도, 성공률 >= 80%**: `verified`
+- **성공률 < 20%**: `failed`
+- **그 외**: `experimental`
+
+### 7. 관찰 기록 (학습)
 ```python
 from app.modules.definitions.service import record_observation, update_command_stats
 
@@ -243,11 +302,23 @@ record_observation(
 update_command_stats(cmd.id, success=(decoded_value is not None))
 ```
 
-## 학습 시스템 동작
+## 학습 시스템 동작 (업데이트: 2026-11-13)
 
-### 자동 검증 승격
-- **needs_verification → verified**: 10회 이상 시도, 성공률 80% 이상
-- **needs_verification → failed**: 10회 이상 시도, 성공률 20% 미만
+### 자동 검증 승격 (실시간)
+분석 저장 시 `update_verification_metrics(scan_id)` 자동 호출:
+- **needs_verification → verified**: 10회 이상 시도, 성공률 >= 80%
+- **needs_verification → failed**: 성공률 < 20%
+- **needs_verification → experimental**: 그 외
+
+`verification_metrics` JSON 필드 자동 업데이트:
+```json
+{
+  "total_tries": 15,
+  "successful_tries": 14,
+  "success_rate": 0.933,
+  "last_updated": "2026-11-13T12:00:00"
+}
+```
 
 ### 학습 요약 조회
 ```python
@@ -266,9 +337,9 @@ cmd.verification_status = 'verified'
 db.session.commit()
 ```
 
-## WESCAN 스타일 결과 생성
+## WESCAN 스타일 결과 생성 (업데이트: 2026-11-13)
 
-WESCAN 앱과 유사한 진단 결과 구조를 생성합니다:
+WESCAN 앱과 유사한 진단 결과 구조 및 등급을 자동 생성합니다:
 
 ```python
 def analyze_scan(scan: Scan) -> dict:
@@ -306,15 +377,54 @@ def analyze_scan(scan: Scan) -> dict:
     # 고장코드 (기존 로직 유지)
     result['dtcs'] = scan.scan_codes
     
+    # DBC 브로드캐스트 신호 (신규: 2026-11-13)
+    result['broadcast_signals'] = decode_broadcast_frames(
+        can_frames, scan.car_maker, scan.car_model
+    )
+    
+    # WESCAN 등급 자동 생성 (신규: 2026-11-13)
+    result['wescan_grades'] = compute_wescan_grades(result)
+    
+    # Verification metrics 자동 업데이트 (신규: 2026-11-13)
+    update_verification_metrics(scan.id)
+    
     return result
+```
+
+**실제 출력 예시 (EV6 File B, 2026-11-13 테스트)**:
+```python
+{
+  'vehicle': {'maker': 'Kia', 'model': 'EV6', 'year': 2022},
+  'battery': {
+    'soc_pct': 45.5,
+    'soh_pct': 96.7,
+    'pack_voltage_v': 704.2,
+    'pack_current_a': 0.0,
+    'max_temp_c': 19,
+    'min_temp_c': 19,
+    'max_cell_voltage_v': 3.66,
+    'min_cell_voltage_v': 3.66,
+    'cum_charge_kwh': 2703.6,
+    'cum_discharge_kwh': 2230.4,
+  },
+  'broadcast_signals': {},  # (테스트 fixture에 DBC 정의 없음)
+  'wescan_grades': [
+    {'item': '배터리 수명 (SOH)', 'value': 96.7, 'unit': '%', 'result': '양호'},
+    {'item': '셀 전압 편차', 'value': 0.0, 'unit': 'V', 'result': '양호'},
+    {'item': '모듈 온도 편차', 'value': 0, 'unit': '°C', 'result': '양호'},
+    {'item': '고장 코드 (DTC)', 'value': 0, 'unit': '개', 'result': '양호'},
+  ],
+  'dtcs': [],
+}
 ```
 
 ## 남은 갭 (Known Limitations)
 
-### 1. DBC 파서 제한
-- 현재 구현은 간단한 DBC 구조만 지원
-- 복잡한 multiplexed signal, value table 미지원
-- 향후 cantools 라이브러리 통합 권장
+### 1. DBC 파서 (2026-11-13: 개선)
+- ✅ 비트 추출, byte order, signedness, scale/offset 지원
+- ✅ 물리적 타당성 검증 및 센티널 필터링
+- ❌ Multiplexed signal 미지원
+- ❌ Value table (enum mapping) 미지원
 
 ### 2. 진단 명령 formula 보안
 - eval() 사용으로 임의 코드 실행 가능성
