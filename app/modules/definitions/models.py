@@ -226,9 +226,9 @@ class ScanObservation(db.Model):
     # 관찰 결과
     applied: Mapped[bool] = mapped_column(default=True, nullable=False)
     success: Mapped[bool | None]  # None = 시도 안 함
-    raw_request: Mapped[str | None] = mapped_column(String(200))
+    raw_request: Mapped[str | None] = mapped_column(String(500))  # Increased for long ISO-TP requests
     raw_response: Mapped[str | None] = mapped_column(Text)
-    decoded_value: Mapped[str | None] = mapped_column(String(200))
+    decoded_value: Mapped[str | None] = mapped_column(Text)  # Changed to Text for long decoded values
     
     # 불일치 플래그
     mismatch_reason: Mapped[str | None] = mapped_column(Text)
