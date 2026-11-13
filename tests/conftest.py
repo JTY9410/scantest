@@ -28,14 +28,14 @@ def app():
 def _clean_database(app):
     """Transaction-based test isolation: 각 테스트를 트랜잭션으로 감싸고 롤백"""
     with app.app_context():
-        # 외부 트랜잭션 시작 (savepoint 기반 중첩 트랜잭션)
+        # 외부 트랜잭션 시작
         connection = db.engine.connect()
         transaction = connection.begin()
         
-        # Flask-SQLAlchemy 세션을 이 트랜잭션에 바인딩
-        db.session = db.create_scoped_session(
-            options={"bind": connection, "binds": {}}
-        )
+        # 기존 세션을 이 연결에 바인딩
+        # Flask-SQLAlchemy의 세션을 직접 교체
+        old_session = db.session
+        db.session = db._make_scoped_session({"bind": connection})
         
         yield
         
@@ -43,6 +43,9 @@ def _clean_database(app):
         db.session.close()
         transaction.rollback()
         connection.close()
+        
+        # 원래 세션 복원
+        db.session = old_session
     
     limiter.reset()
 
