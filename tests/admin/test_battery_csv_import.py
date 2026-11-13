@@ -5,7 +5,7 @@ from app.modules.battery.models import BatterySpec
 from tests.conftest import csrf_token
 
 
-def test_battery_specs_csv_import(admin_client):
+def test_battery_specs_csv_import(admin_client, app):
     """CSV로 배터리 사양을 가져온다."""
     csv_content = b"""maker,model,model_year,trim_grade,gross_kwh,usable_kwh,source_url
 Hyundai,IONIQ 6,2023,Long Range,77.4,74.0,https://www.hyundai.com/worldwide/en/eco/ioniq6/specs
@@ -26,14 +26,15 @@ Tesla,Model 3,2023,Long Range,82.0,79.0,https://www.tesla.com/model3/specs
     
     # DB 확인
     from app.extensions import db
-    count = db.session.query(BatterySpec).count()
-    assert count == 4
-    
-    ioniq6 = db.session.query(BatterySpec).filter(BatterySpec.model == 'IONIQ 6').first()
-    assert ioniq6 is not None
-    assert ioniq6.maker == 'Hyundai'
-    assert ioniq6.gross_kwh == 77.4
-    assert ioniq6.usable_kwh == 74.0
+    with app.app_context():
+        count = db.session.query(BatterySpec).count()
+        assert count == 4
+        
+        ioniq6 = db.session.query(BatterySpec).filter(BatterySpec.model == 'IONIQ 6').first()
+        assert ioniq6 is not None
+        assert ioniq6.maker == 'Hyundai'
+        assert ioniq6.gross_kwh == 77.4
+        assert ioniq6.usable_kwh == 74.0
 
 
 def test_battery_specs_csv_import_skip_duplicates(admin_client):

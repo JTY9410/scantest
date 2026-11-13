@@ -27,9 +27,11 @@ TABLES = (
 
 def upgrade():
     for table in TABLES:
-        op.execute(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY')
+        if op.get_bind().dialect.name == 'postgresql':
+            op.execute(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY')
 
 
 def downgrade():
     for table in TABLES:
-        op.execute(f'ALTER TABLE "{table}" DISABLE ROW LEVEL SECURITY')
+        if op.get_bind().dialect.name == 'postgresql':
+            op.execute(f'ALTER TABLE "{table}" DISABLE ROW LEVEL SECURITY')

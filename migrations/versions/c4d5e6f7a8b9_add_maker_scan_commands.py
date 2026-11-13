@@ -36,7 +36,8 @@ def upgrade():
             "uq_maker_scan_commands", ["maker", "model", "header", "command"],
             unique=True, postgresql_nulls_not_distinct=True,
         )
-    op.execute('ALTER TABLE "maker_scan_commands" ENABLE ROW LEVEL SECURITY')
+    if op.get_bind().dialect.name == 'postgresql':
+        op.execute('ALTER TABLE "maker_scan_commands" ENABLE ROW LEVEL SECURITY')
 
 
 def downgrade():

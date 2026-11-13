@@ -50,7 +50,8 @@ def upgrade():
 
     # ### end Alembic commands ###
     # Supabase Data API(anon) 접근 차단. 앱은 테이블 소유자로 접속해 영향 없음(5011d7edb7a4 참고).
-    op.execute('ALTER TABLE "scan_logics" ENABLE ROW LEVEL SECURITY')
+    if op.get_bind().dialect.name == 'postgresql':
+        op.execute('ALTER TABLE "scan_logics" ENABLE ROW LEVEL SECURITY')
 
 
 def downgrade():

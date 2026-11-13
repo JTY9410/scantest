@@ -51,7 +51,8 @@ def upgrade():
         batch_op.create_index("ix_dtc_clear_logs_scan_id", ["scan_id"], unique=False)
         batch_op.create_index("ix_dtc_clear_logs_user_id", ["user_id"], unique=False)
         batch_op.create_index("ix_dtc_clear_logs_created_at", ["created_at"], unique=False)
-    op.execute('ALTER TABLE "dtc_clear_logs" ENABLE ROW LEVEL SECURITY')
+    if op.get_bind().dialect.name == 'postgresql':
+        op.execute('ALTER TABLE "dtc_clear_logs" ENABLE ROW LEVEL SECURITY')
 
 
 def downgrade():

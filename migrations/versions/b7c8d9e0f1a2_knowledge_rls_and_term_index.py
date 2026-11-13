@@ -22,10 +22,12 @@ TABLES = ("knowledge_commands", "knowledge_formulas", "knowledge_dtcs", "knowled
 def upgrade():
     op.execute("DROP INDEX IF EXISTS ix_knowledge_terms_term")
     for table in TABLES:
-        op.execute(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY')
+        if op.get_bind().dialect.name == 'postgresql':
+            op.execute(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY')
 
 
 def downgrade():
     op.execute("CREATE INDEX IF NOT EXISTS ix_knowledge_terms_term ON knowledge_terms (term)")
     for table in TABLES:
-        op.execute(f'ALTER TABLE "{table}" DISABLE ROW LEVEL SECURITY')
+        if op.get_bind().dialect.name == 'postgresql':
+            op.execute(f'ALTER TABLE "{table}" DISABLE ROW LEVEL SECURITY')

@@ -40,7 +40,8 @@ def upgrade():
         batch_op.create_index(batch_op.f('ix_telematics_devices_company_id'), ['company_id'], unique=False)
 
     # ### end Alembic commands ###
-    op.execute('ALTER TABLE "telematics_devices" ENABLE ROW LEVEL SECURITY')
+    if op.get_bind().dialect.name == 'postgresql':
+        op.execute('ALTER TABLE "telematics_devices" ENABLE ROW LEVEL SECURITY')
     op.drop_constraint(op.f('ck_can_datasets_source_valid'), 'can_datasets', type_='check')
     op.create_check_constraint(op.f('ck_can_datasets_source_valid'), 'can_datasets',
                                "source IN ('upload', 'web', 'app', 'lte')")

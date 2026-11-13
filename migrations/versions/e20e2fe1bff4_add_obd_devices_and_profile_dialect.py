@@ -48,7 +48,8 @@ def upgrade():
         batch_op.add_column(sa.Column('can_bitrate', sa.Integer(), nullable=True))
 
     # ### end Alembic commands ###
-    op.execute('ALTER TABLE "obd_devices" ENABLE ROW LEVEL SECURITY')
+    if op.get_bind().dialect.name == 'postgresql':
+        op.execute('ALTER TABLE "obd_devices" ENABLE ROW LEVEL SECURITY')
     op.create_check_constraint(op.f('ck_obd_profiles_dialect_valid'), 'obd_profiles',
                                "dialect IN ('elm327', 'stn', 'slcan')")
 

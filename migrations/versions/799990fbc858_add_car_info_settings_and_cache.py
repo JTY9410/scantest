@@ -44,7 +44,8 @@ def upgrade():
     )
     # ### end Alembic commands ###
     for table in NEW_TABLES:
-        op.execute(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY')
+        if op.get_bind().dialect.name == 'postgresql':
+            op.execute(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY')
 
 
 def downgrade():

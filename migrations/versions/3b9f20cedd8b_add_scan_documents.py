@@ -32,7 +32,8 @@ def upgrade():
     sa.UniqueConstraint('scan_id', name=op.f('uq_scan_documents_scan_id'))
     )
     # ### end Alembic commands ###
-    op.execute('ALTER TABLE "scan_documents" ENABLE ROW LEVEL SECURITY')
+    if op.get_bind().dialect.name == 'postgresql':
+        op.execute('ALTER TABLE "scan_documents" ENABLE ROW LEVEL SECURITY')
 
 
 def downgrade():

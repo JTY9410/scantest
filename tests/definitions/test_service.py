@@ -46,9 +46,20 @@ def test_update_command_stats_auto_verification(app):
     """자동 검증 승격 테스트."""
     with app.app_context():
         from app.extensions import db
+        from app.modules.definitions.models import DefinitionSource
+        
+        # Create a definition source first
+        source = DefinitionSource(
+            source_type='obdb',
+            file_path='test/obdb.json',
+            sha256='a' * 64,
+            file_size=1024
+        )
+        db.session.add(source)
+        db.session.flush()
         
         cmd = DiagnosticCommand(
-            source_id=1,
+            source_id=source.id,
             source_type='obdb',
             service='22',
             pid='1050',

@@ -109,7 +109,8 @@ def upgrade():
         batch_op.create_index('uq_scan_logics_active_scope', [sa.literal_column("coalesce(maker, '')"), sa.literal_column("coalesce(model, '')")], unique=True, postgresql_where=sa.text("status = 'active'"))
 
     for table in ("can_references", "rule_changes", "rule_incidents"):
-        op.execute(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY')
+        if op.get_bind().dialect.name == 'postgresql':
+            op.execute(f'ALTER TABLE "{table}" ENABLE ROW LEVEL SECURITY')
     # ### end Alembic commands ###
 
 
