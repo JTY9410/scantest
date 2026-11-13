@@ -218,29 +218,9 @@ def reclassify_all_definitions():
     """전체 정의 데이터 재분류 (CLI 명령 및 임포트 후 자동 실행)."""
     print("📊 Reclassifying definition data...")
     
-    # 1. Vehicle powertrain
-    print("  🚗 Vehicle powertrain...")
-    result = db.session.execute(text("""
-        WITH model_classification AS (
-            SELECT 
-                id,
-                model,
-                CASE
-                    WHEN model ~* '\\m(EV6|EV9|EV3|EV4|EV5|IONIQ 5|IONIQ 6|IONIQ 7|KONA ELECTRIC|KONA EV|NIRO EV|SOUL EV|RAY EV|GV60|GV70 ELECTRIC|ID\\.4|ID\\.3|ID\\.7|MODEL [3SXY]|LEAF|ARIYA|BOLT EV|BOLT EUV|E-TRON|TAYCAN|I-PACE|MACH-E|LYRIQ|ATTO 3)\\M' THEN 'BEV'
-                    WHEN model ~* '\\m(PLUG-?IN|PHEV|RECHARGEABLE)\\M' THEN 'PHEV'
-                    WHEN model ~* '\\m(HYBRID|HEV)\\M' AND NOT model ~* '\\m(PLUG)\\M' THEN 'HEV'
-                    WHEN model ~* '\\m(DIESEL|TURBO|GDI|CRDI)\\M' THEN 'ICE'
-                    ELSE 'unknown'
-                END as inferred_powertrain
-            FROM vehicle_definitions
-        )
-        UPDATE vehicle_definitions v
-        SET powertrain = mc.inferred_powertrain
-        FROM model_classification mc
-        WHERE v.id = mc.id AND v.powertrain != mc.inferred_powertrain
-    """))
-    db.session.commit()
-    print(f"     Updated {result.rowcount} vehicles")
+    # 1. Vehicle powertrain with comprehensive classifier
+    from app.modules.definitions.vehicle_classifier import reclassify_all_vehicles
+    reclassify_all_vehicles()
     
     # 2. DBC signals protocol (always CAN)
     print("  📡 DBC signals protocol...")
