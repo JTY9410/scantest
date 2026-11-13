@@ -35,46 +35,126 @@ def extract_tokens(text: str) -> set:
     return set(tokens)
 
 
-# Known BEV models (normalized tokens)
-BEV_TOKENS = {
-    'ioniq5', 'ioniq6', 'ioniq7',
-    'ev3', 'ev4', 'ev5', 'ev6', 'ev9',
-    'kona', 'niro', 'soul', 'ray',
-    'gv60', 'gv70', 'g80', 'gv80', 'electrified',
+# Known BEV models (specific, unambiguous)
+BEV_SPECIFIC_TOKENS = {
+    # Hyundai/Kia specific models (NOT base names)
+    'ioniq5', 'ioniq6', 'ioniq7', 'ioniq9',  # Specific IONIQ numbers
+    'ev3', 'ev4', 'ev5', 'ev6', 'ev9',  # Kia EV series
+    'gv60',  # Genesis
+    
+    # Tesla
     'model3', 'models', 'modelx', 'modely', 'tesla', 'roadster', 'cybertruck',
+    
+    # Nissan
     'leaf', 'ariya',
-    'bolt', 'hummer', 'lyriq', 'equinox', 'blazer',
+    
+    # GM/Chevrolet
+    'bolt', 'hummer', 'lyriq', 'equinox', 'blazer', 'silverado',
+    
+    # Ford
     'mustang', 'mache', 'f150', 'lightning', 'etransit',
+    
+    # VW Group
     'id3', 'id4', 'id5', 'id7', 'buzz',
-    'etron', 'q4', 'q8',
-    'taycan', 'macan',
-    'ipace', 'eqs', 'eqe', 'eqc',
-    'atto3', 'seal', 'dolphin', 'tang', 'han',
-    'zoe', 'ph2',  # Renault ZOE
-    'ec4', 'czero',  # Citroën
-    'imiev',  # Mitsubishi
-    'smart',  # Smart #1
+    
+    # Audi (specific e-tron models, not A3)
+    'q4', 'q8', 'rsetron',
+    
+    # Porsche
+    'taycan',
+    
+    # Jaguar
+    'ipace',
+    
+    # Mercedes
+    'eqs', 'eqe', 'eqc', 'eqa', 'eqb',
+    
+    # BYD
+    'atto3', 'atto', 'seal', 'dolphin', 'tang', 'han',
+    
+    # Renault
+    'zoe', 'ph2',
+    
+    # Citroën
+    'ec4', 'czero',
+    
+    # Mitsubishi
+    'imiev',
+    
+    # Smart
+    'smart',
+    
+    # Polestar
     'polestar',
+    
+    # BMW
+    'ix3', 'ix1',
+    
+    # Others
+    'evx',  # Torres EVX
+    'amperee',  # Opel Ampere-E
 }
 
-# BEV combinations (must have multiple tokens present)
-# Note: 'electric' is handled as a combination token, not standalone
+# Ambiguous base names that need a qualifier (EV/Electric/etc.)
+# These alone should NOT trigger BEV
+AMBIGUOUS_BASE_NAMES = {
+    'kona', 'niro', 'soul', 'ioniq',  # Have ICE/HEV/BEV variants
+    'macan',  # Macan vs Macan-Electric
+    'tucson', 'sportage', 'sorento',  # Have multiple powertrains
+    'prius',  # Prius vs Prius Prime
+}
+
+# BEV qualifier tokens (when combined with base names or standalone)
+BEV_QUALIFIERS = {
+    'electric', 'bev', 'ev',  # General electric
+    'etron', 'etrongt',  # Audi naming
+    'sierraev',  # GMC Sierra EV
+}
+
+# BEV combinations (must have multiple tokens)
 BEV_COMBINATIONS = [
-    {'e', 'golf'},  # e-Golf
+    {'e', 'golf'},
+    {'e', 'tron'},  # Audi e-tron (becomes 'e' + 'tron')
     {'kona', 'electric'}, {'kona', 'ev'},
-    {'niro', 'ev'}, {'soul', 'ev'}, {'ray', 'ev'},
+    {'niro', 'ev'},
+    {'soul', 'ev'},
+    {'ray', 'ev'},
+    {'ioniq', 'electric'},  # Ioniq Electric (but not just Ioniq)
+    {'ioniq', '5'}, {'ioniq', '6'}, {'ioniq', '7'}, {'ioniq', '9'},  # IONIQ-5/6/7/9
     {'gv70', 'electric'}, {'g80', 'electrified'}, {'gv80', 'electrified'},
-    {'mustang', 'mache'}, {'f150', 'lightning'},
+    {'mustang', 'mache'},
+    {'f150', 'lightning'},
+    {'macan', 'electric'},
+    {'xc40', 'bev'},
+    {'zs', 'ev'},
+    {'sierra', 'ev'},
+    {'torres', 'evx'},
+    {'ampera', 'e'},  # Opel Ampera-E / Ampere-E
+    {'ampere', 'e'},  # Alternative spelling
 ]
 
-# PHEV tokens
-PHEV_TOKENS = {'phev', 'plugin', 'plugin', '4xe', 'rechargeable', 'ehybrid', '플러그인'}
+# PHEV tokens (must win over HEV)
+PHEV_TOKENS = {
+    'phev', 'plugin',
+    '4xe',
+    'prime',  # Prius Prime, RAV4 Prime
+    'energi',  # Ford Energi models
+    'rechargeable', 'ehybrid',
+    'volt', 'ampera',  # Chevrolet Volt, Opel Ampera (PHEV versions)
+    '플러그인',
+}
 
-# HEV tokens (but not PHEV)
-HEV_TOKENS = {'hybrid', 'hev', 'selfcharging', '하이브리드'}
+# PHEV combinations (multi-token patterns)
+PHEV_COMBINATIONS = [
+    {'plug', 'in'},  # Plug-in becomes 'plug' + 'in'
+    {'a3', 'e', 'tron'},  # Audi A3 e-tron (PHEV)
+]
 
-# Known HEV models
-HEV_MODEL_TOKENS = {'prius', 'camry', 'accord', 'ioniq'}
+# HEV tokens (but ONLY if no PHEV tokens present)
+HEV_TOKENS = {'hybrid', 'selfcharging', '하이브리드'}
+
+# Known HEV models (specific)
+HEV_MODEL_TOKENS = {'prius', 'camry', 'accord'}
 
 # ICE indicators
 ICE_TOKENS = {'diesel', 'turbo', 'gdi', 'crdi', 'tci'}
@@ -127,15 +207,20 @@ def classify_vehicle_powertrain(
 ) -> Tuple[str, str, float]:
     """Classify vehicle powertrain with source and confidence.
     
+    Priority order:
+    1. VIN-based rules (highest confidence)
+    2. not_vehicle detection
+    3. File path folder evidence (e.g., "Ioniq HEV" folder, "Niro HEV" folder)
+    4. PHEV tokens (must win over HEV)
+    5. HEV tokens (but only 'hev' or 'hybrid', not substring of 'ev')
+    6. BEV specific tokens and combinations
+    7. Ambiguous base names without qualifiers → unknown
+    
     Returns:
         (powertrain, source, confidence)
-        - powertrain: BEV, PHEV, HEV, ICE, not_vehicle, or unknown
-        - source: vin_rule, model_name, path_token, or unknown
-        - confidence: 0.0-1.0
     """
     # Priority 1: VIN-based (if available)
     if vin and validate_vin(vin):
-        # Load VIN rules from database
         vin_rules = db.session.execute(text("""
             SELECT wmi_pattern, vds_position, vds_value_pattern, powertrain, confidence
             FROM vin_decode_rules
@@ -152,36 +237,89 @@ def classify_vehicle_powertrain(
     if is_not_vehicle(maker, model, file_path):
         return ('not_vehicle', 'path_token', 0.95)
     
-    # Priority 3: Model/submodel/file_path tokens
+    # Priority 3: File path folder evidence (explicit powertrain in folder name)
+    # This wins over token matching because it's specific context
+    if file_path:
+        path_lower = file_path.lower()
+        # Look for explicit folder markers like "Ioniq HEV", "Niro HEV", "Ioniq EV"
+        # Use word boundaries to avoid false matches
+        if re.search(r'/(.*?\s+|\b)hev\b', path_lower) or re.search(r'/.*?_hev[/_]', path_lower):
+            return ('HEV', 'path_folder:HEV', 0.95)
+        if re.search(r'/(.*?\s+|\b)phev\b', path_lower) or re.search(r'/.*?_phev[/_]', path_lower):
+            return ('PHEV', 'path_folder:PHEV', 0.95)
+        # EV folder markers (but not inside "HEV")
+        if re.search(r'/.*?\s+ev\b', path_lower) or re.search(r'/.*?_ev[/_\-]', path_lower) or re.search(r'/.*?-ev[/_\-]', path_lower):
+            # Double-check it's not "HEV"
+            if not re.search(r'hev', path_lower):
+                return ('BEV', 'path_folder:EV', 0.95)
+    
+    # Normalize all text for token matching
     all_text = ' '.join(filter(None, [maker, model, submodel, file_path or '']))
     normalized = normalize_text(all_text)
     tokens = extract_tokens(normalized)
     
-    # Check PHEV first (before general hybrid)
-    if tokens & PHEV_TOKENS:
-        return ('PHEV', 'model_name', 0.85)
+    # Priority 4: PHEV tokens and combinations (must win over HEV)
+    # Check PHEV combinations first
+    for combo in PHEV_COMBINATIONS:
+        if combo.issubset(tokens):
+            return ('PHEV', 'model_name:PHEV_combo', 0.90)
     
-    # Check BEV combinations
+    # Check PHEV tokens
+    if tokens & PHEV_TOKENS:
+        return ('PHEV', 'model_name:PHEV_token', 0.85)
+    
+    # Priority 5: HEV tokens (but ONLY the word 'hev' or 'hybrid', not substring)
+    # Check if 'hev' exists as a standalone token (not part of other words)
+    has_hev_token = 'hev' in tokens or 'hybrid' in tokens or 'selfcharging' in tokens or '하이브리드' in tokens
+    has_phev_evidence = bool(tokens & PHEV_TOKENS)
+    
+    if has_hev_token and not has_phev_evidence:
+        # Also check HEV model tokens
+        if tokens & HEV_MODEL_TOKENS:
+            return ('HEV', 'model_name:HEV_model', 0.80)
+        return ('HEV', 'model_name:HEV_token', 0.80)
+    
+    # Priority 6: BEV specific tokens and combinations
+    # Check BEV combinations first (more specific)
     for combo in BEV_COMBINATIONS:
         if combo.issubset(tokens):
-            return ('BEV', 'model_name', 0.90)
+            return ('BEV', 'model_name:BEV_combo', 0.90)
     
-    # Check BEV tokens
-    if tokens & BEV_TOKENS:
-        return ('BEV', 'model_name', 0.85)
+    # Check BEV specific tokens
+    if tokens & BEV_SPECIFIC_TOKENS:
+        return ('BEV', 'model_name:BEV_specific', 0.85)
     
-    # Check HEV (after filtering out PHEV)
-    if tokens & HEV_TOKENS or tokens & HEV_MODEL_TOKENS:
-        # Double-check not PHEV
-        if not (tokens & PHEV_TOKENS):
-            return ('HEV', 'model_name', 0.80)
+    # Check BEV qualifiers (electric, bev, ev, e-tron)
+    if tokens & BEV_QUALIFIERS:
+        # But NOT if it's an ambiguous base name without context
+        # Check if we only have an ambiguous base + qualifier
+        if tokens & AMBIGUOUS_BASE_NAMES:
+            # It's something like "Kona Electric" or "Niro EV" - these are BEV
+            # But just "Kona" or "Niro" alone would be ambiguous
+            base_names_present = tokens & AMBIGUOUS_BASE_NAMES
+            qualifiers_present = tokens & BEV_QUALIFIERS
+            
+            # If we have both base and qualifier, it's BEV
+            if base_names_present and qualifiers_present:
+                return ('BEV', 'model_name:base+BEV_qualifier', 0.85)
+        else:
+            # No ambiguous base, just qualifiers (e.g., "e-tron")
+            return ('BEV', 'model_name:BEV_qualifier', 0.85)
+    
+    # Priority 7: Check if it's an ambiguous base name alone (no qualifiers)
+    if tokens & AMBIGUOUS_BASE_NAMES:
+        # Check if there are NO powertrain qualifiers
+        has_qualifiers = bool(tokens & (BEV_QUALIFIERS | PHEV_TOKENS | {'hev', 'hybrid', '하이브리드'}))
+        if not has_qualifiers:
+            # Ambiguous base name without qualifier → stay unknown
+            return ('unknown', 'ambiguous_base', 0.0)
     
     # Check ICE indicators
     if tokens & ICE_TOKENS:
-        return ('ICE', 'model_name', 0.70)
+        return ('ICE', 'model_name:ICE_token', 0.70)
     
     # Unable to classify
-    return ('unknown', 'unknown', 0.0)
+    return ('unknown', 'no_match', 0.0)
 
 
 def reclassify_all_vehicles():
