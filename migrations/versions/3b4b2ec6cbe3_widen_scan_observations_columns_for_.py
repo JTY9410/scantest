@@ -21,21 +21,15 @@ def upgrade():
     with op.batch_alter_table('dbc_messages', schema=None) as batch_op:
         batch_op.create_index(batch_op.f('ix_dbc_messages_source_id'), ['source_id'], unique=False)
 
+    # dbc_signals protocol, ecu_module, signal_category already added by d7a3e8f6b2c9
+    # Only create indexes if they don't exist (idempotent)
     with op.batch_alter_table('dbc_signals', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('protocol', sa.String(length=20), nullable=True))
-        batch_op.add_column(sa.Column('ecu_module', sa.String(length=50), nullable=True))
-        batch_op.add_column(sa.Column('signal_category', sa.String(length=30), nullable=True))
-        batch_op.create_index('ix_dbc_signals_ecu_module', ['ecu_module'], unique=False)
-        batch_op.create_index(batch_op.f('ix_dbc_signals_message_id'), ['message_id'], unique=False)
-        batch_op.create_index('ix_dbc_signals_protocol', ['protocol'], unique=False)
-        batch_op.create_index('ix_dbc_signals_signal_category', ['signal_category'], unique=False)
+        batch_op.create_index(batch_op.f('ix_dbc_signals_message_id'), ['message_id'], unique=False, if_not_exists=True)
 
+    # diagnostic_commands protocol, ecu_module already added by d7a3e8f6b2c9
+    # Only create indexes if they don't exist
     with op.batch_alter_table('diagnostic_commands', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('protocol', sa.String(length=20), nullable=True))
-        batch_op.add_column(sa.Column('ecu_module', sa.String(length=50), nullable=True))
-        batch_op.create_index('ix_diagnostic_commands_ecu_module', ['ecu_module'], unique=False)
-        batch_op.create_index('ix_diagnostic_commands_protocol', ['protocol'], unique=False)
-        batch_op.create_index(batch_op.f('ix_diagnostic_commands_source_id'), ['source_id'], unique=False)
+        batch_op.create_index(batch_op.f('ix_diagnostic_commands_source_id'), ['source_id'], unique=False, if_not_exists=True)
 
     with op.batch_alter_table('knowledge_commands', schema=None) as batch_op:
         batch_op.alter_column('confidence',
@@ -122,21 +116,13 @@ def downgrade():
                existing_type=sa.DOUBLE_PRECISION(precision=53),
                nullable=True)
 
+    # protocol/ecu_module/signal_category columns and their indexes are from d7a3e8f6b2c9, not this migration
+    # Only drop indexes we created
     with op.batch_alter_table('diagnostic_commands', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ix_diagnostic_commands_source_id'))
-        batch_op.drop_index('ix_diagnostic_commands_protocol')
-        batch_op.drop_index('ix_diagnostic_commands_ecu_module')
-        batch_op.drop_column('ecu_module')
-        batch_op.drop_column('protocol')
+        batch_op.drop_index(batch_op.f('ix_diagnostic_commands_source_id'), if_exists=True)
 
     with op.batch_alter_table('dbc_signals', schema=None) as batch_op:
-        batch_op.drop_index('ix_dbc_signals_signal_category')
-        batch_op.drop_index('ix_dbc_signals_protocol')
-        batch_op.drop_index(batch_op.f('ix_dbc_signals_message_id'))
-        batch_op.drop_index('ix_dbc_signals_ecu_module')
-        batch_op.drop_column('signal_category')
-        batch_op.drop_column('ecu_module')
-        batch_op.drop_column('protocol')
+        batch_op.drop_index(batch_op.f('ix_dbc_signals_message_id'), if_exists=True)
 
     with op.batch_alter_table('dbc_messages', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_dbc_messages_source_id'))

@@ -15,7 +15,7 @@ import csv
 
 # revision identifiers, used by Alembic.
 revision = 'bcbabc4138b6'
-down_revision = 'd7a3e8f6b2c9'
+down_revision = '5e8f9a0b1c2d'
 branch_labels = None
 depends_on = None
 
