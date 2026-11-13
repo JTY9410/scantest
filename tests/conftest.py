@@ -42,13 +42,12 @@ def _clean_database(app):
             db.session.commit()
         else:
             # Postgres: DELETE in FK order + reset ALL sequences
-            # Disable triggers temporarily for faster cleanup
             for table in reversed(db.metadata.sorted_tables):
                 db.session.execute(text(f"DELETE FROM {table.name}"))
             
-            # Reset ALL sequences in the database
+            # Reset ALL sequences in the database (cast to text for setval)
             db.session.execute(text("""
-                SELECT setval(sequence_name, 1, false)
+                SELECT setval(sequence_name::text, 1, false)
                 FROM information_schema.sequences
                 WHERE sequence_schema = 'public'
             """))
