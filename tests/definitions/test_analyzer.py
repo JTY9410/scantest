@@ -4,6 +4,7 @@ import pytest
 from app.modules.definitions.analyzer import analyze_scan_with_definitions
 from app.modules.definitions.models import DiagnosticCommand, DefinitionSource
 from app.modules.scans.models import Scan
+from app.modules.accounts.passwords import hash_password
 
 
 def test_analyze_scan_basic(app):
@@ -13,7 +14,7 @@ def test_analyze_scan_basic(app):
         from app.modules.accounts.models import User
         
         # 테스트 사용자
-        user = User(tid='test', name='Test', type='admin')
+        user = User(tid='test', name='Test', type='admin', password=hash_password('test123'))
         db.session.add(user)
         db.session.flush()
         
@@ -85,7 +86,7 @@ def test_analyze_scan_no_definitions(app):
         from app.extensions import db
         from app.modules.accounts.models import User
         
-        user = User(tid='test2', name='Test', type='admin')
+        user = User(tid='test2', name='Test', type='admin', password=hash_password('test123'))
         db.session.add(user)
         db.session.flush()
         
