@@ -44,10 +44,20 @@ def upgrade():
     for row in rows:
         # NULL 처리
         def parse_float(val):
-            return float(val) if val and val.strip() else None
+            if not val or not val.strip():
+                return None
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                return None
         
         def parse_int(val):
-            return int(float(val)) if val and val.strip() else None
+            if not val or not val.strip():
+                return None
+            try:
+                return int(float(val))
+            except (ValueError, TypeError):
+                return None
         
         # Upsert (maker, model, trim_grade, model_year 조합이 unique)
         conn.execute(sa.text("""
