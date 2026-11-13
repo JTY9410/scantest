@@ -17,8 +17,7 @@ depends_on = None
 
 
 def upgrade():
-    # VehicleDefinition에 powertrain 추가
-    op.add_column('vehicle_definitions', sa.Column('powertrain', sa.String(20), nullable=True))
+    # VehicleDefinition.powertrain은 이미 존재 (eea77f2e08ba에서 생성)
     
     # DbcSignal에 분류 컬럼 추가
     op.add_column('dbc_signals', sa.Column('protocol', sa.String(20), nullable=True))
@@ -140,4 +139,4 @@ def downgrade():
     op.drop_column('dbc_signals', 'signal_category')
     op.drop_column('dbc_signals', 'ecu_module')
     op.drop_column('dbc_signals', 'protocol')
-    op.drop_column('vehicle_definitions', 'powertrain')
+    # powertrain은 기본 테이블 정의이므로 삭제하지 않음

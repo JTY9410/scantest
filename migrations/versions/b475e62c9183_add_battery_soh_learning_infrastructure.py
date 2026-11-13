@@ -80,7 +80,7 @@ def upgrade():
         sa.Column('r_squared', sa.Float(), nullable=True),
         sa.Column('validation_mae', sa.Float(), nullable=True),
         sa.Column('validation_sample_count', sa.Integer(), nullable=True),
-        sa.Column('is_active', sa.Boolean(), server_default=sa.text('0'), nullable=False),
+        sa.Column('is_active', sa.Boolean(), server_default=sa.text('false'), nullable=False),
         sa.Column('trained_at', sa.DateTime(), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
         sa.Column('notes', sa.Text(), nullable=True),
         sa.PrimaryKeyConstraint('id')
