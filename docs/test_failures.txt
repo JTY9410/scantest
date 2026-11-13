@@ -1,0 +1,156 @@
+FAILED tests/admin/test_admin_auth.py::test_logout_requires_post_and_ends_session
+FAILED tests/admin/test_admin_auth.py::test_mfa_is_required_once_enabled - as...
+FAILED tests/admin/test_admin_auth.py::test_admin_can_enroll_otp_and_password_change
+FAILED tests/admin/test_ai_connections.py::test_key_is_encrypted_and_only_last4_is_shown
+FAILED tests/admin/test_ai_connections.py::test_connection_test_records_result
+FAILED tests/admin/test_ai_connections.py::test_revoke_removes_key_and_disables_features
+FAILED tests/admin/test_ai_connections.py::test_settings_conflict_is_detected
+FAILED tests/admin/test_battery_csv_import.py::test_battery_specs_csv_import
+FAILED tests/admin/test_battery_csv_import.py::test_battery_specs_csv_import_skip_duplicates
+FAILED tests/admin/test_car_info_settings.py::test_key_is_encrypted_and_used_before_env
+FAILED tests/admin/test_car_info_settings.py::test_url_must_be_https_and_revoke_clears_key
+FAILED tests/admin/test_members.py::test_member_edit_saves_and_audits - asser...
+FAILED tests/admin/test_members.py::test_member_edit_detects_concurrent_change
+FAILED tests/admin/test_members.py::test_member_edit_rejects_duplicate_email
+FAILED tests/admin/test_members.py::test_admin_cannot_demote_self - assert '...
+FAILED tests/admin/test_obd_devices.py::test_web_remembers_device_for_panel_and_admin_list
+FAILED tests/admin/test_obd_devices.py::test_web_device_validation_and_other_users
+FAILED tests/admin/test_obd_profiles.py::test_admin_creates_ble_profile_with_normalized_commands
+FAILED tests/admin/test_obd_profiles.py::test_invalid_profile_input_is_rejected_with_reason
+FAILED tests/admin/test_obd_profiles.py::test_classic_profile_drops_ble_uuids
+FAILED tests/admin/test_obd_profiles.py::test_stale_edit_is_rejected - Assert...
+FAILED tests/admin/test_obd_profiles.py::test_app_api_lists_only_enabled_profiles
+FAILED tests/admin/test_obd_profiles.py::test_slcan_profile_takes_bitrate_and_no_adapter_commands
+FAILED tests/admin/test_pages.py::test_company_and_code_can_be_created_and_edited
+FAILED tests/api/test_auth_api.py::test_refresh_rotates_token - assert 400 ==...
+FAILED tests/api/test_auth_api.py::test_sms_verification_flow_resets_password
+FAILED tests/api/test_can_captures_api.py::test_capture_upload_returns_result_sheet_from_active_rules
+FAILED tests/api/test_can_captures_api.py::test_capture_upload_validates_input
+FAILED tests/api/test_car_info_api.py::test_car_info_returns_original_dto_and_reuses_cache
+FAILED tests/api/test_car_info_api.py::test_car_info_failure_keeps_laravel_format
+FAILED tests/api/test_obd_devices_api.py::test_app_remembers_device_and_updates_same_name
+FAILED tests/api/test_obd_devices_api.py::test_devices_are_per_user_and_delete_only_own
+FAILED tests/api/test_resources_api.py::test_tester_creates_scan_for_self - a...
+FAILED tests/api/test_resources_api.py::test_owner_cannot_create_scan - asser...
+FAILED tests/api/test_resources_api.py::test_testers_only_see_their_own_scans
+FAILED tests/api/test_resources_api.py::test_list_meta_search_and_page_size_cap
+FAILED tests/api/test_resources_api.py::test_scan_update_and_soft_delete - Ke...
+FAILED tests/api/test_resources_api.py::test_applogs_are_scoped_to_the_member
+FAILED tests/api/test_resources_api.py::test_mismatch_reports_are_scoped_to_the_member
+FAILED tests/api/test_scan_runs_api.py::test_scan_plan_uses_car_info_and_web_plan
+FAILED tests/api/test_scan_runs_api.py::test_scan_plan_without_car_info_still_returns_generic_plan
+FAILED tests/api/test_scan_runs_api.py::test_scan_run_saves_scan_and_returns_pdf_url
+FAILED tests/api/test_scan_runs_api.py::test_scan_run_validates_input - Asser...
+FAILED tests/api/test_telematics_api.py::test_device_token_is_shown_once_and_hashed
+FAILED tests/api/test_telematics_api.py::test_plan_and_capture_with_device_token
+FAILED tests/api/test_telematics_api.py::test_bad_or_disabled_token_is_rejected
+FAILED tests/canlab/test_csv_bms.py::test_csv_upload_shows_bms_sequence_and_compare
+FAILED tests/canlab/test_csv_bms.py::test_csv_upload_respects_limit - assert ...
+FAILED tests/canlab/test_deferred_c6_c9.py::test_cross_check_on_detects_mismatch
+FAILED tests/canlab/test_deferred_c6_c9.py::test_cross_check_soc_vs_display
+FAILED tests/canlab/test_deferred_c6_c9.py::test_broadcast_flag_on_adds_analysis
+FAILED tests/canlab/test_engine.py::test_dtc_summary_with_ftb_labels_on - Key...
+FAILED tests/canlab/test_reconcile.py::test_reconcile_web_flow_requires_vin_confirm_then_finalizes_scan
+FAILED tests/canlab/test_reconcile.py::test_vin_mismatch_stops - assert (400 ...
+FAILED tests/canlab/test_v3_features.py::test_uds_dtcs_flag_on_adds_fault_type
+FAILED tests/canlab/test_v3_features.py::test_c2a_blocks_when_candidate_on_counter
+FAILED tests/canlab/test_v3_features.py::test_security_trace_flag_on - assert...
+FAILED tests/canlab/test_v3_features.py::test_unlock_requires_both_flags - as...
+FAILED tests/canlab/test_web.py::test_upload_summarises_trace_and_masks_vin
+FAILED tests/canlab/test_web.py::test_trace_dataset_links_compare_and_rules
+FAILED tests/canlab/test_web.py::test_upload_rejects_duplicates_wrong_files_and_oversize
+FAILED tests/canlab/test_web.py::test_pdf_page_image_and_manual_truths - werk...
+FAILED tests/canlab/test_web.py::test_ai_ocr_adds_unconfirmed_values_then_admin_confirms
+FAILED tests/canlab/test_web.py::test_ocr_without_ai_connection_explains_how_to_enable
+FAILED tests/canlab/test_web.py::test_scanner_lookup_gives_vehicle_details_for_input_page
+FAILED tests/canlab/test_web.py::test_ingest_requires_known_vehicle_and_valid_reverse_files
+FAILED tests/canlab/test_web.py::test_wescan_values_from_csv_file_and_missing_values
+FAILED tests/canlab/test_web.py::test_text_pdf_values_are_confirmed_before_analysis
+FAILED tests/canlab/test_web.py::test_wescan_values_from_image_pdf_use_ai - a...
+FAILED tests/canlab/test_web.py::test_analysis_never_replaces_active_rules_and_flags_overlap
+FAILED tests/canlab/test_web.py::test_live_capture_is_saved_as_dataset - asse...
+FAILED tests/canlab/test_web.py::test_reference_url_must_be_public_https - as...
+FAILED tests/canlab/test_web.py::test_reference_url_is_extracted_by_ai_and_used_only_after_approval
+FAILED tests/canlab/test_web.py::test_obdb_sync_saves_approved_references - a...
+FAILED tests/canlab/test_web.py::test_pdf_compare_waits_until_values_are_confirmed
+FAILED tests/canlab/test_web.py::test_compare_requires_scan_and_truths - asse...
+FAILED tests/definitions/test_service.py::test_update_command_stats_auto_verification
+FAILED tests/knowledge/test_command_alerts.py::test_admin_delete_flow - asser...
+FAILED tests/knowledge/test_command_alerts.py::test_admin_keep_flow_snoozes_until_new_failures
+FAILED tests/knowledge/test_importer.py::test_import_json_route_stores_uploaded_file
+FAILED tests/knowledge/test_knowledge_crud.py::test_admin_can_edit_and_delete_knowledge
+FAILED tests/knowledge/test_uploads.py::test_pdf_upload_reads_text_and_skips_session_command
+FAILED tests/migrations/test_classification_backfill.py::test_classification_migration_backfill
+FAILED tests/scanner/test_ai_verify.py::test_ai_verify_endpoint - assert 400 ...
+FAILED tests/scanner/test_clear_flow.py::test_web_clear_needs_permission_mfa_and_confirmation
+FAILED tests/scanner/test_clear_flow.py::test_web_clear_saves_result_once_and_audits
+FAILED tests/scanner/test_clear_flow.py::test_web_clear_rejects_expired_token_and_stale_scan
+FAILED tests/scanner/test_clear_flow.py::test_api_clear_for_tester_with_permission_only
+FAILED tests/scanner/test_clear_flow.py::test_api_scan_plan_ignores_clear_flag
+FAILED tests/scanner/test_integration_full.py::test_test_transport_validates_transport
+FAILED tests/scanner/test_integration_full.py::test_test_transport_rejects_unverified
+FAILED tests/scanner/test_integration_full.py::test_run_with_transport_validates_input
+FAILED tests/scanner/test_integration_full.py::test_run_with_transport_with_mock_doip
+FAILED tests/scanner/test_learn_report.py::test_api_scans_do_not_learn - Asse...
+FAILED tests/scanner/test_powertrain.py::test_change_type_on_result_page_keeps_history
+FAILED tests/scanner/test_routes_security.py::test_test_transport_validates_input
+FAILED tests/scanner/test_routes_security.py::test_run_with_transport_validates_input
+FAILED tests/scanner/test_routes_security.py::test_unverified_transports_are_rejected[j2534_kline]
+FAILED tests/scanner/test_routes_security.py::test_unverified_transports_are_rejected[j2534_j1850]
+FAILED tests/scanner/test_routes_security.py::test_doip_blocks_ssrf_targets[169.254.169.254]
+FAILED tests/scanner/test_routes_security.py::test_doip_blocks_ssrf_targets[169.254.1.1]
+FAILED tests/scanner/test_routes_security.py::test_doip_blocks_ssrf_targets[metadata.google.internal]
+FAILED tests/scanner/test_routes_security.py::test_doip_blocks_ssrf_targets[0.0.0.0]
+FAILED tests/scanner/test_routes_security.py::test_doip_blocks_ssrf_targets[224.0.0.1]
+FAILED tests/scanner/test_routes_security.py::test_doip_blocks_ssrf_targets[fe80::1]
+FAILED tests/scanner/test_routes_security.py::test_doip_blocks_ssrf_targets[::ffff:169.254.169.254]
+FAILED tests/scanner/test_routes_security.py::test_doip_blocks_ssrf_targets[bad host!]
+FAILED tests/scanner/test_routes_security.py::test_j2534_blocks_ssrf_targets[http://169.254.169.254/]
+FAILED tests/scanner/test_routes_security.py::test_j2534_blocks_ssrf_targets[http://metadata.google.internal:80]
+FAILED tests/scanner/test_routes_security.py::test_j2534_blocks_ssrf_targets[http://user:pw@127.0.0.1:5000]
+FAILED tests/scanner/test_routes_security.py::test_connection_failure_does_not_leak_exception_details
+FAILED tests/scanner/test_routes_security.py::test_unexpected_error_returns_generic_500
+FAILED tests/scanner/test_routes_security.py::test_test_transport_with_mock_doip
+FAILED tests/scanner/test_routes_security.py::test_test_transport_with_mock_j2534
+FAILED tests/scanner/test_routes_security.py::test_run_with_transport_with_mock_doip
+FAILED tests/scanner/test_serverless_policy.py::test_routes_block_server_transport_on_blocked_server[j2534_can-config0]
+FAILED tests/scanner/test_serverless_policy.py::test_routes_block_server_transport_on_blocked_server[doip-config1]
+FAILED tests/scanner/test_service.py::test_result_page_pops_up_logic_problems_and_handles_deleted_report
+FAILED tests/scanner/test_web.py::test_lookup_failure_is_audited - AttributeE...
+FAILED tests/scanner/test_web.py::test_lookup_success_and_failure - assert (4...
+FAILED tests/scanner/test_web.py::test_scanner_requires_admin_and_csrf - Asse...
+FAILED tests/scanner/test_web.py::test_scan_plan_accepts_csrf_older_than_one_hour
+FAILED tests/scanner/test_web.py::test_run_then_result_page_shows_wescan_format
+ERROR tests/admin/test_definitions_admin.py::test_definitions_sources_list - ...
+ERROR tests/admin/test_definitions_admin.py::test_definitions_sources_list_requires_admin
+ERROR tests/admin/test_definitions_admin.py::test_definitions_vehicles_list
+ERROR tests/admin/test_definitions_admin.py::test_definitions_vehicles_list_filter_by_maker
+ERROR tests/admin/test_definitions_admin.py::test_definitions_vehicles_list_filter_by_powertrain
+ERROR tests/admin/test_definitions_admin.py::test_definitions_signals_list - ...
+ERROR tests/admin/test_definitions_admin.py::test_definitions_signals_list_filter_by_ecu
+ERROR tests/admin/test_definitions_admin.py::test_definitions_signals_list_filter_by_category
+ERROR tests/admin/test_definitions_admin.py::test_definitions_commands_list
+ERROR tests/admin/test_definitions_admin.py::test_definitions_commands_list_filter_by_protocol
+ERROR tests/admin/test_definitions_admin.py::test_definitions_commands_list_filter_by_ecu
+ERROR tests/admin/test_definitions_admin.py::test_all_definitions_pages_require_admin
+ERROR tests/canlab/test_web.py::test_ingest_extracts_vehicle_commands_and_analyses
+ERROR tests/canlab/test_web.py::test_ingest_again_reuses_uploaded_files - ass...
+ERROR tests/canlab/test_web.py::test_apply_shows_before_after_and_confirm_changes_scan_logic
+ERROR tests/canlab/test_web.py::test_confirm_with_stale_version_is_rejected
+ERROR tests/canlab/test_web.py::test_advise_without_ai_shows_rule_based_default
+ERROR tests/canlab/test_web.py::test_ai_advice_is_shown_as_recommendation - a...
+ERROR tests/canlab/test_web.py::test_new_logic_replaces_old_and_rollback_brings_back_rules
+ERROR tests/canlab/test_web.py::test_report_from_wescan_trace_uses_applied_rules
+ERROR tests/canlab/test_web.py::test_reset_cli_counts_then_deletes_all_canlab_data
+ERROR tests/canlab/test_web.py::test_rule_rollback_and_conflict - assert 400 ...
+ERROR tests/canlab/test_web.py::test_ai_report_summary_is_saved - assert 400 ...
+ERROR tests/canlab/test_web.py::test_live_preview_interprets_without_saving
+ERROR tests/canlab/test_web.py::test_live_capture_can_create_report_directly
+ERROR tests/canlab/test_web.py::test_live_page_connects_without_profiles - as...
+ERROR tests/canlab/test_web.py::test_dashboard_has_bluetooth_card - assert 40...
+ERROR tests/canlab/test_web.py::test_scoped_rules_apply_only_to_matching_cars
+ERROR tests/canlab/test_web.py::test_expand_to_maker_then_rollback_leaves_model_scope
+ERROR tests/canlab/test_web.py::test_logic_problems_are_logged_and_listed - a...
+ERROR tests/canlab/test_web.py::test_compare_tab_and_scan_wescan_compare - as...
+ERROR tests/canlab/test_web.py::test_compare_upload_file_without_dataset - as...
+ERROR tests/canlab/test_web.py::test_obd_panel_has_connect_button_and_first_time_hint
