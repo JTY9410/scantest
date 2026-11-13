@@ -29,6 +29,8 @@ def _clean_database(app):
     """Proper test isolation with DELETE + sequence reset"""
     yield
     with app.app_context():
+        # Rollback any pending transactions first
+        db.session.rollback()
         db.session.remove()
         
         if "sqlite" in app.config["SQLALCHEMY_DATABASE_URI"]:
@@ -52,6 +54,9 @@ def _clean_database(app):
                 WHERE sequence_schema = 'public'
             """))
             db.session.commit()
+        
+        # Clean up session state
+        db.session.remove()
     
     limiter.reset()
 
