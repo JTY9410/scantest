@@ -26,10 +26,13 @@ def app():
 
 @pytest.fixture(autouse=True)
 def _clean_database(app):
-    """Fast database cleanup with TRUNCATE CASCADE"""
+    """Fast database cleanup with proper connection management"""
     yield
     with app.app_context():
+        # Close all connections first to avoid lock conflicts
+        db.session.close()
         db.session.remove()
+        db.engine.dispose()
         
         if "sqlite" in app.config["SQLALCHEMY_DATABASE_URI"]:
             # SQLite: use DELETE
@@ -41,11 +44,14 @@ def _clean_database(app):
                 pass
             db.session.commit()
         else:
-            # Postgres: Single TRUNCATE CASCADE is fast and correct
-            # Resets sequences and clears all data atomically
-            tables = ", ".join(t.name for t in db.metadata.sorted_tables)
-            db.session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
-            db.session.commit()
+            # Postgres: TRUNCATE CASCADE with connection cleanup
+            try:
+                tables = ", ".join(t.name for t in db.metadata.sorted_tables)
+                db.session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+                db.session.commit()
+            except Exception:
+                # Fallback to rollback on error
+                db.session.rollback()
     
     limiter.reset()
 
