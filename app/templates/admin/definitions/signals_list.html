@@ -1,0 +1,75 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, empty, pagination as render_pagination %}
+{% block title %}DBC 신호 관리{% endblock %}
+
+{% block content %}
+{% call page_header("DBC 신호", "CAN 메시지 신호 정의") %}{% endcall %}
+
+<div class="card card-body">
+  <form method="get" class="mb-4 flex gap-2">
+    <select name="protocol" class="input flex-1">
+      <option value="">모든 프로토콜</option>
+      {% for proto, count in by_protocol %}
+      <option value="{{ proto }}" {{ 'selected' if current_protocol == proto }}>{{ proto or '미분류' }} ({{ count }})</option>
+      {% endfor %}
+    </select>
+    <select name="ecu_module" class="input flex-1">
+      <option value="">모든 ECU</option>
+      {% for ecu, count in by_ecu %}
+      <option value="{{ ecu }}" {{ 'selected' if current_ecu_module == ecu }}>{{ ecu or '미분류' }} ({{ count }})</option>
+      {% endfor %}
+    </select>
+    <select name="signal_category" class="input flex-1">
+      <option value="">모든 카테고리</option>
+      {% for cat, count in by_category %}
+      <option value="{{ cat }}" {{ 'selected' if current_signal_category == cat }}>{{ cat or '미분류' }} ({{ count }})</option>
+      {% endfor %}
+    </select>
+    <input type="text" name="search" value="{{ current_search }}" placeholder="검색" class="input flex-1">
+    <button type="submit" class="btn btn-secondary">검색</button>
+    <a href="{{ url_for('definitions_admin.signals_list') }}" class="btn">초기화</a>
+  </form>
+
+  <div class="mb-4">
+    <p class="text-sm text-muted">총 <strong>{{ total_count }}</strong>개 신호</p>
+  </div>
+
+  {% if signals %}
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>신호명</th>
+          <th>프로토콜</th>
+          <th>ECU</th>
+          <th>카테고리</th>
+          <th>단위</th>
+          <th>범위</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for signal in signals %}
+        <tr>
+          <td class="font-mono text-sm">{{ signal.signal_name }}</td>
+          <td><span class="badge">{{ signal.protocol or '-' }}</span></td>
+          <td><span class="badge">{{ signal.ecu_module or '-' }}</span></td>
+          <td class="text-sm">{{ signal.signal_category or '-' }}</td>
+          <td class="text-sm">{{ signal.unit or '-' }}</td>
+          <td class="text-sm text-muted">
+            {% if signal.min_value is not none and signal.max_value is not none %}
+            {{ signal.min_value }} ~ {{ signal.max_value }}
+            {% else %}
+            -
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ render_pagination(pagination, 'definitions_admin.signals_list', protocol=current_protocol, ecu_module=current_ecu_module, signal_category=current_signal_category, search=current_search) }}
+  {% else %}
+  {{ empty("신호 정의가 없습니다") }}
+  {% endif %}
+</div>
+{% endblock %}

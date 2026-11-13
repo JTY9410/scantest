@@ -1,0 +1,67 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, empty, pagination as render_pagination %}
+{% block title %}차량 정의 관리{% endblock %}
+
+{% block content %}
+{% call page_header("차량 정의", "제조사·모델별 정의 매핑") %}{% endcall %}
+
+<div class="card card-body">
+  <form method="get" class="mb-4 flex gap-2">
+    <select name="maker" class="input flex-1">
+      <option value="">모든 제조사</option>
+      {% for maker, count in by_maker %}
+      <option value="{{ maker }}" {{ 'selected' if current_maker == maker }}>{{ maker }} ({{ count }})</option>
+      {% endfor %}
+    </select>
+    <input type="text" name="model" value="{{ current_model }}" placeholder="모델명" class="input flex-1">
+    <select name="powertrain" class="input flex-1">
+      <option value="">모든 파워트레인</option>
+      {% for pt, count in by_powertrain %}
+      <option value="{{ pt }}" {{ 'selected' if current_powertrain == pt }}>{{ pt or '미분류' }} ({{ count }})</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn-secondary">검색</button>
+    <a href="{{ url_for('definitions_admin.vehicles_list') }}" class="btn">초기화</a>
+  </form>
+
+  <div class="mb-4">
+    <p class="text-sm text-muted">총 <strong>{{ total_count }}</strong>개 차량</p>
+  </div>
+
+  {% if vehicles %}
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>제조사</th>
+          <th>모델</th>
+          <th>서브모델</th>
+          <th>연도</th>
+          <th>파워트레인</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for vehicle in vehicles %}
+        <tr>
+          <td><strong>{{ vehicle.maker }}</strong></td>
+          <td>{{ vehicle.model }}</td>
+          <td class="text-sm text-muted">{{ vehicle.submodel or '-' }}</td>
+          <td class="text-sm">{{ vehicle.year_from }}{% if vehicle.year_to %}-{{ vehicle.year_to }}{% endif %}</td>
+          <td>
+            {% if vehicle.powertrain %}
+            <span class="badge">{{ vehicle.powertrain }}</span>
+            {% else %}
+            <span class="text-muted">-</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ render_pagination(pagination, 'definitions_admin.vehicles_list', maker=current_maker, model=current_model, powertrain=current_powertrain) }}
+  {% else %}
+  {{ empty("차량 정의가 없습니다") }}
+  {% endif %}
+</div>
+{% endblock %}

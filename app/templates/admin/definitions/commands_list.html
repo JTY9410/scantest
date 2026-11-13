@@ -1,0 +1,66 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, empty, pagination as render_pagination %}
+{% block title %}진단 명령 관리{% endblock %}
+
+{% block content %}
+{% call page_header("진단 명령", "OBD2/UDS 진단 명령 정의") %}{% endcall %}
+
+<div class="card card-body">
+  <form method="get" class="mb-4 flex gap-2">
+    <select name="protocol" class="input flex-1">
+      <option value="">모든 프로토콜</option>
+      {% for proto, count in by_protocol %}
+      <option value="{{ proto }}" {{ 'selected' if current_protocol == proto }}>{{ proto or '미분류' }} ({{ count }})</option>
+      {% endfor %}
+    </select>
+    <select name="ecu_module" class="input flex-1">
+      <option value="">모든 ECU</option>
+      {% for ecu, count in by_ecu %}
+      <option value="{{ ecu }}" {{ 'selected' if current_ecu_module == ecu }}>{{ ecu or '미분류' }} ({{ count }})</option>
+      {% endfor %}
+    </select>
+    <input type="text" name="search" value="{{ current_search }}" placeholder="검색" class="input flex-1">
+    <button type="submit" class="btn btn-secondary">검색</button>
+    <a href="{{ url_for('definitions_admin.commands_list') }}" class="btn">초기화</a>
+  </form>
+
+  <div class="mb-4">
+    <p class="text-sm text-muted">총 <strong>{{ total_count }}</strong>개 명령</p>
+  </div>
+
+  {% if commands %}
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>명령</th>
+          <th>프로토콜</th>
+          <th>ECU</th>
+          <th>신호명</th>
+          <th>단위</th>
+          <th>설명</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cmd in commands %}
+        <tr>
+          <td class="font-mono text-sm">
+            {{ cmd.service_id }}
+            {% if cmd.pid %}{{ cmd.pid }}{% endif %}
+          </td>
+          <td><span class="badge">{{ cmd.protocol or '-' }}</span></td>
+          <td><span class="badge">{{ cmd.ecu_module or '-' }}</span></td>
+          <td class="text-sm">{{ cmd.signal_name or '-' }}</td>
+          <td class="text-sm">{{ cmd.unit_name or '-' }}</td>
+          <td class="text-sm text-muted">{{ cmd.description | truncate(50) if cmd.description else '-' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ render_pagination(pagination, 'definitions_admin.commands_list', protocol=current_protocol, ecu_module=current_ecu_module, search=current_search) }}
+  {% else %}
+  {{ empty("진단 명령 정의가 없습니다") }}
+  {% endif %}
+</div>
+{% endblock %}

@@ -17,8 +17,7 @@ depends_on = None
 
 
 def upgrade():
-    # VehicleDefinition에 powertrain 추가
-    op.add_column('vehicle_definitions', sa.Column('powertrain', sa.String(20), nullable=True))
+    # VehicleDefinition.powertrain은 이미 존재 (eea77f2e08ba에서 생성)
     
     # DbcSignal에 분류 컬럼 추가
     op.add_column('dbc_signals', sa.Column('protocol', sa.String(20), nullable=True))
@@ -37,90 +36,90 @@ def upgrade():
     op.create_index('ix_diagnostic_commands_protocol', 'diagnostic_commands', ['protocol'])
     op.create_index('ix_diagnostic_commands_ecu_module', 'diagnostic_commands', ['ecu_module'])
     
-    # 백필 (deterministic rules)
-    # 1. Powertrain from model names
+    # 백필 (deterministic rules) - REAL schema 기준
+    # 1. Powertrain from model names (word boundaries)
     op.execute("""
         UPDATE vehicle_definitions
         SET powertrain = CASE
-            WHEN model ILIKE '%EV%' OR model ILIKE '%ioniq%' OR model ILIKE '%kona electric%' 
-                OR model ILIKE '%niro ev%' OR model ILIKE '%soul ev%' THEN 'BEV'
-            WHEN model ILIKE '%plug%' OR model ILIKE '%phev%' THEN 'PHEV'
-            WHEN model ILIKE '%hybrid%' OR model ILIKE '%hev%' THEN 'HEV'
-            ELSE 'ICE'
+            WHEN model ~* '\\m(EV6|EV9|IONIQ 5|IONIQ 6|KONA ELECTRIC|KONA EV|NIRO EV|SOUL EV|E-GMP|GV60|GV70 ELECTRIC|ID\\.4|ID\\.3|ID\\.7|MODEL [3SXY]|LEAF|ARIYA|BOLT EV|BOLT EUV|E-TRON|TAYCAN|I-PACE|MACH-E)\\M' THEN 'BEV'
+            WHEN model ~* '\\m(PLUG-?IN|PHEV|NIRO PLUG|SORENTO PLUG|SPORTAGE PLUG|TUCSON PLUG|OUTLANDER PHEV)\\M' THEN 'PHEV'
+            WHEN model ~* '\\m(HYBRID|HEV|PRIUS|CAMRY HYBRID|TUCSON HYBRID|SONATA HYBRID|ACCORD HYBRID)\\M' 
+                AND NOT model ~* '\\m(PLUG)\\M' THEN 'HEV'
+            ELSE 'unknown'
         END
         WHERE powertrain IS NULL
     """)
     
-    # 2. Protocol from source type or file path
+    # 2. DBC signals are always CAN protocol
     op.execute("""
         UPDATE dbc_signals
-        SET protocol = CASE
-            WHEN EXISTS (
-                SELECT 1 FROM definition_sources ds 
-                WHERE ds.id = dbc_signals.source_id 
-                AND (ds.source_type = 'dbc' OR ds.file_path LIKE '%.dbc')
-            ) THEN 'CAN'
-            ELSE 'CAN'
-        END
+        SET protocol = 'CAN'
         WHERE protocol IS NULL
     """)
     
+    # 3. Protocol for diagnostic commands (use `service` column, not service_id)
     op.execute("""
         UPDATE diagnostic_commands
         SET protocol = CASE
-            WHEN service_id IN ('01', '02', '09') THEN 'OBD-II'
-            WHEN service_id IN ('10', '11', '14', '19', '22', '27', '2E', '31', '3E') THEN 'UDS'
-            WHEN service_id IN ('21', '22', '23', '24') AND mode IS NOT NULL THEN 'KWP2000'
-            ELSE 'UDS'
+            WHEN service IN ('01', '02', '03', '04', '05', '06', '07', '08', '09', '0A') THEN 'OBD-II'
+            WHEN service IN ('10', '11', '14', '19', '22', '27', '2E', '2F', '31', '3E', '85') THEN 'UDS'
+            WHEN service IN ('21', '23') THEN 'KWP2000'
+            ELSE 'unknown'
         END
         WHERE protocol IS NULL
     """)
     
-    # 3. ECU module from signal/command name patterns
+    # 4. ECU module from signal name patterns
     op.execute("""
         UPDATE dbc_signals
         SET ecu_module = CASE
-            WHEN signal_name ILIKE '%bms%' OR signal_name ILIKE '%battery%' OR signal_name ILIKE '%soc%' OR signal_name ILIKE '%soh%' THEN 'BMS'
-            WHEN signal_name ILIKE '%motor%' OR signal_name ILIKE '%inverter%' OR signal_name ILIKE '%mccu%' THEN 'MCU'
-            WHEN signal_name ILIKE '%obc%' OR signal_name ILIKE '%charger%' OR signal_name ILIKE '%charge%' THEN 'OBC'
-            WHEN signal_name ILIKE '%vcu%' OR signal_name ILIKE '%vehicle%' THEN 'VCU'
-            WHEN signal_name ILIKE '%cluster%' OR signal_name ILIKE '%dashboard%' THEN 'CLUSTER'
-            WHEN signal_name ILIKE '%bcm%' OR signal_name ILIKE '%body%' THEN 'BCM'
-            WHEN signal_name ILIKE '%abs%' OR signal_name ILIKE '%brake%' THEN 'ABS'
+            WHEN signal_name ~* '(bms|battery|pack|cell|soc|soh)' THEN 'BMS'
+            WHEN signal_name ~* '(motor|inverter|mccu|mcu)' THEN 'MCU'
+            WHEN signal_name ~* '(obc|charger|charge(?!_discharge))' THEN 'OBC'
+            WHEN signal_name ~* '(vcu|vehicle_control)' THEN 'VCU'
+            WHEN signal_name ~* '(ecm|engine)' THEN 'ECM'
+            WHEN signal_name ~* '(tcm|transmission)' THEN 'TCM'
+            WHEN signal_name ~* '(cluster|dashboard|display)' THEN 'CLUSTER'
+            WHEN signal_name ~* '(bcm|body)' THEN 'BCM'
+            WHEN signal_name ~* '(abs|brake)' THEN 'ABS'
             ELSE 'UNKNOWN'
         END
         WHERE ecu_module IS NULL
     """)
     
+    # 5. ECU module from ecu_name and label (REAL columns: ecu_name, label, NOT unit_name/signal_name)
     op.execute("""
         UPDATE diagnostic_commands
         SET ecu_module = CASE
-            WHEN unit_name ILIKE '%bms%' OR unit_name ILIKE '%battery%' THEN 'BMS'
-            WHEN unit_name ILIKE '%motor%' OR unit_name ILIKE '%mcu%' THEN 'MCU'
-            WHEN unit_name ILIKE '%charger%' OR unit_name ILIKE '%obc%' THEN 'OBC'
-            WHEN unit_name ILIKE '%vcu%' OR unit_name ILIKE '%vehicle%' THEN 'VCU'
-            WHEN unit_name ILIKE '%ecm%' OR unit_name ILIKE '%engine%' THEN 'ECM'
-            WHEN unit_name ILIKE '%tcm%' OR unit_name ILIKE '%transmission%' THEN 'TCM'
+            WHEN ecu_name ~* '(bms|battery)' OR label ~* '(battery|pack|cell|soc|soh)' THEN 'BMS'
+            WHEN ecu_name ~* '(motor|mcu|inverter)' OR label ~* '(motor|inverter)' THEN 'MCU'
+            WHEN ecu_name ~* '(obc|charger)' OR label ~* '(charger|charging)' THEN 'OBC'
+            WHEN ecu_name ~* '(vcu|vehicle)' OR label ~* '(vehicle_control)' THEN 'VCU'
+            WHEN ecu_name ~* '(ecm|engine)' OR label ~* '(engine|rpm|coolant)' THEN 'ECM'
+            WHEN ecu_name ~* '(tcm|transmission)' OR label ~* '(transmission|gear)' THEN 'TCM'
+            WHEN ecu_name ~* '(cluster|dashboard)' THEN 'CLUSTER'
+            WHEN ecu_name ~* '(bcm|body)' THEN 'BCM'
+            WHEN ecu_name ~* '(abs|brake)' OR label ~* '(abs|brake)' THEN 'ABS'
             ELSE 'UNKNOWN'
         END
         WHERE ecu_module IS NULL
     """)
     
-    # 4. Signal category from signal name keywords
+    # 6. Signal category from signal name keywords
     op.execute("""
         UPDATE dbc_signals
         SET signal_category = CASE
-            WHEN signal_name ILIKE '%soc%' OR signal_name ILIKE '%state%charge%' THEN 'battery_soc'
-            WHEN signal_name ILIKE '%soh%' OR signal_name ILIKE '%state%health%' THEN 'battery_soh'
-            WHEN signal_name ILIKE '%voltage%' OR signal_name ILIKE '%volt%' THEN 'battery_voltage'
-            WHEN signal_name ILIKE '%current%' OR signal_name ILIKE '%ampere%' THEN 'battery_current'
-            WHEN signal_name ILIKE '%temp%' OR signal_name ILIKE '%temperature%' THEN 'temperature'
-            WHEN signal_name ILIKE '%cell%' AND (signal_name ILIKE '%volt%' OR signal_name ILIKE '%voltage%') THEN 'cell_voltage'
-            WHEN signal_name ILIKE '%charge%' AND signal_name ILIKE '%power%' THEN 'charging_power'
-            WHEN signal_name ILIKE '%dtc%' OR signal_name ILIKE '%fault%' OR signal_name ILIKE '%error%' THEN 'dtc'
-            WHEN signal_name ILIKE '%speed%' OR signal_name ILIKE '%velocity%' THEN 'drive_speed'
-            WHEN signal_name ILIKE '%torque%' THEN 'drive_torque'
-            WHEN signal_name ILIKE '%power%' AND NOT signal_name ILIKE '%charge%' THEN 'drive_power'
+            WHEN signal_name ~* '\\m(soc|state.*charge)\\M' THEN 'battery_soc'
+            WHEN signal_name ~* '\\m(soh|state.*health)\\M' THEN 'battery_soh'
+            WHEN signal_name ~* 'cell.*volt' THEN 'cell_voltage'
+            WHEN signal_name ~* '(pack|battery).*(voltage|volt)' THEN 'battery_voltage'
+            WHEN signal_name ~* '(pack|battery).*(current|amp)' THEN 'battery_current'
+            WHEN signal_name ~* '(temp|temperature)' THEN 'temperature'
+            WHEN signal_name ~* 'charg.*power' THEN 'charging_power'
+            WHEN signal_name ~* '(dtc|fault|error|warning)' THEN 'dtc'
+            WHEN signal_name ~* '(vehicle|car).*speed' THEN 'drive_speed'
+            WHEN signal_name ~* 'torque' THEN 'drive_torque'
+            WHEN signal_name ~* 'motor.*power' OR signal_name ~* 'drive.*power' THEN 'drive_power'
             ELSE 'other'
         END
         WHERE signal_category IS NULL
@@ -140,4 +139,4 @@ def downgrade():
     op.drop_column('dbc_signals', 'signal_category')
     op.drop_column('dbc_signals', 'ecu_module')
     op.drop_column('dbc_signals', 'protocol')
-    op.drop_column('vehicle_definitions', 'powertrain')
+    # powertrain은 기본 테이블 정의이므로 삭제하지 않음

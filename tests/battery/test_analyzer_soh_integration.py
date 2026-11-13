@@ -112,11 +112,11 @@ def test_analyzer_ev6_fixture_soh(app):
         db.session.add(user)
         db.session.commit()
         
-        # EV6 실측 데이터 로드 (fixtures/ev6_measured_trace.csv)
-        fixture_path = Path(__file__).parent.parent / 'fixtures' / 'ev6_measured_trace.csv'
+        # EV6 실측 데이터 로드
+        fixture_path = Path(__file__).parent.parent / 'fixtures' / 'ev6_file_b_scantest_measured.csv'
         
         if not fixture_path.exists():
-            pytest.skip('EV6 fixture 파일이 없습니다.')
+            pytest.skip(f'EV6 fixture not found at {fixture_path}')
         
         scan = Scan(
             type='ev',

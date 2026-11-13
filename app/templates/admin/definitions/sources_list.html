@@ -1,0 +1,67 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, empty, pagination as render_pagination %}
+{% block title %}정의 출처 관리{% endblock %}
+
+{% block content %}
+{% call page_header("정의 출처", "DBC, OBDb, WiCAN, Torque, CanZE 파일") %}{% endcall %}
+
+<div class="card card-body">
+  <form method="get" class="mb-4 flex gap-2">
+    <select name="source_type" class="input flex-1">
+      <option value="">모든 출처 타입</option>
+      <option value="dbc" {{ 'selected' if current_source_type == 'dbc' }}>DBC</option>
+      <option value="obdb" {{ 'selected' if current_source_type == 'obdb' }}>OBDb</option>
+      <option value="wican" {{ 'selected' if current_source_type == 'wican' }}>WiCAN</option>
+      <option value="torque" {{ 'selected' if current_source_type == 'torque' }}>Torque</option>
+      <option value="canze" {{ 'selected' if current_source_type == 'canze' }}>CanZE</option>
+    </select>
+    <input type="text" name="search" value="{{ current_search }}" placeholder="검색" class="input flex-1">
+    <button type="submit" class="btn btn-secondary">검색</button>
+    <a href="{{ url_for('definitions_admin.sources_list') }}" class="btn">초기화</a>
+  </form>
+
+  <div class="mb-4">
+    <p class="text-sm text-muted">총 <strong>{{ total_count }}</strong>개 출처</p>
+    {% if by_type %}
+    <div class="mt-2 flex flex-wrap gap-2">
+      {% for type, count in by_type %}
+      <a href="{{ url_for('definitions_admin.sources_list', source_type=type) }}" 
+         class="px-2 py-1 rounded text-sm bg-surface border border-line hover:border-line-strong">
+        {{ type }} ({{ count }})
+      </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  {% if sources %}
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>타입</th>
+          <th>파일 경로</th>
+          <th>출처 저장소</th>
+          <th>라이선스</th>
+          <th>가져온 시각</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for source in sources %}
+        <tr>
+          <td><span class="badge">{{ source.source_type }}</span></td>
+          <td class="font-mono text-sm">{{ source.file_path | truncate(50) }}</td>
+          <td class="text-sm">{{ source.origin_repo or '-' }}</td>
+          <td class="text-sm">{{ source.license or '-' }}</td>
+          <td class="text-sm text-muted">{{ source.imported_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ render_pagination(pagination, 'definitions_admin.sources_list', source_type=current_source_type, search=current_search) }}
+  {% else %}
+  {{ empty("정의 출처가 없습니다") }}
+  {% endif %}
+</div>
+{% endblock %}

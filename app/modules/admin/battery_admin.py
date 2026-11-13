@@ -1,6 +1,9 @@
 """배터리 사양 및 SOH 학습 관리자 페이지."""
+import csv
+import io
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from sqlalchemy import func, desc
+from werkzeug.utils import secure_filename
 
 from app.extensions import db
 from app.modules.battery.models import BatterySpec, SOHResult, LearnedFormula
@@ -129,6 +132,93 @@ def spec_edit(spec_id):
         return redirect(url_for('battery_admin.spec_detail', spec_id=spec.id))
     
     return render_template('admin/battery/spec_form.html', spec=spec)
+
+
+@bp.route('/specs/import', methods=['GET', 'POST'])
+@admin_required
+def specs_import():
+    """CSV로 배터리 사양 일괄 추가."""
+    if request.method == 'POST':
+        if 'csv_file' not in request.files:
+            flash('파일이 없습니다.', 'error')
+            return redirect(request.url)
+        
+        file = request.files['csv_file']
+        if file.filename == '':
+            flash('파일을 선택하세요.', 'error')
+            return redirect(request.url)
+        
+        if not file.filename.endswith('.csv'):
+            flash('CSV 파일만 업로드할 수 있습니다.', 'error')
+            return redirect(request.url)
+        
+        try:
+            # UTF-8 BOM 처리
+            content = file.read().decode('utf-8-sig')
+            reader = csv.DictReader(io.StringIO(content))
+            
+            imported = 0
+            skipped = 0
+            errors = []
+            
+            for row_num, row in enumerate(reader, start=2):
+                try:
+                    # 필수 필드 검증
+                    if not row.get('maker') or not row.get('model') or not row.get('source_url'):
+                        errors.append(f"행 {row_num}: maker, model, source_url은 필수입니다.")
+                        skipped += 1
+                        continue
+                    
+                    # 중복 검사
+                    existing = db.session.query(BatterySpec).filter(
+                        BatterySpec.maker == row['maker'],
+                        BatterySpec.model == row['model'],
+                        BatterySpec.model_year == (int(row['model_year']) if row.get('model_year') else None),
+                        BatterySpec.trim_grade == (row.get('trim_grade') or None)
+                    ).first()
+                    
+                    if existing:
+                        skipped += 1
+                        continue
+                    
+                    spec = BatterySpec(
+                        maker=row['maker'],
+                        model=row['model'],
+                        trim_grade=row.get('trim_grade') or None,
+                        model_year=int(row['model_year']) if row.get('model_year') else None,
+                        generation=row.get('generation') or None,
+                        market=row.get('market') or None,
+                        gross_kwh=float(row['gross_kwh']) if row.get('gross_kwh') else None,
+                        usable_kwh=float(row['usable_kwh']) if row.get('usable_kwh') else None,
+                        nominal_voltage_v=float(row['nominal_voltage_v']) if row.get('nominal_voltage_v') else None,
+                        capacity_ah=float(row['capacity_ah']) if row.get('capacity_ah') else None,
+                        cell_chemistry=row.get('cell_chemistry') or None,
+                        cell_count=int(row['cell_count']) if row.get('cell_count') else None,
+                        cell_config=row.get('cell_config') or None,
+                        source_url=row['source_url'],
+                        source_note=row.get('source_note') or None
+                    )
+                    db.session.add(spec)
+                    imported += 1
+                    
+                except (ValueError, KeyError) as e:
+                    errors.append(f"행 {row_num}: {str(e)}")
+                    skipped += 1
+            
+            db.session.commit()
+            
+            msg = f'{imported}개 추가, {skipped}개 건너뜀'
+            if errors:
+                msg += f' (오류: {len(errors)}건 - 처음 5건: {"; ".join(errors[:5])})'
+            flash(msg, 'success' if imported > 0 else 'warning')
+            return redirect(url_for('battery_admin.specs_list'))
+            
+        except Exception as e:
+            db.session.rollback()
+            flash(f'CSV 처리 중 오류: {str(e)}', 'error')
+            return redirect(request.url)
+    
+    return render_template('admin/battery/specs_import.html')
 
 
 @bp.route('/soh-results')
