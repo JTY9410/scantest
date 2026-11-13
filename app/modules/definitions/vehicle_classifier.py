@@ -2,9 +2,17 @@
 
 Handles real-world data formats: underscores, spaces, colons, dashes,
 Korean text, mixed case, etc.
+
+Priority order for powertrain determination:
+1. Manual override (user-corrected conflicts) - never overwritten
+2. Plate lookup (차량번호 from existing Wecar API) - PRIMARY source
+3. VIN rules (manufacturer-specific VDS rules) - CROSS-CHECK
+4. vPIC API (NHTSA) - fallback for VIN
+5. Model name/path tokens - heuristic
+6. BMS evidence - heuristic
 """
 import re
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 from sqlalchemy import text
 
 from app.extensions import db
@@ -35,27 +43,28 @@ def extract_tokens(text: str) -> set:
     return set(tokens)
 
 
-# Known BEV models (specific, unambiguous)
+# Known BEV models (specific, unambiguous, BEV-only nameplates)
 BEV_SPECIFIC_TOKENS = {
     # Hyundai/Kia specific models (NOT base names)
     'ioniq5', 'ioniq6', 'ioniq7', 'ioniq9',  # Specific IONIQ numbers
     'ev3', 'ev4', 'ev5', 'ev6', 'ev9',  # Kia EV series
     'gv60',  # Genesis
     
-    # Tesla
+    # Tesla (all models are BEV-only)
     'model3', 'models', 'modelx', 'modely', 'tesla', 'roadster', 'cybertruck',
     
     # Nissan
     'leaf', 'ariya',
     
     # GM/Chevrolet
-    'bolt', 'hummer', 'lyriq', 'equinox', 'blazer', 'silverado',
+    'bolt', 'bolteuc', 'bolt ev', 'hummer', 'lyriq', 'equinox', 'blazer', 'silverado',
     
     # Ford
-    'mustang', 'mache', 'f150', 'lightning', 'etransit',
+    'mache', 'mustangmache', 'lightning', 'f150lightning', 'etransit',  # BEV-only nameplates
     
     # VW Group
-    'id3', 'id4', 'id5', 'id7', 'buzz',
+    'id3', 'id4', 'id5', 'id7', 'buzz', 'enyaq', 'born',  # VW/Skoda/Cupra BEVs
+    'bz4x',  # Toyota bZ4X
     
     # Audi (specific e-tron models, not A3)
     'q4', 'q8', 'rsetron',
@@ -72,11 +81,11 @@ BEV_SPECIFIC_TOKENS = {
     # BYD
     'atto3', 'atto', 'seal', 'dolphin', 'tang', 'han',
     
-    # Renault
-    'zoe', 'ph2',
+    # Renault/Dacia
+    'zoe', 'ph2', 'spring',
     
-    # Citroën
-    'ec4', 'czero',
+    # Citroën/Peugeot
+    'ec4', 'czero', 'e208', 'e2008',
     
     # Mitsubishi
     'imiev',
@@ -84,11 +93,20 @@ BEV_SPECIFIC_TOKENS = {
     # Smart
     'smart',
     
-    # Polestar
-    'polestar',
+    # Polestar (all models BEV)
+    'polestar', 'polestar2',
     
     # BMW
-    'ix3', 'ix1',
+    'ix3', 'ix1', 'ix',
+    
+    # Subaru/Toyota
+    'solterra',  # Subaru Solterra BEV-only nameplate
+    
+    # Rivian/Lucid (all models BEV)
+    'rivian', 'r1t', 'r1s', 'lucid', 'air',
+    
+    # Volvo
+    'xc40recharge',  # XC40 Recharge is BEV (not PHEV)
     
     # Others
     'evx',  # Torres EVX
@@ -115,6 +133,7 @@ BEV_QUALIFIERS = {
 BEV_COMBINATIONS = [
     {'e', 'golf'},
     {'e', 'tron'},  # Audi e-tron (becomes 'e' + 'tron')
+    {'e', '208'}, {'e', '2008'},  # Peugeot e-208, e-2008
     {'kona', 'electric'}, {'kona', 'ev'},
     {'niro', 'ev'},
     {'soul', 'ev'},
@@ -154,7 +173,11 @@ PHEV_COMBINATIONS = [
 HEV_TOKENS = {'hybrid', 'selfcharging', '하이브리드'}
 
 # Known HEV models (specific)
-HEV_MODEL_TOKENS = {'prius', 'camry', 'accord'}
+# Prius: all models are HEV except Prime (which is PHEV)
+HEV_MODEL_TOKENS = {
+    'prius', 'priusv',  # Toyota Prius (all non-Prime variants)
+    'camry', 'accord',
+}
 
 # ICE indicators
 ICE_TOKENS = {'diesel', 'turbo', 'gdi', 'crdi', 'tci'}
@@ -171,11 +194,12 @@ NOT_VEHICLE_MAKERS = {
     'bosch', 'delphi', 'marelli', 'teves', 'continental', 'denso',
     'aim', 'stack', 'life', 'motec', 'haltech', 'link',
     'dallara',  # Race car manufacturer, not street vehicles
+    'mectronik',  # Aftermarket ECU vendor
 }
 
 
 def is_not_vehicle(maker: Optional[str], model: Optional[str], file_path: Optional[str]) -> bool:
-    """Check if this is an ECU vendor or protocol, not a vehicle."""
+    """Check if this is an ECU vendor, protocol, or shared definitions, not a vehicle."""
     # Check file path patterns
     if file_path:
         file_lower = file_path.lower()
@@ -183,8 +207,13 @@ def is_not_vehicle(maker: Optional[str], model: Optional[str], file_path: Option
             if re.search(pattern, file_lower):
                 return True
     
-    # Check maker
+    # Check maker for shared/common folders (공용)
     if maker:
+        maker_lower = maker.lower()
+        # Shared definitions folders like 'Volkswagen_Group_공용', 'Hyundai_Kia_Genesis_공용'
+        if '공용' in maker_lower or '_공용' in maker:
+            return True
+        
         maker_tokens = extract_tokens(normalize_text(maker))
         if maker_tokens & NOT_VEHICLE_MAKERS:
             return True
@@ -198,12 +227,53 @@ def is_not_vehicle(maker: Optional[str], model: Optional[str], file_path: Option
     return False
 
 
+def map_fuel_to_powertrain(diag_fuel: str) -> Tuple[Optional[str], float]:
+    """Map Wecar diag_fuel to powertrain classification.
+    
+    Args:
+        diag_fuel: Fuel type from Wecar API (e.g., '전기', '하이브리드')
+    
+    Returns:
+        Tuple of (powertrain, confidence) or (None, 0.0) if unmapped
+    """
+    if not diag_fuel:
+        return (None, 0.0)
+    
+    fuel_norm = diag_fuel.strip().lower()
+    
+    # Electric (전기)
+    if '전기' in fuel_norm or 'electric' in fuel_norm or 'bev' in fuel_norm:
+        return ('BEV', 0.99)
+    
+    # Hydrogen / Fuel Cell (수소, 연료전지)
+    if '수소' in fuel_norm or '연료전지' in fuel_norm or 'hydrogen' in fuel_norm or 'fcev' in fuel_norm:
+        return ('FCEV', 0.99)
+    
+    # Plug-in Hybrid (플러그인)
+    if '플러그인' in fuel_norm or 'plug-in' in fuel_norm or 'plugin' in fuel_norm or 'phev' in fuel_norm:
+        return ('PHEV', 0.95)
+    
+    # Hybrid (하이브리드) - but not mild/마일드 which is ICE
+    if '마일드' in fuel_norm or 'mild' in fuel_norm or '48v' in fuel_norm:
+        return ('ICE', 0.95)
+    if '하이브리드' in fuel_norm or 'hybrid' in fuel_norm or 'hev' in fuel_norm:
+        return ('HEV', 0.95)
+    
+    # ICE fuels
+    if any(ice in fuel_norm for ice in ['휘발유', 'gasoline', '가솔린', '경유', 'diesel', 'lpg', 'lpi', 'cng', 'lng']):
+        return ('ICE', 0.95)
+    
+    # Unknown fuel type
+    return (None, 0.0)
+
+
 def classify_vehicle_powertrain(
     maker: Optional[str],
     model: Optional[str],
     submodel: Optional[str],
     file_path: Optional[str],
-    vin: Optional[str] = None
+    vin: Optional[str] = None,
+    has_bms_commands: bool = False
 ) -> Tuple[str, str, float]:
     """Classify vehicle powertrain with source and confidence.
     
@@ -215,23 +285,28 @@ def classify_vehicle_powertrain(
     5. HEV tokens (but only 'hev' or 'hybrid', not substring of 'ev')
     6. BEV specific tokens and combinations
     7. Ambiguous base names without qualifiers → unknown
+    8. BMS evidence (if has_bms_commands=True)
     
     Returns:
         (powertrain, source, confidence)
     """
-    # Priority 1: VIN-based (if available)
+    # Priority 1: VIN-based (if available and database accessible)
     if vin and validate_vin(vin):
-        vin_rules = db.session.execute(text("""
-            SELECT wmi_pattern, vds_position, vds_value_pattern, powertrain, confidence
-            FROM vin_decode_rules
-            ORDER BY confidence DESC
-        """)).fetchall()
-        
-        rules_list = [dict(row._mapping) for row in vin_rules]
-        powertrain_vin, source_vin, conf_vin = decode_powertrain_from_vin(vin, rules_list)
-        
-        if powertrain_vin and powertrain_vin != 'unknown' and source_vin == 'vin_rule':
-            return (powertrain_vin, 'vin_rule', conf_vin)
+        try:
+            vin_rules = db.session.execute(text("""
+                SELECT wmi_pattern, vds_position, vds_value_pattern, powertrain, confidence
+                FROM vin_decode_rules
+                ORDER BY confidence DESC
+            """)).fetchall()
+            
+            rules_list = [dict(row._mapping) for row in vin_rules]
+            powertrain_vin, source_vin, conf_vin = decode_powertrain_from_vin(vin, rules_list)
+            
+            if powertrain_vin and powertrain_vin != 'unknown' and source_vin == 'vin_rule':
+                return (powertrain_vin, 'vin_rule', conf_vin)
+        except Exception:
+            # Database not available (e.g., in tests without app context)
+            pass
     
     # Priority 2: Check if not_vehicle
     if is_not_vehicle(maker, model, file_path):
@@ -268,13 +343,36 @@ def classify_vehicle_powertrain(
     if tokens & PHEV_TOKENS:
         return ('PHEV', 'model_name:PHEV_token', 0.85)
     
-    # Priority 5: HEV tokens (but ONLY the word 'hev' or 'hybrid', not substring)
-    # Check if 'hev' exists as a standalone token (not part of other words)
+    # Priority 5: Check for mixed powertrain (both HEV and BEV evidence)
+    # If both hybrid and BEV tokens appear (and no PHEV), it's ambiguous/mixed
     has_hev_token = 'hev' in tokens or 'hybrid' in tokens or 'selfcharging' in tokens or '하이브리드' in tokens
+    has_bev_evidence = bool(tokens & (BEV_SPECIFIC_TOKENS | BEV_QUALIFIERS))
     has_phev_evidence = bool(tokens & PHEV_TOKENS)
     
+    if has_hev_token and has_bev_evidence and not has_phev_evidence:
+        # Mixed powertrain (e.g., "Ioniq Hybrid EV" covers both) → unknown
+        return ('unknown', 'mixed_powertrain', 0.0)
+    
+    # Priority 6: HEV detection
+    # Check Toyota Prius models (all are HEV except Prime which is PHEV)
+    if 'prius' in tokens or 'priusv' in tokens:
+        # If it has PHEV tokens, it's already been caught above
+        # Otherwise, Prius is HEV
+        return ('HEV', 'model_name:Prius_HEV', 0.90)
+    
+    # Check Lexus/Toyota 'h' suffix (e.g., ES-300h, RX450h)
+    # 'h' suffix = HEV, 'h+' or '450h+' = PHEV
+    if model or maker:
+        text_for_suffix = ' '.join(filter(None, [maker, model]))
+        # Check for PHEV h+ patterns
+        if re.search(r'\d+h\+', text_for_suffix.lower()) or 'h+' in text_for_suffix.lower():
+            return ('PHEV', 'model_name:Lexus_h+', 0.90)
+        # Check for HEV h suffix (but not h+)
+        if re.search(r'\d+h\b', text_for_suffix.lower()) or re.search(r'-\d+h\b', text_for_suffix.lower()):
+            return ('HEV', 'model_name:Lexus_h', 0.90)
+    
     if has_hev_token and not has_phev_evidence:
-        # Also check HEV model tokens
+        # Also check HEV model tokens (other than Prius which is handled above)
         if tokens & HEV_MODEL_TOKENS:
             return ('HEV', 'model_name:HEV_model', 0.80)
         return ('HEV', 'model_name:HEV_token', 0.80)
@@ -317,6 +415,10 @@ def classify_vehicle_powertrain(
     # Check ICE indicators
     if tokens & ICE_TOKENS:
         return ('ICE', 'model_name:ICE_token', 0.70)
+    
+    # Priority 8: BMS evidence (if has_bms_commands)
+    if has_bms_commands:
+        return ('BEV', 'bms_evidence', 0.60)
     
     # Unable to classify
     return ('unknown', 'no_match', 0.0)

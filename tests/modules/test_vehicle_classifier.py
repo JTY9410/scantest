@@ -54,8 +54,10 @@ def test_is_not_vehicle():
     assert is_not_vehicle(None, None, '01_DBC/_공통_프로토콜/OBD2/obd2.dbc') == True
     assert is_not_vehicle(None, None, '04_Torque_PID/OBD2/something.csv') == True
     
-    # Common vendor pattern
-    assert is_not_vehicle('Hyundai_Kia_Genesis_공용', None, None) == False  # Not a vendor, but a shared folder
+    # Shared/common protocol folders (공용 pattern) → not_vehicle
+    assert is_not_vehicle('Hyundai_Kia_Genesis_공용', None, None) == True
+    assert is_not_vehicle('Volkswagen_Group_공용', None, None) == True
+    assert is_not_vehicle('GM_공용', None, None) == True
     
     # Regular vehicles
     assert is_not_vehicle('Hyundai', 'Ioniq 5', '02_OBDb/Hyundai/IONIQ 5/default.json') == False
@@ -292,5 +294,50 @@ def test_unknown_cases():
 ])
 def test_production_regression_cases(maker, model, submodel, file_path, expected_pt, description):
     """Regression tests from real production data (2026-11-13 report)."""
+    pt, src, conf = classify_vehicle_powertrain(maker, model, submodel, file_path)
+    assert pt == expected_pt, f"{description}: expected {expected_pt}, got {pt} (source: {src})"
+
+
+# Additional regression tests from 2026-11-13 22:28 report
+@pytest.mark.parametrize("maker,model,submodel,file_path,expected_pt,description", [
+    # Toyota Prius models (all HEV except Prime)
+    ('Toyota', 'Prius', None, None, 'HEV', 'Prius base model'),
+    ('Toyota', 'Prius-v', None, None, 'HEV', 'Prius-v'),
+    
+    # Lexus h suffix = HEV
+    ('Lexus', 'ES-300h', None, None, 'HEV', 'Lexus ES-300h'),
+    ('Lexus', 'RX450h', None, None, 'HEV', 'Lexus RX450h'),
+    ('Lexus', 'NX350h', None, None, 'HEV', 'Lexus NX350h'),
+    ('Lexus', 'UX250h', None, None, 'HEV', 'Lexus UX250h'),
+    
+    # Lexus h+ suffix = PHEV
+    ('Lexus', 'RX450h+', None, None, 'PHEV', 'Lexus RX450h+'),
+    
+    # Mixed powertrain → unknown
+    (None, 'Hyundai: Ioniq Hybrid EV (2016-2019)', None, None, 'unknown', 'Mixed Hybrid+EV'),
+    
+    # BEV-only nameplates
+    ('Subaru', 'Solterra', None, None, 'BEV', 'Subaru Solterra'),
+    ('Toyota', 'bZ4X', None, None, 'BEV', 'Toyota bZ4X'),
+    ('Polestar', '2', None, None, 'BEV', 'Polestar 2'),
+    ('VW', 'Enyaq', None, None, 'BEV', 'VW Enyaq'),
+    ('Cupra', 'Born', None, None, 'BEV', 'Cupra Born'),
+    ('Dacia', 'Spring', None, None, 'BEV', 'Dacia Spring'),
+    ('Peugeot', 'e-208', None, None, 'BEV', 'Peugeot e-208'),
+    ('Peugeot', 'e-2008', None, None, 'BEV', 'Peugeot e-2008'),
+    ('Rivian', 'R1T', None, None, 'BEV', 'Rivian R1T'),
+    ('Lucid', 'Air', None, None, 'BEV', 'Lucid Air'),
+    
+    # Shared/common definitions → not_vehicle
+    ('Volkswagen_Group_공용', None, None, None, 'not_vehicle', 'VW Group shared'),
+    ('GM_공용', None, None, None, 'not_vehicle', 'GM shared'),
+    ('Hyundai_Kia_Genesis_공용', None, None, None, 'not_vehicle', 'HKG shared'),
+    ('Honda_Acura_공용', None, None, None, 'not_vehicle', 'Honda/Acura shared'),
+    
+    # ECU vendor → not_vehicle
+    ('MECTRONIK', None, None, None, 'not_vehicle', 'MECTRONIK ECU vendor'),
+])
+def test_production_regression_2(maker, model, submodel, file_path, expected_pt, description):
+    """Additional regression tests from 2026-11-13 22:28 report."""
     pt, src, conf = classify_vehicle_powertrain(maker, model, submodel, file_path)
     assert pt == expected_pt, f"{description}: expected {expected_pt}, got {pt} (source: {src})"
