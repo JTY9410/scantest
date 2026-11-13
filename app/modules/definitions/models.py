@@ -59,7 +59,7 @@ class VehicleDefinition(db.Model):
     year_to: Mapped[int | None]
     
     # 추가 메타데이터
-    powertrain: Mapped[str | None] = mapped_column(String(20))  # ev|hev|ice
+    powertrain: Mapped[str | None] = mapped_column(String(20))  # BEV|PHEV|HEV|ICE
     notes: Mapped[str | None] = mapped_column(Text)
     
     created_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)
@@ -125,9 +125,17 @@ class DbcSignal(db.Model):
     comment: Mapped[str | None] = mapped_column(Text)
     receivers: Mapped[str | None] = mapped_column(Text)  # comma-separated ECU names
     
+    # Classification
+    protocol: Mapped[str | None] = mapped_column(String(20))  # CAN, CAN-FD
+    ecu_module: Mapped[str | None] = mapped_column(String(50))  # BMS, MCU, OBC, VCU
+    signal_category: Mapped[str | None] = mapped_column(String(30))  # battery_soc, battery_soh
+    
     __table_args__ = (
         Index("ix_dbc_signals_message", "message_id"),
         Index("ix_dbc_signals_name", "signal_name"),
+        Index("ix_dbc_signals_protocol", "protocol"),
+        Index("ix_dbc_signals_ecu_module", "ecu_module"),
+        Index("ix_dbc_signals_signal_category", "signal_category"),
     )
 
 
@@ -177,6 +185,10 @@ class DiagnosticCommand(db.Model):
     success_count: Mapped[int] = mapped_column(default=0, nullable=False)
     failure_count: Mapped[int] = mapped_column(default=0, nullable=False)
     
+    # Classification
+    protocol: Mapped[str | None] = mapped_column(String(20))  # OBD-II, UDS, KWP2000
+    ecu_module: Mapped[str | None] = mapped_column(String(50))  # BMS, MCU, ECM, TCM
+    
     created_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now(), nullable=False)
     
@@ -193,6 +205,8 @@ class DiagnosticCommand(db.Model):
         Index("ix_diagnostic_commands_maker_model", "maker", "model"),
         Index("ix_diagnostic_commands_ecu_service_pid", "ecu_address", "service", "pid"),
         Index("ix_diagnostic_commands_verification", "verification_status"),
+        Index("ix_diagnostic_commands_protocol", "protocol"),
+        Index("ix_diagnostic_commands_ecu_module", "ecu_module"),
     )
 
 
