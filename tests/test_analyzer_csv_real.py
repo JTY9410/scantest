@@ -117,19 +117,22 @@ def test_analyzer_real_csv(app):
         print(f"Total rows created: {len(observations)}")
         
         if observations:
-            success = sum(1 for o in observations if o.decode_success)
+            success = sum(1 for o in observations if o.success)
             failed = len(observations) - success
             print(f"  Decoded successfully: {success}")
             print(f"  Failed to decode: {failed}")
             
             # 성공한 샘플 출력
-            successful_obs = [o for o in observations if o.decode_success][:3]
+            successful_obs = [o for o in observations if o.success][:3]
             if successful_obs:
                 print(f"\nSample Decoded Values:")
                 for obs in successful_obs:
-                    cmd = db.session.query(DiagnosticCommand).get(obs.command_id)
-                    if cmd:
-                        print(f"  - {cmd.name or cmd.command}: {obs.decoded_value}")
+                    if obs.definition_id > 0:
+                        cmd = db.session.query(DiagnosticCommand).get(obs.definition_id)
+                        if cmd:
+                            print(f"  - {cmd.label or cmd.command_bytes}: {obs.decoded_value}")
+                    else:
+                        print(f"  - {obs.decoded_value[:50]}")
         
         print(f"\n✅ Analyzer execution completed")
         
