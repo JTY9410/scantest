@@ -35,40 +35,29 @@ def app(_app_base):
 def _clean_database(app):
     yield
     with app.app_context():
-        # Close and remove all connections first
-        db.session.close()
+        db.session.rollback()
         db.session.remove()
-        db.engine.dispose()
         
-        # SQLite doesn't support TRUNCATE, use DELETE instead
         if "sqlite" in app.config["SQLALCHEMY_DATABASE_URI"]:
             for table in reversed(db.metadata.sorted_tables):
                 db.session.execute(text(f"DELETE FROM {table.name}"))
-            # Reset SQLite sequences (only if table exists)
             try:
                 db.session.execute(text("DELETE FROM sqlite_sequence"))
             except Exception:
-                pass  # Table doesn't exist yet
+                pass
             db.session.commit()
         else:
-            # Set short lock timeout to avoid hanging on locks
-            db.session.execute(text("SET LOCAL lock_timeout = '5s'"))
-            tables = ", ".join(t.name for t in db.metadata.sorted_tables)
-            try:
-                db.session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
-                db.session.commit()
-            except Exception as e:
-                # If TRUNCATE fails, fall back to DELETE
-                db.session.rollback()
-                for table in reversed(db.metadata.sorted_tables):
-                    db.session.execute(text(f"DELETE FROM {table.name}"))
-                # Reset sequences
-                db.session.execute(text("""
-                    SELECT setval(sequence_name::text, 1, false)
-                    FROM information_schema.sequences
-                    WHERE sequence_schema = 'public'
-                """))
-                db.session.commit()
+            # Postgres: DELETE + reset sequences (no TRUNCATE to avoid locks)
+            for table in reversed(db.metadata.sorted_tables):
+                db.session.execute(text(f"DELETE FROM {table.name}"))
+            db.session.execute(text("""
+                SELECT setval(sequence_name::text, 1, false)
+                FROM information_schema.sequences
+                WHERE sequence_schema = 'public'
+            """))
+            db.session.commit()
+        db.session.remove()
+    
     limiter.reset()
 
 
