@@ -22,7 +22,7 @@ depends_on = None
 def upgrade():
     # Re-classify UNKNOWN ECUs with improved rules
     # Add Korean ECU names and additional keywords
-    op.execute("""
+    op.execute(r"""
         UPDATE diagnostic_commands
         SET ecu_module = CASE
             -- Korean ECU names
@@ -77,7 +77,7 @@ def upgrade():
     """)
     
     # Re-classify 'other' signals with unit-based rules
-    op.execute("""
+    op.execute(r"""
         UPDATE dbc_signals
         SET signal_category = CASE
             -- Unit-based classification (most reliable)
@@ -123,7 +123,7 @@ def upgrade():
     """)
     
     # Re-classify unknown vehicle powertrains
-    op.execute("""
+    op.execute(r"""
         UPDATE vehicle_definitions
         SET powertrain = CASE
             -- Pure EV model names
