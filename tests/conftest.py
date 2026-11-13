@@ -26,38 +26,24 @@ def app():
 
 @pytest.fixture(autouse=True)
 def _clean_database(app):
-    yield
+    """Transaction-based test isolation: 각 테스트를 트랜잭션으로 감싸고 롤백"""
     with app.app_context():
-        db.session.remove()
-        # SQLite doesn't support TRUNCATE, use DELETE instead
-        if "sqlite" in app.config["SQLALCHEMY_DATABASE_URI"]:
-            for table in reversed(db.metadata.sorted_tables):
-                db.session.execute(text(f"DELETE FROM {table.name}"))
-            # Reset SQLite sequences (only if table exists)
-            try:
-                db.session.execute(text("DELETE FROM sqlite_sequence"))
-            except Exception:
-                pass  # Table doesn't exist yet
-            db.session.commit()
-        else:
-            # 긴 테스트 런에서 잠금 충돌을 방지하기 위해:
-            # 1. 유휴 연결 종료
-            # 2. 잠금 타임아웃 증가
-            db.session.execute(text("""
-                SELECT pg_terminate_backend(pid)
-                FROM pg_stat_activity
-                WHERE datname = current_database()
-                  AND pid <> pg_backend_pid()
-                  AND state = 'idle'
-                  AND state_change < NOW() - INTERVAL '5 seconds'
-            """))
-            db.session.commit()
-            
-            # 더 긴 타임아웃으로 TRUNCATE 시도
-            db.session.execute(text("SET LOCAL lock_timeout = '120s'"))
-            tables = ", ".join(t.name for t in db.metadata.sorted_tables)
-            db.session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
-            db.session.commit()
+        # 외부 트랜잭션 시작 (savepoint 기반 중첩 트랜잭션)
+        connection = db.engine.connect()
+        transaction = connection.begin()
+        
+        # Flask-SQLAlchemy 세션을 이 트랜잭션에 바인딩
+        db.session = db.create_scoped_session(
+            options={"bind": connection, "binds": {}}
+        )
+        
+        yield
+        
+        # 테스트 후 트랜잭션 롤백 (매우 빠름)
+        db.session.close()
+        transaction.rollback()
+        connection.close()
+    
     limiter.reset()
 
 
