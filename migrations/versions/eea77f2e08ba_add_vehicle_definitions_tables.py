@@ -1,7 +1,7 @@
 """add vehicle definitions tables
 
 Revision ID: eea77f2e08ba
-Revises: 18dc2cfd3e9d
+Revises: fix_bms_0102_formula
 Create Date: 2026-11-13 08:00:00.000000
 
 """
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = 'eea77f2e08ba'
-down_revision = '18dc2cfd3e9d'
+down_revision = 'fix_bms_0102_formula'
 branch_labels = None
 depends_on = None
 
