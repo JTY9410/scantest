@@ -40,8 +40,8 @@ def upgrade():
         sa.Column('confidence', sa.Float(), nullable=False, default=0.9, comment='Rule confidence 0.0-1.0'),
         sa.Column('description', sa.Text(), nullable=True, comment='Human-readable rule description'),
         sa.Column('source_url', sa.String(500), nullable=False, comment='Citation: manufacturer doc, NHTSA vPIC, or other reference'),
-        sa.Column('created_at', sa.DateTime(), nullable=False, default=sa.func.now()),
-        sa.Column('updated_at', sa.DateTime(), nullable=False, default=sa.func.now(), onupdate=sa.func.now()),
+        sa.Column('created_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
+        sa.Column('updated_at', sa.DateTime(), nullable=False, server_default=sa.func.now(), onupdate=sa.func.now()),
     )
     
     op.create_index('ix_vin_decode_rules_wmi_powertrain', 'vin_decode_rules', ['wmi_pattern', 'powertrain'])
@@ -58,7 +58,7 @@ def upgrade():
         sa.Column('model', sa.String(100), nullable=True),
         sa.Column('model_year', sa.Integer(), nullable=True),
         sa.Column('response_json', sa.JSON(), nullable=True, comment='Full API response'),
-        sa.Column('cached_at', sa.DateTime(), nullable=False, default=sa.func.now()),
+        sa.Column('cached_at', sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.Column('expires_at', sa.DateTime(), nullable=False, comment='Cache expiry (90 days)'),
     )
     
