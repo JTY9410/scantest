@@ -2,10 +2,10 @@
 
 분석 저장 시 DiagnosticCommand의 검증 상태를 자동 갱신.
 
-규칙 (기존):
+규칙 (DB CHECK constraint 준수):
 - 10회 이상 시도, 성공률 80% 이상: verified
 - 성공률 20% 미만: failed
-- 그 외: experimental
+- 그 외: needs_verification (CHECK constraint: 'needs_verification'|'verified'|'failed')
 """
 from sqlalchemy import func
 
@@ -55,13 +55,13 @@ def update_verification_metrics(scan_id: int) -> dict[str, int]:
         old_status = command.verification_status
         new_status = old_status
         
-        # 상태 결정
+        # 상태 결정 (CHECK constraint: needs_verification|verified|failed)
         if total_tries >= 10 and success_rate >= 0.8:
             new_status = 'verified'
         elif success_rate < 0.2:
             new_status = 'failed'
         else:
-            new_status = 'experimental'
+            new_status = 'needs_verification'
         
         # 업데이트
         if old_status != new_status:
