@@ -212,6 +212,19 @@ def register_cli(app: Flask) -> None:
         click.echo(f"\nDiagnostic Commands Verification:")
         click.echo(f"  Verified: {verified}")
         click.echo(f"  Needs Verification: {needs_verification}")
+    
+    @definitions.command("classify")
+    def definitions_classify() -> None:
+        """전체 정의 데이터를 재분류합니다 (ECU, powertrain, signal_category)."""
+        from app.modules.definitions.classifier import reclassify_all_definitions
+        
+        summary = reclassify_all_definitions()
+        
+        click.echo("\n=== Classification Summary ===")
+        for table_col, counts in summary.items():
+            click.echo(f"\n{table_col}:")
+            for key, count in counts.items():
+                click.echo(f"  {key}: {count}")
 
     app.cli.add_command(definitions)
     
