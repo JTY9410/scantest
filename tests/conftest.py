@@ -35,8 +35,10 @@ def app(_app_base):
 def _clean_database(app):
     yield
     with app.app_context():
+        # Close all existing connections first
         db.session.rollback()
         db.session.remove()
+        db.engine.dispose()
         
         if "sqlite" in app.config["SQLALCHEMY_DATABASE_URI"]:
             for table in reversed(db.metadata.sorted_tables):
@@ -47,14 +49,12 @@ def _clean_database(app):
                 pass
             db.session.commit()
         else:
-            # Postgres: DELETE + reset sequences (no TRUNCATE to avoid locks)
-            for table in reversed(db.metadata.sorted_tables):
-                db.session.execute(text(f"DELETE FROM {table.name}"))
-            db.session.execute(text("""
-                SELECT setval(sequence_name::text, 1, false)
-                FROM information_schema.sequences
-                WHERE sequence_schema = 'public'
-            """))
+            # Postgres: TRUNCATE all tables excluding alembic_version
+            db.session.execute(text("SET lock_timeout = '5s'"))
+            tables = [t.name for t in db.metadata.sorted_tables if t.name != 'alembic_version']
+            if tables:
+                tables_str = ", ".join(tables)
+                db.session.execute(text(f"TRUNCATE {tables_str} RESTART IDENTITY CASCADE"))
             db.session.commit()
         db.session.remove()
     
