@@ -25,6 +25,7 @@ dependencies = [
     "pypdf>=6.20,<7",
     "pillow>=12.3,<13",
     "reportlab>=5.0.1,<6",
+    "cantools>=45.1.2,<46",
 ]
 
 [project.optional-dependencies]

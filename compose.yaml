@@ -21,10 +21,15 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-1}
       # 큰 CSV(예: 방송 CAN이 많은 28.7MB 기록)도 받는다. 앱 기본값과 같은 64MB.
       CANLAB_MAX_UPLOAD_BYTES: ${CANLAB_MAX_UPLOAD_BYTES:-67108864}
+      # Optional: 정의파일 경로 (미지정 시 flask definitions import 명령에 경로 전달)
+      DEFINITIONS_DIR: ${DEFINITIONS_DIR:-/definitions}
     ports:
       - "${WEB_BIND:-127.0.0.1}:${WEB_PORT:-18080}:8000"
     volumes:
       - .:/srv
+      # Optional: 호스트의 정의파일 폴더를 읽기전용으로 마운트
+      # 예: DEFINITIONS_HOST_DIR=~/Desktop/차량측정용_정의파일 docker compose up
+      - ${DEFINITIONS_HOST_DIR:-./uploads/차량측정용_정의파일}:/definitions:ro
     depends_on:
       db:
         condition: service_healthy

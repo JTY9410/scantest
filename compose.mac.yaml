@@ -14,4 +14,10 @@ services:
       AUTO_DB_UPGRADE: ${AUTO_DB_UPGRADE:-1}
       PROXY_FIX_HOPS: ${PROXY_FIX_HOPS:-1}
       TRUST_PROXY: ${TRUST_PROXY:-1}
-    volumes: !reset []
+      # Optional: 정의파일 경로 (미지정 시 flask definitions import 명령에 경로 전달)
+      DEFINITIONS_DIR: ${DEFINITIONS_DIR:-/definitions}
+    volumes: !reset
+      - ./uploads:/app/uploads
+      # Optional: 호스트의 정의파일 폴더를 읽기전용으로 마운트
+      # 예: DEFINITIONS_HOST_DIR=~/Desktop/차량측정용_정의파일 docker compose -f compose.yaml -f compose.mac.yaml up
+      - ${DEFINITIONS_HOST_DIR:-./uploads/차량측정용_정의파일}:/definitions:ro
