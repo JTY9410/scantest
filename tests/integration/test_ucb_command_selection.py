@@ -98,3 +98,10 @@ def test_select_commands_ucb_no_stats(app, ucb_test_cleanup):
         assert set(selected) == set(candidates)
 
 
+
+
+def test_plan_orders_commands_by_ucb(app, ucb_test_cleanup):
+    """Test that plan.build() orders commands by UCB scores.
+    
+    사용자 요구사항 (c): plan.py 통합 - 성공률 높은 명령이 먼저 나옴
+    """
