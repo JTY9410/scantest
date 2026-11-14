@@ -37,36 +37,60 @@ def build_profiles() -> dict:
     common_commands = defaultdict(lambda: defaultdict(dict))
     
     # Get all diagnostic commands with vehicle scoping
+    # LEFT JOIN vehicle_definitions to get maker/model for canze/torque
     commands = db.session.execute(text("""
         SELECT 
-            maker, model, 
-            ecu_address, service, pid, command_bytes,
-            label, formula, unit, source_type
-        FROM diagnostic_commands
-        WHERE maker IS NOT NULL
-        ORDER BY maker, model, ecu_address, service, pid
+            COALESCE(dc.maker, vd.maker) as maker,
+            COALESCE(dc.model, vd.model) as model,
+            dc.ecu_address, dc.service, dc.pid, dc.command_bytes,
+            dc.label, dc.formula, dc.unit, dc.source_type,
+            dc.source_id, ds.file_path
+        FROM diagnostic_commands dc
+        LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
+        LEFT JOIN definition_sources ds ON dc.source_id = ds.id
+        ORDER BY maker, model, dc.ecu_address, dc.service, dc.pid
     """)).fetchall()
     
     for row in commands:
-        maker, model, ecu_address, service, pid, command_bytes, label, formula, unit, source_type = row
+        maker, model, ecu_address, service, pid, command_bytes, label, formula, unit, source_type, source_id, file_path = row
         
-        # Skip rows without essential info
-        if not all([maker, ecu_address, service, pid, command_bytes, label]):
+        # Skip rows without essential info (ecu_address can be NULL)
+        if not all([service, pid, command_bytes, label]):
             continue
         
+        # Infer maker/model from file_path if still NULL
+        if not maker and file_path:
+            # Example: /definitions/05_CanZE_조회필드/ZOE/LBC2_Fields.csv → Renault ZOE
+            path_parts = file_path.split('/')
+            if len(path_parts) >= 3:
+                # Look for maker/model in path (e.g., ZOE, Leaf, etc.)
+                for part in path_parts:
+                    if part and part not in ('definitions', '05_CanZE_조회필드', 'Fields.csv'):
+                        # Try to infer maker from folder name
+                        inferred_maker = resolve_maker(part)
+                        if inferred_maker:
+                            maker = inferred_maker
+                            model = part
+                            break
+        
         # Check if this is a common/standard PID (SAE J1979)
-        if maker in ('공통규격', '공용규격', '_공통_센서'):
+        if maker and maker in ('공통규격', '공용규격', '_공통_센서'):
             # Store in common section
             service_pid_key = f"{service}_{pid}"
-            if ecu_address not in common_commands:
-                common_commands[ecu_address] = {}
-            common_commands[ecu_address][service_pid_key] = {
+            ecu_key = ecu_address or 'unknown'
+            if ecu_key not in common_commands:
+                common_commands[ecu_key] = {}
+            common_commands[ecu_key][service_pid_key] = {
                 'command_bytes': command_bytes,
                 'label': label,
                 'formula': formula,
                 'unit': unit,
                 'source_type': source_type
             }
+            continue
+        
+        # Skip if still no maker after all attempts
+        if not maker:
             continue
         
         # Resolve maker to standard key
@@ -81,11 +105,14 @@ def build_profiles() -> dict:
         # Key is service+pid (e.g., "22_1050" for 22 1050)
         service_pid_key = f"{service}_{pid}"
         
-        # Store command profile
-        if ecu_address not in profiles[resolved_maker][model_key]:
-            profiles[resolved_maker][model_key][ecu_address] = {}
+        # ECU address (allow NULL, use 'unknown')
+        ecu_key = ecu_address or 'unknown'
         
-        profiles[resolved_maker][model_key][ecu_address][service_pid_key] = {
+        # Store command profile
+        if ecu_key not in profiles[resolved_maker][model_key]:
+            profiles[resolved_maker][model_key][ecu_key] = {}
+        
+        profiles[resolved_maker][model_key][ecu_key][service_pid_key] = {
             'command_bytes': command_bytes,
             'label': label,
             'formula': formula,
@@ -144,32 +171,40 @@ def get_profile_coverage() -> dict:
         SELECT COUNT(*) FROM diagnostic_commands
     """)).scalar()
     
-    # Commands with null maker
+    # Commands with null maker (after vehicle_definitions join)
     null_maker_count = db.session.execute(text("""
-        SELECT COUNT(*) FROM diagnostic_commands WHERE maker IS NULL
+        SELECT COUNT(*) 
+        FROM diagnostic_commands dc
+        LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
+        WHERE COALESCE(dc.maker, vd.maker) IS NULL
     """)).scalar()
     
-    # Commands with missing essential fields
+    # Commands with missing essential fields (ecu_address is optional)
     missing_fields_count = db.session.execute(text("""
-        SELECT COUNT(*) FROM diagnostic_commands 
-        WHERE maker IS NOT NULL 
-        AND (ecu_address IS NULL OR service IS NULL OR pid IS NULL 
-             OR command_bytes IS NULL OR label IS NULL)
+        SELECT COUNT(*) 
+        FROM diagnostic_commands dc
+        LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
+        WHERE COALESCE(dc.maker, vd.maker) IS NOT NULL 
+        AND (dc.service IS NULL OR dc.pid IS NULL 
+             OR dc.command_bytes IS NULL OR dc.label IS NULL)
     """)).scalar()
     
     # Common commands (SAE standard)
     common_count = db.session.execute(text("""
-        SELECT COUNT(*) FROM diagnostic_commands
-        WHERE maker IN ('공통규격', '공용규격', '_공통_센서')
-    """)).fetchall()[0][0]
+        SELECT COUNT(*) 
+        FROM diagnostic_commands dc
+        LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
+        WHERE COALESCE(dc.maker, vd.maker) IN ('공통규격', '공용규격', '_공통_센서')
+    """)).scalar()
     
-    # Get all makers and check which can be resolved
+    # Get all makers (after vehicle_definitions join) and check which can be resolved
     all_makers = db.session.execute(text("""
-        SELECT maker, COUNT(*) as count
-        FROM diagnostic_commands
-        WHERE maker IS NOT NULL 
-        AND maker NOT IN ('공통규격', '공용규격', '_공통_센서')
-        GROUP BY maker
+        SELECT COALESCE(dc.maker, vd.maker) as maker, COUNT(*) as count
+        FROM diagnostic_commands dc
+        LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
+        WHERE COALESCE(dc.maker, vd.maker) IS NOT NULL 
+        AND COALESCE(dc.maker, vd.maker) NOT IN ('공통규격', '공용규격', '_공통_센서')
+        GROUP BY COALESCE(dc.maker, vd.maker)
     """)).fetchall()
     
     resolved_makers = {}
@@ -184,50 +219,52 @@ def get_profile_coverage() -> dict:
     
     # Models count (after resolution)
     models_count = db.session.execute(text("""
-        SELECT COUNT(DISTINCT maker || '|' || COALESCE(model, 'generic'))
-        FROM diagnostic_commands
-        WHERE maker IS NOT NULL
-        AND maker NOT IN ('공통규격', '공용규격', '_공통_센서')
+        SELECT COUNT(DISTINCT COALESCE(dc.maker, vd.maker) || '|' || COALESCE(dc.model, vd.model, 'generic'))
+        FROM diagnostic_commands dc
+        LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
+        WHERE COALESCE(dc.maker, vd.maker) IS NOT NULL
+        AND COALESCE(dc.maker, vd.maker) NOT IN ('공통규격', '공용규격', '_공통_센서')
     """)).scalar()
     
     # Total commands included (resolvable makers with all fields)
     total_included = sum(resolved_makers.values())
     
-    # Commands by ECU (only included commands)
+    # Commands by ECU (only included commands, ecu_address can be NULL)
     ecu_counts = db.session.execute(text("""
-        SELECT ecu_address, COUNT(*) as count
-        FROM diagnostic_commands
-        WHERE maker IS NOT NULL 
-        AND ecu_address IS NOT NULL
-        AND service IS NOT NULL AND pid IS NOT NULL
-        AND command_bytes IS NOT NULL AND label IS NOT NULL
-        AND maker NOT IN ('공통규격', '공용규격', '_공통_센서')
-        GROUP BY ecu_address
+        SELECT COALESCE(dc.ecu_address, 'unknown') as ecu, COUNT(*) as count
+        FROM diagnostic_commands dc
+        LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
+        WHERE COALESCE(dc.maker, vd.maker) IS NOT NULL 
+        AND dc.service IS NOT NULL AND dc.pid IS NOT NULL
+        AND dc.command_bytes IS NOT NULL AND dc.label IS NOT NULL
+        AND COALESCE(dc.maker, vd.maker) NOT IN ('공통규격', '공용규격', '_공통_센서')
+        GROUP BY COALESCE(dc.ecu_address, 'unknown')
         ORDER BY count DESC
         LIMIT 10
     """)).fetchall()
     
     # Source breakdown (only included commands)
     source_counts = db.session.execute(text("""
-        SELECT source_type, COUNT(*) as count
-        FROM diagnostic_commands
-        WHERE maker IS NOT NULL
-        AND ecu_address IS NOT NULL
-        AND service IS NOT NULL AND pid IS NOT NULL
-        AND command_bytes IS NOT NULL AND label IS NOT NULL
-        AND maker NOT IN ('공통규격', '공용규격', '_공통_센서')
-        GROUP BY source_type
+        SELECT dc.source_type, COUNT(*) as count
+        FROM diagnostic_commands dc
+        LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
+        WHERE COALESCE(dc.maker, vd.maker) IS NOT NULL
+        AND dc.service IS NOT NULL AND dc.pid IS NOT NULL
+        AND dc.command_bytes IS NOT NULL AND dc.label IS NOT NULL
+        AND COALESCE(dc.maker, vd.maker) NOT IN ('공통규격', '공용규격', '_공통_센서')
+        GROUP BY dc.source_type
         ORDER BY count DESC
     """)).fetchall()
     
     # Excluded by source
     excluded_by_source = db.session.execute(text("""
-        SELECT source_type, COUNT(*) as count
-        FROM diagnostic_commands
-        WHERE maker IS NULL
-        OR ecu_address IS NULL OR service IS NULL OR pid IS NULL
-        OR command_bytes IS NULL OR label IS NULL
-        GROUP BY source_type
+        SELECT dc.source_type, COUNT(*) as count
+        FROM diagnostic_commands dc
+        LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
+        WHERE COALESCE(dc.maker, vd.maker) IS NULL
+        OR dc.service IS NULL OR dc.pid IS NULL
+        OR dc.command_bytes IS NULL OR dc.label IS NULL
+        GROUP BY dc.source_type
         ORDER BY count DESC
     """)).fetchall()
     

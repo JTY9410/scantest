@@ -23,6 +23,7 @@ _FALLBACK_ALIASES = {
     "nissan": "nissan",
     "닛산": "nissan",
     "닛싼": "nissan",
+    "nissaninfiniti": "nissan",
     "genesis": "genesis",
     "제네시스": "genesis",
     "tesla": "tesla",

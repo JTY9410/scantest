@@ -232,3 +232,209 @@ def test_wescan_build_profiles_export_integration(app, wescan_test_commands, tmp
         assert 'coverage' in data
         assert isinstance(data['profiles'], dict)
         assert isinstance(data['coverage'], dict)
+
+
+def test_canze_vehicle_definitions_join(app):
+    """Test that canze commands with NULL maker use vehicle_definitions."""
+    with app.app_context():
+        from app.modules.scanner.wescan_profiles import build_profiles, get_profile_coverage
+        
+        # Create unique identifiers
+        unique_id = str(uuid.uuid4())[:8]
+        sha_hash = uuid.uuid4().hex + uuid.uuid4().hex[:32]
+        file_path = f'/test/canze_vd_{unique_id}.csv'
+        
+        # Create definition source (canze type)
+        db.session.execute(text("""
+            INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
+            VALUES ('canze', :path, :sha, 100, NOW())
+        """), {'path': file_path, 'sha': sha_hash})
+        db.session.commit()
+        
+        source_id = db.session.execute(text("""
+            SELECT id FROM definition_sources WHERE file_path = :path
+        """), {'path': file_path}).scalar()
+        
+        # Create vehicle_definition with maker/model
+        db.session.execute(text("""
+            INSERT INTO vehicle_definitions (source_id, maker, model, year_from, year_to, submodel, created_at)
+            VALUES (:sid, 'Renault', 'ZOE', 2019, 2023, 'R135', NOW())
+        """), {'sid': source_id})
+        db.session.commit()
+        
+        # Create diagnostic command with NULL maker (typical for canze)
+        db.session.execute(text("""
+            INSERT INTO diagnostic_commands 
+                (source_id, source_type, maker, model, ecu_address, service, pid, 
+                 command_bytes, label, formula, unit, verification_status,
+                 verification_count, success_count, failure_count,
+                 created_at, updated_at)
+            VALUES 
+                (:sid, 'canze', NULL, NULL, '7BB', '22', '2002', '222002', 
+                 'Battery SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now())
+        """), {'sid': source_id})
+        db.session.commit()
+        
+        # Build profiles should include this command via vehicle_definitions join
+        profiles = build_profiles()
+        coverage = get_profile_coverage()
+        
+        # Should be included under 'renault' (resolved from 'Renault')
+        assert 'renault' in profiles
+        assert coverage['total_commands'] >= 1
+        
+        # Verify in coverage stats
+        assert 'renault' in coverage['commands_by_maker']
+
+
+def test_wican_null_ecu_address(app):
+    """Test that wican commands with NULL ecu_address are included."""
+    with app.app_context():
+        from app.modules.scanner.wescan_profiles import build_profiles, get_profile_coverage
+        
+        # Create unique identifiers
+        unique_id = str(uuid.uuid4())[:8]
+        sha_hash = uuid.uuid4().hex + uuid.uuid4().hex[:32]
+        file_path = f'/test/wican_{unique_id}.json'
+        
+        # Create definition source (wican type)
+        db.session.execute(text("""
+            INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
+            VALUES ('wican', :path, :sha, 100, NOW())
+        """), {'path': file_path, 'sha': sha_hash})
+        db.session.commit()
+        
+        source_id = db.session.execute(text("""
+            SELECT id FROM definition_sources WHERE file_path = :path
+        """), {'path': file_path}).scalar()
+        
+        # Create diagnostic command with NULL ecu_address (typical for wican)
+        db.session.execute(text("""
+            INSERT INTO diagnostic_commands 
+                (source_id, source_type, maker, model, ecu_address, service, pid, 
+                 command_bytes, label, formula, unit, verification_status,
+                 verification_count, success_count, failure_count,
+                 created_at, updated_at)
+            VALUES 
+                (:sid, 'wican', 'Renault_ Kangoo Z.E', 'Renault: Kangoo Z.E.', NULL, 
+                 '22', '1234', '221234', 'Test Field', 'A', '', 'verified', 0, 0, 0, now(), now())
+        """), {'sid': source_id})
+        db.session.commit()
+        
+        # Build profiles should include this command with 'unknown' ECU
+        profiles = build_profiles()
+        coverage = get_profile_coverage()
+        
+        # Should be included under 'renault' (resolved from 'Renault_ Kangoo Z.E')
+        assert 'renault' in profiles
+        
+        # Should have 'unknown' ECU in coverage
+        assert 'unknown' in coverage['commands_by_ecu']
+        assert coverage['commands_by_ecu']['unknown'] >= 1
+
+
+def test_common_pid_separation(app):
+    """Test that 공통규격 commands are separated into _common section."""
+    with app.app_context():
+        from app.modules.scanner.wescan_profiles import build_profiles, get_profile_coverage
+        
+        # Create unique identifiers
+        unique_id = str(uuid.uuid4())[:8]
+        sha_hash = uuid.uuid4().hex + uuid.uuid4().hex[:32]
+        file_path = f'/test/common_{unique_id}.dbc'
+        
+        # Create definition source
+        db.session.execute(text("""
+            INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
+            VALUES ('obdb', :path, :sha, 100, NOW())
+        """), {'path': file_path, 'sha': sha_hash})
+        db.session.commit()
+        
+        source_id = db.session.execute(text("""
+            SELECT id FROM definition_sources WHERE file_path = :path
+        """), {'path': file_path}).scalar()
+        
+        # Create common/standard PID command
+        db.session.execute(text("""
+            INSERT INTO diagnostic_commands 
+                (source_id, source_type, maker, model, ecu_address, service, pid, 
+                 command_bytes, label, formula, unit, verification_status,
+                 verification_count, success_count, failure_count,
+                 created_at, updated_at)
+            VALUES 
+                (:sid, 'obdb', '공통규격', NULL, '7E0', '01', '0C', '010C', 
+                 'Engine RPM', '((A*256)+B)/4', 'rpm', 'verified', 0, 0, 0, now(), now())
+        """), {'sid': source_id})
+        db.session.commit()
+        
+        # Build profiles should include this in _common section
+        profiles = build_profiles()
+        coverage = get_profile_coverage()
+        
+        # Should be in _common section, not in regular makers
+        assert '_common' in profiles
+        assert '공통규격' not in profiles
+        
+        # Should be counted as common commands
+        assert coverage['common_commands'] >= 1
+
+
+def test_nissan_infiniti_alias(app):
+    """Test that NissanInfiniti resolves to nissan."""
+    with app.app_context():
+        from app.core.makers import resolve_maker
+        from app.modules.scanner.wescan_profiles import build_profiles, get_profile_coverage
+        
+        # Ensure NissanInfiniti alias exists in DB
+        db.session.execute(text("""
+            INSERT INTO maker_aliases (standard_key, english_name, korean_name, aliases)
+            VALUES ('nissan', 'Nissan', '닛산', ARRAY['nissan', 'NissanInfiniti', 'nissaninfiniti', '닛산', '닛싼'])
+            ON CONFLICT (standard_key) DO UPDATE SET
+                aliases = EXCLUDED.aliases
+        """))
+        db.session.commit()
+        
+        # Clear cache to force reload
+        import app.core.makers as makers_module
+        makers_module._ALIASES_CACHE = None
+        makers_module._REVERSE_LOOKUP_CACHE = None
+        
+        # Create unique identifiers
+        unique_id = str(uuid.uuid4())[:8]
+        sha_hash = uuid.uuid4().hex + uuid.uuid4().hex[:32]
+        file_path = f'/test/nissaninfiniti_{unique_id}.dbc'
+        
+        # Create definition source
+        db.session.execute(text("""
+            INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
+            VALUES ('obdb', :path, :sha, 100, NOW())
+        """), {'path': file_path, 'sha': sha_hash})
+        db.session.commit()
+        
+        source_id = db.session.execute(text("""
+            SELECT id FROM definition_sources WHERE file_path = :path
+        """), {'path': file_path}).scalar()
+        
+        # Create diagnostic command with NissanInfiniti maker
+        db.session.execute(text("""
+            INSERT INTO diagnostic_commands 
+                (source_id, source_type, maker, model, ecu_address, service, pid, 
+                 command_bytes, label, formula, unit, verification_status,
+                 verification_count, success_count, failure_count,
+                 created_at, updated_at)
+            VALUES 
+                (:sid, 'obdb', 'NissanInfiniti', 'Leaf', '79B', '22', '1001', '221001', 
+                 'Battery Temp', 'A-40', 'C', 'verified', 0, 0, 0, now(), now())
+        """), {'sid': source_id})
+        db.session.commit()
+        
+        # Verify NissanInfiniti resolves to nissan
+        assert resolve_maker('NissanInfiniti') == 'nissan'
+        
+        # Build profiles should include this under 'nissan' (after resolution)
+        profiles = build_profiles()
+        coverage = get_profile_coverage()
+        
+        # Should have resolved to nissan
+        assert 'nissan' in profiles
+        assert 'nissan' in coverage['commands_by_maker']
