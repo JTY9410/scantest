@@ -267,6 +267,51 @@ def build_plan(car: dict | None = None, *, expand: bool = False) -> dict:
 
     maker_name = str((car or {}).get("diag_company") or "").strip() or None
     knowledge = scan_commands(maker_name) if has_app_context() else []
+    
+    # UCB-based command sorting if stats available
+    if knowledge and maker_name:
+        try:
+            from app.modules.scanner.continuous_learning import LearningStats
+            from app.core.makers import resolve_maker
+            
+            resolved_maker = resolve_maker(maker_name) or maker_name
+            model = str((car or {}).get("model") or "").strip() or None
+            
+            stats = LearningStats()
+            stats.load_from_database()
+            
+            # Group commands by ECU
+            ecu_commands = {}
+            for req in knowledge:
+                ecu = req.get("header") or "UNKNOWN"
+                if ecu not in ecu_commands:
+                    ecu_commands[ecu] = []
+                ecu_commands[ecu].append(req)
+            
+            # Sort each ECU's commands by UCB
+            sorted_knowledge = []
+            for ecu, cmds in ecu_commands.items():
+                candidate_commands = [c["command"] for c in cmds]
+                sorted_commands = stats.select_commands_ucb(
+                    resolved_maker, model or "", ecu, candidate_commands, top_k=len(candidate_commands)
+                )
+                # Reorder based on UCB ranking
+                cmd_map = {c["command"]: c for c in cmds}
+                for cmd in sorted_commands:
+                    if cmd in cmd_map:
+                        sorted_knowledge.append(cmd_map[cmd])
+                # Add any commands not in stats (shouldn't happen, but defensive)
+                for c in cmds:
+                    if c["command"] not in sorted_commands:
+                        sorted_knowledge.append(c)
+            
+            knowledge = sorted_knowledge
+        except Exception as e:
+            # If UCB fails, use original order
+            from flask import current_app
+            if has_app_context():
+                current_app.logger.warning(f"UCB sorting failed, using original order: {e}")
+    
     for request in knowledge:
         header = request["header"]
         if _blocked(request["command"]) or (header, request["command"]) in planned:
