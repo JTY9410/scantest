@@ -27,6 +27,7 @@ from app.modules.reports.models import Applog, CarMismatchReport
 from app.modules.scanner.routes import flow_config
 from app.modules.scans import car_info
 from app.modules.scans.models import DEFAULT_CAR_INFO_URL, Scan
+from app.modules.scanner.wescan_profiles import get_profile_coverage, get_commands_for_vehicle
 
 bp = Blueprint("admin", __name__, url_prefix="/admin")
 
@@ -286,3 +287,24 @@ def powertrain_revert(vehicle_definition_id: int):
         return jsonify(result), 200
     except Exception as e:
         return jsonify({"error": str(e)}), 400
+
+
+@bp.get("/wescan-profiles")
+@admin_required
+def wescan_profiles():
+    """WESCAN command profiles coverage and statistics."""
+    coverage = get_profile_coverage()
+    
+    # Get maker filter
+    maker_filter = request.args.get('maker')
+    commands = []
+    
+    if maker_filter:
+        commands = get_commands_for_vehicle(maker_filter)
+    
+    return render_template(
+        "admin/wescan_profiles.html",
+        coverage=coverage,
+        maker_filter=maker_filter,
+        commands=commands
+    )

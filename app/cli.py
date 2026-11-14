@@ -698,6 +698,73 @@ def register_cli(app: Flask) -> None:
 
     app.cli.add_command(definitions)
     
+    @click.group()
+    def wescan() -> None:
+        """WESCAN command profiles and scan management."""
+        pass
+    
+    @wescan.command("build-profiles")
+    @click.option("--export", type=click.Path(), help="Export profiles to JSON file")
+    def build_profiles(export: str | None) -> None:
+        """Build WESCAN command profiles from diagnostic_commands.
+        
+        Profiles group commands by maker/model for reuse at scan time.
+        
+        Usage:
+            flask wescan build-profiles               # Show coverage stats
+            flask wescan build-profiles --export profiles.json  # Export to file
+        """
+        from app.modules.scanner.wescan_profiles import build_profiles, get_profile_coverage
+        import json
+        
+        click.echo("=" * 80)
+        click.echo("WESCAN COMMAND PROFILES")
+        click.echo("=" * 80)
+        click.echo()
+        
+        click.echo("Building profiles from diagnostic_commands...")
+        profiles = build_profiles()
+        
+        click.echo("Getting coverage statistics...")
+        coverage = get_profile_coverage()
+        
+        click.echo()
+        click.echo("Coverage Statistics:")
+        click.echo("-" * 80)
+        click.echo(f"  Total makers with profiles: {coverage['total_makers']}")
+        click.echo(f"  Total maker/model combinations: {coverage['total_models']}")
+        click.echo(f"  Total commands: {coverage['total_commands']}")
+        
+        click.echo("\n  Top makers by command count:")
+        for maker, count in sorted(coverage['commands_by_maker'].items(), 
+                                   key=lambda x: x[1], reverse=True)[:10]:
+            click.echo(f"    {maker}: {count} commands")
+        
+        click.echo("\n  Top ECU addresses:")
+        for ecu, count in coverage['commands_by_ecu'].items():
+            click.echo(f"    {ecu}: {count} commands")
+        
+        click.echo("\n  Source breakdown:")
+        for source, count in coverage['top_sources']:
+            click.echo(f"    {source}: {count} commands")
+        
+        if export:
+            click.echo(f"\nExporting profiles to {export}...")
+            with open(export, 'w', encoding='utf-8') as f:
+                json.dump({
+                    'profiles': profiles,
+                    'coverage': coverage
+                }, f, indent=2, ensure_ascii=False)
+            click.echo("Export complete.")
+        
+        click.echo()
+        click.echo("=" * 80)
+        click.echo(f"Profile build complete: {coverage['total_makers']} makers, "
+                  f"{coverage['total_models']} models, {coverage['total_commands']} commands")
+        click.echo("=" * 80)
+    
+    app.cli.add_command(wescan)
+    
     # Database audit command
     @app.cli.command("audit")
     @click.argument("scope", default="db")

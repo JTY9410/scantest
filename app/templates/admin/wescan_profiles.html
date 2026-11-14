@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+
+{% block title %}WESCAN 명령 프로필{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <h1 class="mb-4">WESCAN 명령 프로필</h1>
+  
+  <div class="row">
+    <div class="col-md-12">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5>커버리지 통계</h5>
+        </div>
+        <div class="card-body">
+          <div class="row">
+            <div class="col-md-3">
+              <div class="text-center p-3 border rounded">
+                <h2 class="text-primary">{{ coverage.total_makers }}</h2>
+                <p class="mb-0">제조사</p>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center p-3 border rounded">
+                <h2 class="text-primary">{{ coverage.total_models }}</h2>
+                <p class="mb-0">제조사/모델 조합</p>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center p-3 border rounded">
+                <h2 class="text-primary">{{ coverage.total_commands }}</h2>
+                <p class="mb-0">진단 명령</p>
+              </div>
+            </div>
+            <div class="col-md-3">
+              <div class="text-center p-3 border rounded">
+                <h2 class="text-primary">{{ coverage.commands_by_ecu|length }}</h2>
+                <p class="mb-0">ECU 주소</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="col-md-6">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5>제조사별 명령 수 (상위 10개)</h5>
+        </div>
+        <div class="card-body">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>제조사</th>
+                <th class="text-end">명령 수</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for maker, count in coverage.commands_by_maker.items()|sort(attribute='1', reverse=True)[:10] %}
+              <tr>
+                <td>{{ maker }}</td>
+                <td class="text-end">{{ count }}</td>
+                <td>
+                  <a href="{{ url_for('admin.wescan_profiles', maker=maker) }}" class="btn btn-sm btn-outline-primary">
+                    명령 보기
+                  </a>
+                </td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-md-6">
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5>ECU 주소별 명령 수</h5>
+        </div>
+        <div class="card-body">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>ECU 주소</th>
+                <th class="text-end">명령 수</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for ecu, count in coverage.commands_by_ecu.items() %}
+              <tr>
+                <td><code>{{ ecu }}</code></td>
+                <td class="text-end">{{ count }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card mb-4">
+        <div class="card-header">
+          <h5>명령 출처</h5>
+        </div>
+        <div class="card-body">
+          <table class="table table-sm">
+            <thead>
+              <tr>
+                <th>출처</th>
+                <th class="text-end">명령 수</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for source, count in coverage.top_sources %}
+              <tr>
+                <td>{{ source }}</td>
+                <td class="text-end">{{ count }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  {% if maker_filter %}
+  <div class="row">
+    <div class="col-md-12">
+      <div class="card">
+        <div class="card-header">
+          <h5>{{ maker_filter }} 명령 목록</h5>
+          <a href="{{ url_for('admin.wescan_profiles') }}" class="btn btn-sm btn-secondary">
+            전체 보기
+          </a>
+        </div>
+        <div class="card-body">
+          <div class="table-responsive">
+            <table class="table table-sm table-striped">
+              <thead>
+                <tr>
+                  <th>ECU</th>
+                  <th>서비스</th>
+                  <th>PID</th>
+                  <th>명령</th>
+                  <th>라벨</th>
+                  <th>수식</th>
+                  <th>단위</th>
+                  <th>출처</th>
+                </tr>
+              </thead>
+              <tbody>
+                {% for cmd in commands %}
+                <tr>
+                  <td><code>{{ cmd.ecu_address }}</code></td>
+                  <td><code>{{ cmd.service }}</code></td>
+                  <td><code>{{ cmd.pid }}</code></td>
+                  <td><code>{{ cmd.command_bytes }}</code></td>
+                  <td>{{ cmd.label }}</td>
+                  <td>
+                    {% if cmd.formula %}
+                    <code class="small">{{ cmd.formula }}</code>
+                    {% else %}
+                    <span class="text-muted">-</span>
+                    {% endif %}
+                  </td>
+                  <td>{{ cmd.unit or '-' }}</td>
+                  <td><span class="badge bg-secondary">{{ cmd.source_type }}</span></td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="mt-4">
+    <a href="{{ url_for('admin.dashboard') }}" class="btn btn-secondary">← 대시보드로 돌아가기</a>
+  </div>
+</div>
+{% endblock %}
