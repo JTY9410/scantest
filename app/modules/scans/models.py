@@ -110,12 +110,14 @@ class Scan(TimestampMixin, SoftDeleteMixin, db.Model):
     car_battery_capacity: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     car_discharge_energy: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     car_charge_energy: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    battery_spec_id: Mapped[int | None] = mapped_column(ForeignKey('battery_specs.id', ondelete='SET NULL'))
     raw: Mapped[Any | None] = mapped_column(JSON)
     bms_data: Mapped[Any | None] = mapped_column(JSON)
 
     owner: Mapped[User | None] = relationship(foreign_keys=[owner_id])
     tester: Mapped[User] = relationship(foreign_keys=[tester_id])
     company: Mapped[Company | None] = relationship()
+    battery_spec: Mapped["BatterySpec | None"] = relationship("BatterySpec", foreign_keys=[battery_spec_id])
     scan_codes: Mapped[list["ScanCode"]] = relationship(
         primaryjoin="and_(Scan.id == ScanCode.scan_id, ScanCode.deleted_at.is_(None))",
         order_by="ScanCode.id",

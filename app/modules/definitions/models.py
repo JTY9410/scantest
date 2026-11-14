@@ -61,6 +61,7 @@ class VehicleDefinition(db.Model):
     # 추가 메타데이터
     powertrain: Mapped[str | None] = mapped_column(String(20))  # BEV|PHEV|HEV|ICE
     notes: Mapped[str | None] = mapped_column(Text)
+    battery_spec_id: Mapped[int | None] = mapped_column(db.ForeignKey("battery_specs.id", ondelete="SET NULL"))
     
     created_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)
     

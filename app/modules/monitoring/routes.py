@@ -176,24 +176,24 @@ def override_scan_fields(scan_id: int):
         except (ValueError, TypeError):
             return jsonify({"error": "Invalid year value"}), 400
     
-    # Battery capacity
-    if "battery_capacity" in data and data["battery_capacity"]:
+    # Battery spec
+    if "battery_spec_id" in data and data["battery_spec_id"]:
         try:
-            capacity = float(data["battery_capacity"])
-            if scan.car_battery_capacity != capacity:
+            spec_id = int(data["battery_spec_id"])
+            if scan.battery_spec_id != spec_id:
                 audit = PowertrainOverrideAudit(
                     scan_id=scan_id, user_id=user_id,
-                    field_name="battery_capacity",
-                    previous_value=str(scan.car_battery_capacity) if scan.car_battery_capacity else None,
-                    new_value=str(capacity),
+                    field_name="battery_spec",
+                    previous_value=str(scan.battery_spec_id) if scan.battery_spec_id else None,
+                    new_value=str(spec_id),
                     new_source="manual_override",
                     reason=reason or None
                 )
                 db.session.add(audit)
-                scan.car_battery_capacity = capacity
-                changes.append("battery_capacity")
+                scan.battery_spec_id = spec_id
+                changes.append("battery_spec")
         except (ValueError, TypeError):
-            return jsonify({"error": "Invalid battery capacity value"}), 400
+            return jsonify({"error": "Invalid battery spec ID"}), 400
     
     if not changes:
         return jsonify({"error": "No changes requested"}), 400
@@ -259,6 +259,39 @@ def revert_scan_powertrain(scan_id: int):
         "new_source": pt_source,
         "audit_id": audit.id
     })
+
+
+@bp.get("/api/battery-specs/list")
+def list_battery_specs():
+    """List battery specs for dropdown, optionally filtered by maker/model."""
+    from app.modules.battery.models import BatterySpec
+    from sqlalchemy import or_
+    
+    maker = request.args.get("maker", "").strip()
+    model = request.args.get("model", "").strip()
+    
+    stmt = select(BatterySpec).where(BatterySpec.is_active == True).order_by(
+        BatterySpec.maker, BatterySpec.model, BatterySpec.model_year.desc()
+    )
+    
+    if maker:
+        stmt = stmt.where(BatterySpec.maker.ilike(f"%{maker}%"))
+    if model:
+        stmt = stmt.where(BatterySpec.model.ilike(f"%{model}%"))
+    
+    specs = list(db.session.scalars(stmt.limit(50)).all())
+    
+    return jsonify([{
+        "id": s.id,
+        "maker": s.maker,
+        "model": s.model,
+        "trim_grade": s.trim_grade,
+        "model_year": s.model_year,
+        "usable_kwh": float(s.usable_kwh) if s.usable_kwh else None,
+        "gross_kwh": float(s.gross_kwh) if s.gross_kwh else None,
+        "source_type": s.source_type,
+        "source_url": s.source_url
+    } for s in specs])
 
 
 @bp.get("/activities")

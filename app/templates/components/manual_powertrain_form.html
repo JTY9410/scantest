@@ -45,9 +45,12 @@
         </div>
         
         <div>
-          <label for="battery-capacity-input" class="block text-sm font-medium mb-2">배터리 용량 (kWh)</label>
-          <input type="number" id="battery-capacity-input" name="battery_capacity" class="form-input w-full" 
-                 value="{{ current_battery_capacity or '' }}" placeholder="예: 77.4" step="0.1">
+          <label for="battery-spec-select" class="block text-sm font-medium mb-2">배터리 사양</label>
+          <select id="battery-spec-select" name="battery_spec_id" class="form-select w-full">
+            <option value="">선택 안 함</option>
+            <!-- Options loaded dynamically -->
+          </select>
+          <p class="text-xs text-muted mt-1">제조사·모델 입력 시 자동 필터</p>
         </div>
       </div>
       
@@ -97,6 +100,42 @@
   const errorDiv = document.getElementById('powertrain-error');
   const errorMsg = document.getElementById('powertrain-error-message');
   const revertBtn = document.getElementById('revert-btn');
+  const batterySpecSelect = document.getElementById('battery-spec-select');
+  const makerInput = document.getElementById('maker-input');
+  const modelInput = document.getElementById('model-input');
+  
+  // Load battery specs
+  async function loadBatterySpecs(maker = null, model = null) {
+    try {
+      let url = '/api/battery-specs/list';
+      const params = new URLSearchParams();
+      if (maker) params.append('maker', maker);
+      if (model) params.append('model', model);
+      if (params.toString()) url += '?' + params.toString();
+      
+      const response = await fetch(url);
+      const specs = await response.json();
+      
+      batterySpecSelect.innerHTML = '<option value="">선택 안 함</option>';
+      specs.forEach(spec => {
+        const label = `${spec.maker} ${spec.model} ${spec.trim_grade || ''} (${spec.usable_kwh || spec.gross_kwh}kWh, ${spec.source_type})`.trim();
+        const option = document.createElement('option');
+        option.value = spec.id;
+        option.textContent = label;
+        if (spec.id === {{ current_battery_spec_id or 'null' }}) option.selected = true;
+        batterySpecSelect.appendChild(option);
+      });
+    } catch (error) {
+      console.error('Failed to load battery specs:', error);
+    }
+  }
+  
+  // Load specs on page load
+  loadBatterySpecs(makerInput.value, modelInput.value);
+  
+  // Reload on maker/model change
+  makerInput.addEventListener('change', () => loadBatterySpecs(makerInput.value, modelInput.value));
+  modelInput.addEventListener('change', () => loadBatterySpecs(makerInput.value, modelInput.value));
   
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -108,7 +147,7 @@
       maker: formData.get('maker') || undefined,
       model: formData.get('model') || undefined,
       year: formData.get('year') || undefined,
-      battery_capacity: formData.get('battery_capacity') || undefined,
+      battery_spec_id: formData.get('battery_spec_id') || undefined,
       reason: formData.get('reason') || undefined
     };
     
