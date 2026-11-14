@@ -65,6 +65,7 @@ jobs:
           context: .
           file: Dockerfile
           target: prod
+          platforms: linux/amd64,linux/arm64
           build-args: |
             APP_VERSION=2.0.0+${{ github.sha }}
           push: true
