@@ -215,29 +215,182 @@ class LearningStats:
                 for model, ecus in models.items():
                     self._discovered_ecus[maker][model] = set(ecus)
     
+    def load_from_database(self, maker: Optional[str] = None, model: Optional[str] = None) -> int:
+        """Load learned data from database into memory.
+        
+        Args:
+            maker: Filter by maker (None = all)
+            model: Filter by model (None = all)
+            
+        Returns:
+            Number of command stats loaded
+        """
+        from sqlalchemy import text
+        
+        query = "SELECT maker, model, ecu, command, attempts, successes, timeouts, nrcs, avg_response_ms FROM command_stats WHERE 1=1"
+        params = {}
+        
+        if maker:
+            query += " AND maker = :maker"
+            params['maker'] = maker
+        if model:
+            query += " AND model = :model"
+            params['model'] = model
+        
+        results = db.session.execute(text(query), params).fetchall()
+        
+        loaded = 0
+        for row in results:
+            maker_val, model_val, ecu, command, attempts, successes, timeouts, nrcs, avg_ms = row
+            
+            # Load into memory stats
+            stats = self._stats[maker_val][model_val][ecu][command]
+            stats['total'] = attempts
+            stats['success'] = successes
+            stats['timeout'] = timeouts
+            stats['nrc'] = nrcs
+            
+            # Approximate response times from avg
+            if avg_ms:
+                self._response_times[maker_val][model_val][ecu][command] = [int(avg_ms)] * min(successes, 10)
+            
+            loaded += 1
+        
+        return loaded
+    
+    def select_commands_ucb(
+        self,
+        maker: str,
+        model: str,
+        ecu: str,
+        candidate_commands: List[str],
+        top_k: int = 10
+    ) -> List[str]:
+        """Select top-k commands using UCB (Upper Confidence Bound) algorithm.
+        
+        Balances exploration (trying untested commands) with exploitation (using known-good commands).
+        
+        Args:
+            maker: Vehicle maker
+            model: Vehicle model
+            ecu: ECU identifier
+            candidate_commands: List of possible commands
+            top_k: Number of commands to select
+            
+        Returns:
+            Sorted list of selected commands (highest UCB score first)
+        """
+        from sqlalchemy import text
+        import math
+        
+        # Get UCB scores from database for these commands
+        if not candidate_commands:
+            return []
+        
+        placeholders = ','.join([f':cmd{i}' for i in range(len(candidate_commands))])
+        params = {'maker': maker, 'model': model, 'ecu': ecu}
+        params.update({f'cmd{i}': cmd for i, cmd in enumerate(candidate_commands)})
+        
+        results = db.session.execute(text(f"""
+            SELECT command, ucb_score, attempts, successes
+            FROM command_stats
+            WHERE maker = :maker AND model = :model AND ecu = :ecu
+            AND command IN ({placeholders})
+            ORDER BY ucb_score DESC
+        """), params).fetchall()
+        
+        scored = {row[0]: row[1] for row in results}  # command -> ucb_score
+        tested = {row[0] for row in results}
+        
+        # Commands not in DB get maximum exploration bonus
+        untested = [cmd for cmd in candidate_commands if cmd not in tested]
+        
+        # Combine: tested commands by UCB score + untested commands (exploration bonus)
+        selected = []
+        
+        # Add top UCB-scored tested commands
+        for cmd in sorted(scored.keys(), key=lambda c: scored[c], reverse=True):
+            selected.append(cmd)
+            if len(selected) >= top_k:
+                break
+        
+        # Fill remaining slots with untested commands (exploration)
+        for cmd in untested:
+            if len(selected) >= top_k:
+                break
+            selected.append(cmd)
+        
+        return selected[:top_k]
+    
     def persist_to_database(self) -> None:
         """Persist learned data to database for long-term storage."""
-        # Store in a dedicated learning_stats table or as JSON in system settings
-        import json
+        from sqlalchemy import text
+        import statistics
         
-        data = self.export_learned_data()
+        persisted = 0
         
-        # For now, just log the summary
-        total_commands = sum(
-            len(cmds)
-            for maker_data in self._stats.values()
-            for model_data in maker_data.values()
-            for ecu_data in model_data.values()
-            for cmds in [ecu_data]
-        )
+        for maker, models in self._stats.items():
+            for model, ecus in models.items():
+                for ecu, commands in ecus.items():
+                    for command, stats in commands.items():
+                        total = stats.get('total', 0)
+                        if total == 0:
+                            continue
+                        
+                        success = stats.get('success', 0)
+                        timeout = stats.get('timeout', 0)
+                        nrc = stats.get('nrc', 0)
+                        
+                        # Get response time stats
+                        response_times = self._response_times.get(maker, {}).get(model, {}).get(ecu, {}).get(command, [])
+                        min_ms = min(response_times) if response_times else None
+                        max_ms = max(response_times) if response_times else None
+                        avg_ms = statistics.mean(response_times) if response_times else None
+                        
+                        # Thompson sampling: alpha = successes + 1, beta = failures + 1
+                        thompson_alpha = float(success + 1)
+                        thompson_beta = float((total - success) + 1)
+                        
+                        # UCB score: success_rate + sqrt(2 * ln(total) / attempts)
+                        import math
+                        success_rate = success / total if total > 0 else 0.0
+                        exploration = math.sqrt(2 * math.log(total + 1) / total) if total > 0 else 1.0
+                        ucb_score = success_rate + exploration
+                        
+                        # Upsert to database
+                        db.session.execute(text("""
+                            INSERT INTO command_stats 
+                            (maker, model, ecu, command, attempts, successes, timeouts, nrcs,
+                             min_response_ms, max_response_ms, avg_response_ms,
+                             ucb_score, thompson_alpha, thompson_beta, last_seen, updated_at)
+                            VALUES (:maker, :model, :ecu, :command, :attempts, :successes, :timeouts, :nrcs,
+                                    :min_ms, :max_ms, :avg_ms, :ucb_score, :alpha, :beta, now(), now())
+                            ON CONFLICT (maker, model, ecu, command) 
+                            DO UPDATE SET
+                                attempts = command_stats.attempts + EXCLUDED.attempts,
+                                successes = command_stats.successes + EXCLUDED.successes,
+                                timeouts = command_stats.timeouts + EXCLUDED.timeouts,
+                                nrcs = command_stats.nrcs + EXCLUDED.nrcs,
+                                min_response_ms = LEAST(command_stats.min_response_ms, EXCLUDED.min_response_ms),
+                                max_response_ms = GREATEST(command_stats.max_response_ms, EXCLUDED.max_response_ms),
+                                avg_response_ms = (command_stats.avg_response_ms * command_stats.attempts + 
+                                                  EXCLUDED.avg_response_ms * EXCLUDED.attempts) / 
+                                                 (command_stats.attempts + EXCLUDED.attempts),
+                                ucb_score = EXCLUDED.ucb_score,
+                                thompson_alpha = EXCLUDED.thompson_alpha,
+                                thompson_beta = EXCLUDED.thompson_beta,
+                                last_seen = now(),
+                                updated_at = now()
+                        """), {
+                            'maker': maker, 'model': model, 'ecu': ecu, 'command': command,
+                            'attempts': total, 'successes': success, 'timeouts': timeout, 'nrcs': nrc,
+                            'min_ms': min_ms, 'max_ms': max_ms, 'avg_ms': avg_ms,
+                            'ucb_score': ucb_score, 'alpha': thompson_alpha, 'beta': thompson_beta
+                        })
+                        persisted += 1
         
-        total_ecus = sum(
-            len(ecus)
-            for maker_data in self._discovered_ecus.values()
-            for ecus in maker_data.values()
-        )
-        
-        print(f"Learned data: {total_commands} commands tracked, {total_ecus} ECUs discovered")
+        db.session.commit()
+        print(f"Persisted {persisted} command stats to database")
 
 
 # Global learning stats instance

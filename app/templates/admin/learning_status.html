@@ -1,0 +1,155 @@
+{% extends "admin/base.html" %}
+
+{% block title %}학습 현황{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>학습 현황 대시보드</h2>
+    
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5>전체 통계</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-2">
+                            <h6>제조사</h6>
+                            <h3>{{ summary[0] }}</h3>
+                        </div>
+                        <div class="col-md-2">
+                            <h6>모델</h6>
+                            <h3>{{ summary[1] }}</h3>
+                        </div>
+                        <div class="col-md-2">
+                            <h6>ECU</h6>
+                            <h3>{{ summary[2] }}</h3>
+                        </div>
+                        <div class="col-md-2">
+                            <h6>명령</h6>
+                            <h3>{{ summary[3] }}</h3>
+                        </div>
+                        <div class="col-md-2">
+                            <h6>총 시도</h6>
+                            <h3>{{ summary[4]:,}}</h3>
+                        </div>
+                        <div class="col-md-2">
+                            <h6>성공률</h6>
+                            <h3>{{ summary[6] }}%</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>제조사별 통계</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>제조사</th>
+                                <th>명령</th>
+                                <th>시도</th>
+                                <th>성공</th>
+                                <th>성공률</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for row in by_maker %}
+                            <tr>
+                                <td>{{ row[0] }}</td>
+                                <td>{{ row[1] }}</td>
+                                <td>{{ row[2]:,}}</td>
+                                <td>{{ row[3]:,}}</td>
+                                <td>{{ row[4] }}%</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        <div class="col-md-6">
+            <div class="card">
+                <div class="card-header">
+                    <h5>학습 실행 기록</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>이름</th>
+                                <th>상태</th>
+                                <th>생성일</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for run in learning_runs %}
+                            <tr>
+                                <td>{{ run[0] }}</td>
+                                <td>{{ run[1] }}</td>
+                                <td>
+                                    <span class="badge bg-{{ 'success' if run[2] == 'promoted' else 'warning' if run[2] == 'candidate' else 'danger' }}">
+                                        {{ run[2] }}
+                                    </span>
+                                </td>
+                                <td>{{ run[5].strftime('%Y-%m-%d %H:%M') if run[5] else 'N/A' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="row mt-4">
+        <div class="col-md-12">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Top 20 명령 (UCB Score 순)</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-sm table-striped">
+                        <thead>
+                            <tr>
+                                <th>제조사</th>
+                                <th>모델</th>
+                                <th>ECU</th>
+                                <th>명령</th>
+                                <th>시도</th>
+                                <th>성공</th>
+                                <th>성공률</th>
+                                <th>UCB Score</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for cmd in top_commands %}
+                            <tr>
+                                <td>{{ cmd[0] }}</td>
+                                <td>{{ cmd[1] or 'N/A' }}</td>
+                                <td>{{ cmd[2] }}</td>
+                                <td><code>{{ cmd[3] }}</code></td>
+                                <td>{{ cmd[4] }}</td>
+                                <td>{{ cmd[5] }}</td>
+                                <td>{{ cmd[6] }}%</td>
+                                <td>{{ "%.3f"|format(cmd[7]) if cmd[7] else 'N/A' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

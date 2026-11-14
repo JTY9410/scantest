@@ -1146,3 +1146,132 @@ def register_cli(app: Flask) -> None:
     # Battery management commands
     from app.modules.battery.cli import battery
     app.cli.add_command(battery)
+
+    # Learning management commands
+    @click.group()
+    def learning() -> None:
+        """Continuous learning management and experiment tracking."""
+        pass
+    
+    @learning.command("stats")
+    @click.option("--maker", help="Filter by maker")
+    @click.option("--model", help="Filter by model")
+    @click.option("--ecu", help="Filter by ECU")
+    @click.option("--limit", default=20, help="Limit results")
+    def learning_stats(maker: str, model: str, ecu: str, limit: int) -> None:
+        """Show learning statistics from command_stats."""
+        from sqlalchemy import text
+        
+        query = """
+            SELECT maker, model, ecu, command, attempts, successes, 
+                   ROUND(100.0 * successes / NULLIF(attempts, 0), 1) as success_rate,
+                   avg_response_ms, ucb_score, last_seen
+            FROM command_stats
+            WHERE 1=1
+        """
+        params = {}
+        
+        if maker:
+            query += " AND maker = :maker"
+            params['maker'] = maker
+        if model:
+            query += " AND model = :model"
+            params['model'] = model
+        if ecu:
+            query += " AND ecu = :ecu"
+            params['ecu'] = ecu
+        
+        query += f" ORDER BY ucb_score DESC NULLS LAST LIMIT {limit}"
+        
+        results = db.session.execute(text(query), params).fetchall()
+        
+        click.echo("=" * 120)
+        click.echo("LEARNING STATISTICS (Top by UCB Score)")
+        click.echo("=" * 120)
+        click.echo(f"{'Maker':<15} {'Model':<20} {'ECU':<10} {'Command':<15} {'Attempts':<10} {'Success%':<10} {'AvgMs':<10} {'UCB':<8}")
+        click.echo("-" * 120)
+        
+        for row in results:
+            maker_val, model_val, ecu_val, cmd, attempts, successes, rate, avg_ms, ucb, last = row
+            avg_str = f"{int(avg_ms)}" if avg_ms else "N/A"
+            ucb_str = f"{ucb:.3f}" if ucb else "N/A"
+            click.echo(f"{maker_val:<15} {model_val or 'N/A':<20} {ecu_val:<10} {cmd:<15} {attempts:<10} {rate or 0:<10.1f} {avg_str:<10} {ucb_str:<8}")
+        
+        click.echo("=" * 120)
+    
+    @learning.command("promote")
+    @click.argument("run_id", type=int)
+    @click.option("--yes", is_flag=True, help="Skip confirmation")
+    def learning_promote(run_id: int, yes: bool) -> None:
+        """Promote a learning run to production."""
+        from sqlalchemy import text
+        
+        # Get run info
+        run = db.session.execute(text("""
+            SELECT id, run_name, status, params, metrics
+            FROM learning_runs WHERE id = :id
+        """), {'id': run_id}).fetchone()
+        
+        if not run:
+            click.echo(f"Learning run {run_id} not found", err=True)
+            return
+        
+        if run[2] == 'promoted':
+            click.echo(f"Run {run_id} is already promoted", err=True)
+            return
+        
+        click.echo(f"Run ID: {run[0]}")
+        click.echo(f"Name: {run[1]}")
+        click.echo(f"Status: {run[2]}")
+        click.echo(f"Params: {run[3]}")
+        click.echo(f"Metrics: {run[4]}")
+        
+        if not yes:
+            if not click.confirm("\nPromote this run to production?"):
+                click.echo("Aborted")
+                return
+        
+        db.session.execute(text("""
+            UPDATE learning_runs 
+            SET status = 'promoted', promoted_at = now(), updated_at = now()
+            WHERE id = :id
+        """), {'id': run_id})
+        db.session.commit()
+        
+        click.echo(f"✓ Run {run_id} promoted to production")
+    
+    @learning.command("rollback")
+    @click.argument("run_id", type=int)
+    @click.option("--reason", required=True, help="Reason for rollback")
+    @click.option("--yes", is_flag=True, help="Skip confirmation")
+    def learning_rollback(run_id: int, reason: str, yes: bool) -> None:
+        """Roll back a learning run."""
+        from sqlalchemy import text
+        
+        run = db.session.execute(text("""
+            SELECT id, run_name, status FROM learning_runs WHERE id = :id
+        """), {'id': run_id}).fetchone()
+        
+        if not run:
+            click.echo(f"Learning run {run_id} not found", err=True)
+            return
+        
+        click.echo(f"Rolling back run {run[0]}: {run[1]} (status: {run[2]})")
+        click.echo(f"Reason: {reason}")
+        
+        if not yes:
+            if not click.confirm("\nProceed with rollback?"):
+                click.echo("Aborted")
+                return
+        
+        db.session.execute(text("""
+            UPDATE learning_runs 
+            SET status = 'rolled_back', rolled_back_at = now(), 
+                rollback_reason = :reason, updated_at = now()
+            WHERE id = :id
+        """), {'id': run_id, 'reason': reason})
+        db.session.commit()
+        
+        click.echo(f"✓ Run {run_id} rolled back")
+    
+    app.cli.add_command(learning)
