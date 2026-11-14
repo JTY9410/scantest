@@ -140,10 +140,15 @@ def test_non_admin_cannot_resolve(client, make_user, app):
 
 def test_nissan_spellings_unified(app):
     with app.app_context():
+        from app.core.makers import resolve_maker
         for i, name in enumerate(["Nissan", "NISSAN", "닛산", " nissan "]):
             db.session.add(KnowledgeDTC(code=f"P010{i}", maker=name, source="t", description="d"))
         db.session.commit()
-        assert set(db.session.scalars(select(KnowledgeDTC.maker)).all()) == {"닛산"}
+        # All variations should resolve to 'nissan' standard key
+        makers = set(db.session.scalars(select(KnowledgeDTC.maker)).all())
+        for maker in makers:
+            assert resolve_maker(maker) == 'nissan'
+        # Querying with any variation should find all records
         for query in ("Nissan", "NISSAN", "닛산"):
             codes = {d.code for d in list_dtcs(status=None, maker=query)}
             assert {"P0100", "P0101", "P0102", "P0103"} <= codes

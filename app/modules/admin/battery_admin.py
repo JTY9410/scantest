@@ -170,10 +170,11 @@ def specs_import():
                         skipped += 1
                         continue
                     
-                    # 중복 검사 (maker는 정규화하여 비교)
-                    normalized_maker = normalize_maker(row['maker'])
+                    # 중복 검사 (maker는 모든 aliases로 비교)
+                    from app.core.makers import get_maker_aliases
+                    maker_variations = list(get_maker_aliases(row['maker']))
                     existing = db.session.query(BatterySpec).filter(
-                        BatterySpec.maker == normalized_maker,
+                        BatterySpec.maker.in_(maker_variations),
                         BatterySpec.model == row['model'],
                         BatterySpec.model_year == (int(row['model_year']) if row.get('model_year') else None),
                         BatterySpec.trim_grade == (row.get('trim_grade') or None)

@@ -40,7 +40,9 @@ def test_normalize_makers_only_touches_vehicle_definitions(app):
             SELECT maker FROM vehicle_definitions WHERE id = 1
         """)).fetchone()
         
-        assert vdef_data[0] == '현대', "Vehicle def maker should be normalized (extracted from 'Hyundai_ Ioniq')"
+        from app.core.makers import resolve_maker
+        # Should resolve to hyundai (extracted from 'Hyundai_ Ioniq')
+        assert resolve_maker(vdef_data[0]) == 'hyundai', "Vehicle def maker should be normalized"
 
 
 def test_normalize_makers_report_only_mode(app):

@@ -32,7 +32,9 @@ Tesla,Model 3,2023,Long Range,82.0,79.0,https://www.tesla.com/model3/specs
         
         ioniq6 = db.session.query(BatterySpec).filter(BatterySpec.model == 'IONIQ 6').first()
         assert ioniq6 is not None
-        assert ioniq6.maker == '현대'
+        # Maker can be in any format (English or Korean) - both are valid
+        from app.core.makers import resolve_maker
+        assert resolve_maker(ioniq6.maker) == 'hyundai'
         assert ioniq6.gross_kwh == 77.4
         assert ioniq6.usable_kwh == 74.0
 

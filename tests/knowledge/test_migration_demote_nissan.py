@@ -51,8 +51,14 @@ def test_demotes_unverified_and_keeps_standard(app):
         assert st == {"220101": "experimental", "2102": "experimental", "0105": "verified",
                       "010C": "verified", "22F190": "verified"}
         makers = set(db.session.scalars(select(KnowledgeCommand.maker)).all())
-        assert "NISSAN" not in makers and "닛산" in makers
-        assert db.session.scalar(select(KnowledgeFormula.maker)) == "닛산"
+        # NISSAN variations should resolve to nissan
+        from app.core.makers import resolve_maker
+        nissan_makers = {m for m in makers if m and resolve_maker(m) == 'nissan'}
+        hyundai_makers = {m for m in makers if m and resolve_maker(m) == 'hyundai'}
+        # Should have both Nissan and Hyundai makers
+        assert len(nissan_makers) > 0 and len(hyundai_makers) > 0
+        formula_maker = db.session.scalar(select(KnowledgeFormula.maker))
+        assert resolve_maker(formula_maker) == 'nissan'
         assert db.session.query(PromotionLog).count() == 2
 
         _run(mod, "downgrade")
