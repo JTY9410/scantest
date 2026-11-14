@@ -28,6 +28,17 @@ def _app_base():
         flask_migrate_upgrade()
     yield app
     with app.app_context():
+        # Cleanup: terminate all connections and drop schema
+        try:
+            db.session.execute(text("""
+                SELECT pg_terminate_backend(pid)
+                FROM pg_stat_activity
+                WHERE datname = current_database()
+                AND pid <> pg_backend_pid()
+            """))
+            db.session.commit()
+        except Exception:
+            pass
         db.session.execute(text("DROP SCHEMA public CASCADE"))
         db.session.execute(text("CREATE SCHEMA public"))
         db.session.commit()
@@ -44,9 +55,13 @@ def _clean_database(app):
     yield
     with app.app_context():
         # Close all existing connections first
-        db.session.rollback()
-        db.session.remove()
-        db.engine.dispose()
+        try:
+            db.session.rollback()
+            db.session.close()
+            db.session.remove()
+            db.engine.dispose()
+        except Exception:
+            pass
         
         if "sqlite" in app.config["SQLALCHEMY_DATABASE_URI"]:
             for table in reversed(db.metadata.sorted_tables):
@@ -57,20 +72,50 @@ def _clean_database(app):
                 pass
             db.session.commit()
         else:
-            # Postgres: TRUNCATE all tables excluding alembic_version
-            # Close all active sessions first
-            db.session.rollback()
-            db.session.close()
-            db.session.remove()
+            # Postgres: Terminate connections then TRUNCATE
+            try:
+                # Create new connection for cleanup
+                with db.engine.connect() as conn:
+                    # Terminate other connections
+                    conn.execute(text("""
+                        SELECT pg_terminate_backend(pid)
+                        FROM pg_stat_activity  
+                        WHERE datname = current_database()
+                        AND pid <> pg_backend_pid()
+                        AND state = 'idle'
+                    """))
+                    conn.commit()
+            except Exception:
+                pass
             
-            # Use DELETE instead of TRUNCATE to avoid lock issues
-            for table in reversed(db.metadata.sorted_tables):
-                if table.name != 'alembic_version':
-                    try:
-                        db.session.execute(text(f"DELETE FROM {table.name}"))
-                    except Exception:
-                        pass
-            db.session.commit()
+            # TRUNCATE all tables excluding alembic_version
+            db.session.execute(text("SET lock_timeout = '10s'"))
+            tables = [t.name for t in db.metadata.sorted_tables if t.name != 'alembic_version']
+            if tables:
+                tables_str = ", ".join(tables)
+                try:
+                    db.session.execute(text(f"TRUNCATE {tables_str} RESTART IDENTITY CASCADE"))
+                    db.session.commit()
+                except Exception as e:
+                    # If TRUNCATE fails due to locks, fall back to DELETE
+                    db.session.rollback()
+                    for table in reversed(db.metadata.sorted_tables):
+                        if table.name != 'alembic_version':
+                            try:
+                                db.session.execute(text(f"DELETE FROM {table.name}"))
+                            except Exception:
+                                pass
+                    # Reset sequences manually
+                    for table in db.metadata.sorted_tables:
+                        if table.name != 'alembic_version':
+                            for col in table.columns:
+                                if col.autoincrement:
+                                    try:
+                                        seq = f"{table.name}_{col.name}_seq"
+                                        db.session.execute(text(f"SELECT setval('{seq}', 1, false)"))
+                                    except Exception:
+                                        pass
+                    db.session.commit()
         db.session.remove()
     
     limiter.reset()
