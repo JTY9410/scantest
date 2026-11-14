@@ -243,3 +243,46 @@ def car_info_revoke():
         else:
             flash("인증키를 지웠습니다.", "success")
     return redirect(url_for("admin.car_info_settings"))
+
+
+@bp.post("/powertrain/override")
+@admin_required
+def powertrain_override():
+    """Manual powertrain override with audit trail."""
+    from app.modules.definitions.powertrain_service import save_powertrain_override
+    from flask import jsonify
+    
+    data = request.get_json()
+    vehicle_definition_id = data.get('vehicle_definition_id')
+    scan_id = data.get('scan_id')
+    new_powertrain = data.get('powertrain')
+    reason = data.get('reason')
+    
+    if not new_powertrain:
+        return jsonify({"error": "Powertrain required"}), 400
+    
+    try:
+        result = save_powertrain_override(
+            user_id=current_user.id,
+            vehicle_definition_id=vehicle_definition_id,
+            scan_id=scan_id,
+            new_powertrain=new_powertrain,
+            reason=reason
+        )
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+@bp.post("/powertrain/revert/<int:vehicle_definition_id>")
+@admin_required
+def powertrain_revert(vehicle_definition_id: int):
+    """Revert manual override back to automatic classification."""
+    from app.modules.definitions.powertrain_service import revert_to_automatic
+    from flask import jsonify
+    
+    try:
+        result = revert_to_automatic(vehicle_definition_id=vehicle_definition_id)
+        return jsonify(result), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400

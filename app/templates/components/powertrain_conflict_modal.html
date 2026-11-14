@@ -1,0 +1,160 @@
+{% macro powertrain_conflict_modal(conflict_data, vehicle_definition_id=None, scan_id=None) %}
+<div class="powertrain-conflict-modal hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+     data-vehicle-definition-id="{{ vehicle_definition_id }}"
+     data-scan-id="{{ scan_id }}">
+  <div class="card max-w-2xl w-full mx-4">
+    <div class="card-body">
+      <div class="flex items-start justify-between">
+        <div>
+          <h2 class="text-lg font-bold text-error">동력원 불일치 감지</h2>
+          <p class="mt-1 text-sm text-muted">
+            차량번호 조회 결과와 VIN 규칙이 다른 동력원을 나타냅니다.
+          </p>
+        </div>
+        <button type="button" class="btn-icon" data-close-modal aria-label="닫기">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+      <div class="mt-6 grid grid-cols-2 gap-4">
+        <div class="border border-line rounded-lg p-4 bg-surface">
+          <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 text-success" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <h3 class="font-bold">차량번호 조회 (권장)</h3>
+          </div>
+          <dl class="mt-3 space-y-2 text-sm">
+            <div>
+              <dt class="font-medium text-muted">동력원</dt>
+              <dd class="mt-1 text-base font-bold">{{ conflict_data.plate_powertrain }}</dd>
+            </div>
+            <div>
+              <dt class="font-medium text-muted">신뢰도</dt>
+              <dd class="mt-1">{{ "%.1f"|format(conflict_data.plate_confidence * 100) }}%</dd>
+            </div>
+            <div>
+              <dt class="font-medium text-muted">출처</dt>
+              <dd class="mt-1">국토교통부 차량등록 DB</dd>
+            </div>
+          </dl>
+          <button type="button" 
+                  class="btn btn-primary w-full mt-4"
+                  data-select-powertrain="{{ conflict_data.plate_powertrain }}"
+                  data-source="plate_lookup">
+            이 값 사용
+          </button>
+        </div>
+
+        <div class="border border-line rounded-lg p-4">
+          <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 text-warning" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <h3 class="font-bold">VIN 규칙</h3>
+          </div>
+          <dl class="mt-3 space-y-2 text-sm">
+            <div>
+              <dt class="font-medium text-muted">동력원</dt>
+              <dd class="mt-1 text-base font-bold">{{ conflict_data.vin_powertrain }}</dd>
+            </div>
+            <div>
+              <dt class="font-medium text-muted">신뢰도</dt>
+              <dd class="mt-1">{{ "%.1f"|format(conflict_data.vin_confidence * 100) }}%</dd>
+            </div>
+            <div>
+              <dt class="font-medium text-muted">출처</dt>
+              <dd class="mt-1">VIN 패턴 규칙</dd>
+            </div>
+          </dl>
+          <button type="button" 
+                  class="btn btn-secondary w-full mt-4"
+                  data-select-powertrain="{{ conflict_data.vin_powertrain }}"
+                  data-source="vin_pattern">
+            이 값 사용
+          </button>
+        </div>
+      </div>
+
+      <div class="mt-6 border-t border-line pt-4">
+        <label for="conflict-reason" class="block text-sm font-medium">
+          해결 사유 (선택)
+        </label>
+        <textarea id="conflict-reason" 
+                  class="input mt-2" 
+                  rows="2" 
+                  placeholder="왜 이 값을 선택했는지 기록할 수 있습니다"></textarea>
+      </div>
+
+      <div class="mt-4 flex justify-end gap-2">
+        <button type="button" class="btn btn-secondary" data-close-modal>
+          나중에
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  const modal = document.querySelector('.powertrain-conflict-modal');
+  if (!modal) return;
+
+  const closeButtons = modal.querySelectorAll('[data-close-modal]');
+  const selectButtons = modal.querySelectorAll('[data-select-powertrain]');
+  const reasonInput = document.getElementById('conflict-reason');
+
+  function closeModal() {
+    modal.classList.add('hidden');
+  }
+
+  closeButtons.forEach(btn => {
+    btn.addEventListener('click', closeModal);
+  });
+
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  selectButtons.forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const powertrain = btn.dataset.selectPowertrain;
+      const source = btn.dataset.source;
+      const reason = reasonInput.value.trim();
+      
+      const vehicleDefinitionId = modal.dataset.vehicleDefinitionId;
+      const scanId = modal.dataset.scanId;
+
+      try {
+        const response = await fetch('/admin/powertrain/override', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]').content
+          },
+          body: JSON.stringify({
+            vehicle_definition_id: vehicleDefinitionId ? parseInt(vehicleDefinitionId) : null,
+            scan_id: scanId ? parseInt(scanId) : null,
+            powertrain: powertrain,
+            reason: reason || `${source === 'plate_lookup' ? '차량번호' : 'VIN'} 조회 결과 선택`
+          })
+        });
+
+        if (!response.ok) {
+          const error = await response.json();
+          throw new Error(error.error || '저장 실패');
+        }
+
+        // Success - reload page to show updated powertrain
+        window.location.reload();
+      } catch (err) {
+        alert('저장 중 오류가 발생했습니다: ' + err.message);
+        console.error(err);
+      }
+    });
+  });
+})();
+</script>
+{% endmacro %}

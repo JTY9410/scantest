@@ -18,11 +18,16 @@ def _app_base():
     """Session-scoped app for creating schema once"""
     app = create_app("testing")
     with app.app_context():
-        db.drop_all()
+        # Use CASCADE to handle foreign key dependencies added by migrations
+        db.session.execute(text("DROP SCHEMA public CASCADE"))
+        db.session.execute(text("CREATE SCHEMA public"))
+        db.session.commit()
         db.create_all()
     yield app
     with app.app_context():
-        db.drop_all()
+        db.session.execute(text("DROP SCHEMA public CASCADE"))
+        db.session.execute(text("CREATE SCHEMA public"))
+        db.session.commit()
 
 
 @pytest.fixture
