@@ -89,16 +89,19 @@ def test_admin_conflict_api_requires_admin():
 def test_conflict_modal_template_exists():
     """Test that conflict modal template exists."""
     import os
-    template_path = '/agent/repos/scantest/app/templates/components/powertrain_conflict_modal.html'
-    assert os.path.exists(template_path), "Conflict modal template should exist"
+    from pathlib import Path
+    project_root = Path(__file__).parent.parent.parent
+    template_path = project_root / 'app' / 'templates' / 'components' / 'powertrain_conflict_modal.html'
+    assert template_path.exists(), "Conflict modal template should exist"
 
 
 def test_migration_adds_conflict_columns():
     """Test that migration adds all required conflict columns."""
     # Verify migration file exists
-    import os
-    migration_path = '/agent/repos/scantest/migrations/versions/3fa208f56efc_add_powertrain_conflict_and_audit.py'
-    assert os.path.exists(migration_path), "Conflict migration should exist"
+    from pathlib import Path
+    project_root = Path(__file__).parent.parent.parent
+    migration_path = project_root / 'migrations' / 'versions' / '3fa208f56efc_add_powertrain_conflict_and_audit.py'
+    assert migration_path.exists(), "Conflict migration should exist"
     
     # Read migration and verify it adds the columns
     with open(migration_path) as f:
