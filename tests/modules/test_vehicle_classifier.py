@@ -66,7 +66,7 @@ def test_is_not_vehicle():
 def test_classify_real_formats():
     """Test classification with exact real data formats from production."""
     # Real format 1: WiCAN with underscores and spaces
-    pt, src, conf = classify_vehicle_powertrain(
+    pt, src, conf, _ = classify_vehicle_powertrain(
         maker='Hyundai_ Ioniq5_Ioniq6 72kWh',
         model='Hyundai: Ioniq5/Ioniq6 72kWh',
         submodel=None,
@@ -77,7 +77,7 @@ def test_classify_real_formats():
     assert conf > 0.8
     
     # Real format 2: VW e-Golf
-    pt2, src2, conf2 = classify_vehicle_powertrain(
+    pt2, src2, conf2, _ = classify_vehicle_powertrain(
         maker='Volkswagen',
         model='e-Golf',
         submodel=None,
@@ -87,7 +87,7 @@ def test_classify_real_formats():
     assert 'model_name' in src2 or 'BEV' in src2
     
     # Real format 3: Renault ZOE with maker '-'
-    pt3, src3, conf3 = classify_vehicle_powertrain(
+    pt3, src3, conf3, _ = classify_vehicle_powertrain(
         maker='-',
         model='ZOE_Ph2',
         submodel=None,
@@ -97,7 +97,7 @@ def test_classify_real_formats():
     assert 'model_name' in src3 or 'BEV' in src3
     
     # Real format 4: ECU vendor MARELLI
-    pt4, src4, conf4 = classify_vehicle_powertrain(
+    pt4, src4, conf4, _ = classify_vehicle_powertrain(
         maker='MARELLI',
         model=None,
         submodel=None,
@@ -107,7 +107,7 @@ def test_classify_real_formats():
     assert src4 == 'path_token'
     
     # Real format 5: TEVES (ECU vendor)
-    pt5, src5, conf5 = classify_vehicle_powertrain(
+    pt5, src5, conf5, _ = classify_vehicle_powertrain(
         maker='TEVES',
         model=None,
         submodel=None,
@@ -116,7 +116,7 @@ def test_classify_real_formats():
     assert pt5 == 'not_vehicle', f"Expected not_vehicle for TEVES, got {pt5}"
     
     # Real format 6: Dallara (race car, not street vehicle)
-    pt6, src6, conf6 = classify_vehicle_powertrain(
+    pt6, src6, conf6, _ = classify_vehicle_powertrain(
         maker='Dallara',
         model='Formula',
         submodel=None,
@@ -125,7 +125,7 @@ def test_classify_real_formats():
     assert pt6 == 'not_vehicle', f"Expected not_vehicle for Dallara, got {pt6}"
     
     # Real format 7: Common protocols (공통)
-    pt7, src7, conf7 = classify_vehicle_powertrain(
+    pt7, src7, conf7, _ = classify_vehicle_powertrain(
         maker=None,
         model='OBD2',
         submodel=None,
@@ -136,7 +136,7 @@ def test_classify_real_formats():
     # Real format 8: Shared folder (공용) - shared/common protocol definitions
     # 'Hyundai_Kia_Genesis_공용' is a shared definitions folder
     # Should be classified as not_vehicle per user requirement (Message 8)
-    pt8, src8, conf8 = classify_vehicle_powertrain(
+    pt8, src8, conf8, _ = classify_vehicle_powertrain(
         maker='Hyundai_Kia_Genesis_공용',
         model='Common Commands',
         submodel=None,
@@ -146,7 +146,7 @@ def test_classify_real_formats():
     assert pt8 == 'not_vehicle', f"Expected not_vehicle for shared folder, got {pt8}"
     
     # Real format 9: Kia Ray EV from Torque
-    pt9, src9, conf9 = classify_vehicle_powertrain(
+    pt9, src9, conf9, _ = classify_vehicle_powertrain(
         maker=None,
         model='extendedpids',
         submodel=None,
@@ -155,7 +155,7 @@ def test_classify_real_formats():
     assert pt9 == 'BEV', f"Expected BEV for Ray EV (from path), got {pt9}"
     
     # Real format 10: Chrysler Pacifica (has both ICE and hybrid - ambiguous)
-    pt10, src10, conf10 = classify_vehicle_powertrain(
+    pt10, src10, conf10, _ = classify_vehicle_powertrain(
         maker='Chrysler',
         model='Pacifica 2015+',
         submodel=None,
@@ -165,7 +165,7 @@ def test_classify_real_formats():
     assert pt10 == 'unknown', f"Expected unknown for ambiguous Pacifica, got {pt10}"
     
     # Real format 11: Chrysler Pacifica Hybrid (explicit)
-    pt11, src11, conf11 = classify_vehicle_powertrain(
+    pt11, src11, conf11, _ = classify_vehicle_powertrain(
         maker='Chrysler',
         model='Pacifica Hybrid',
         submodel=None,
@@ -174,7 +174,7 @@ def test_classify_real_formats():
     assert pt11 == 'HEV', f"Expected HEV for Pacifica Hybrid, got {pt11}"
     
     # Real format 12: Tesla Model 3
-    pt12, src12, conf12 = classify_vehicle_powertrain(
+    pt12, src12, conf12, _ = classify_vehicle_powertrain(
         maker='Tesla',
         model='Model 3',
         submodel=None,
@@ -186,7 +186,7 @@ def test_classify_real_formats():
 def test_bev_combinations():
     """Test BEV combinations (multiple tokens required)."""
     # Kona Electric
-    pt, src, conf = classify_vehicle_powertrain(
+    pt, src, conf, _ = classify_vehicle_powertrain(
         maker='Hyundai',
         model='Kona Electric',
         submodel=None,
@@ -195,7 +195,7 @@ def test_bev_combinations():
     assert pt == 'BEV'
     
     # Niro EV
-    pt2, src2, conf2 = classify_vehicle_powertrain(
+    pt2, src2, conf2, _ = classify_vehicle_powertrain(
         maker='Kia',
         model='Niro EV',
         submodel=None,
@@ -206,7 +206,7 @@ def test_bev_combinations():
 
 def test_phev_priority():
     """Test PHEV takes priority over HEV."""
-    pt, src, conf = classify_vehicle_powertrain(
+    pt, src, conf, _ = classify_vehicle_powertrain(
         maker='Jeep',
         model='Wrangler 4xe',
         submodel='Plug-in Hybrid',
@@ -217,7 +217,7 @@ def test_phev_priority():
 
 def test_hev_not_phev():
     """Test HEV without plug-in."""
-    pt, src, conf = classify_vehicle_powertrain(
+    pt, src, conf, _ = classify_vehicle_powertrain(
         maker='Toyota',
         model='Prius',
         submodel='Hybrid',
@@ -229,7 +229,7 @@ def test_hev_not_phev():
 def test_unknown_cases():
     """Test that ambiguous cases stay unknown."""
     # Generic Tucson without clear powertrain marker
-    pt, src, conf = classify_vehicle_powertrain(
+    pt, src, conf, _ = classify_vehicle_powertrain(
         maker='Hyundai',
         model='Tucson',
         submodel=None,
@@ -238,7 +238,7 @@ def test_unknown_cases():
     assert pt == 'unknown', f"Expected unknown for generic Tucson, got {pt}"
     
     # Empty/minimal data
-    pt2, src2, conf2 = classify_vehicle_powertrain(
+    pt2, src2, conf2, _ = classify_vehicle_powertrain(
         maker=None,
         model=None,
         submodel=None,
@@ -294,7 +294,7 @@ def test_unknown_cases():
 ])
 def test_production_regression_cases(maker, model, submodel, file_path, expected_pt, description):
     """Regression tests from real production data (2026-11-13 report)."""
-    pt, src, conf = classify_vehicle_powertrain(maker, model, submodel, file_path)
+    pt, src, conf, conflict = classify_vehicle_powertrain(maker, model, submodel, file_path)
     assert pt == expected_pt, f"{description}: expected {expected_pt}, got {pt} (source: {src})"
 
 
@@ -314,7 +314,8 @@ def test_production_regression_cases(maker, model, submodel, file_path, expected
     ('Lexus', 'RX450h+', None, None, 'PHEV', 'Lexus RX450h+'),
     
     # Mixed powertrain → unknown
-    (None, 'Hyundai: Ioniq Hybrid EV (2016-2019)', None, None, 'unknown', 'Mixed Hybrid+EV'),
+    (None, 'Hyundai: Ioniq Hybrid EV (2016-2019)', None, None, 'unknown', 'Mixed Hybrid+EV model'),
+    ('Hyundai_ Ioniq Hybrid EV (2016-2019)', None, None, None, 'unknown', 'Mixed Hybrid+EV maker'),
     
     # Ford Mustang-Mach-E (hyphenated) → BEV
     ('Ford', 'Mustang-Mach-E', None, None, 'BEV', 'Ford Mustang Mach-E'),
@@ -342,7 +343,7 @@ def test_production_regression_cases(maker, model, submodel, file_path, expected
 ])
 def test_production_regression_2(maker, model, submodel, file_path, expected_pt, description):
     """Additional regression tests from 2026-11-13 22:28 report."""
-    pt, src, conf = classify_vehicle_powertrain(maker, model, submodel, file_path)
+    pt, src, conf, conflict = classify_vehicle_powertrain(maker, model, submodel, file_path)
     assert pt == expected_pt, f"{description}: expected {expected_pt}, got {pt} (source: {src})"
 
 
@@ -365,8 +366,8 @@ def test_unicode_nfd_normalization():
     assert unicodedata.normalize('NFC', maker_nfd) == maker_nfc
     
     # Both should classify as not_vehicle
-    pt_nfd, _, _ = classify_vehicle_powertrain(maker_nfd, None, None, None)
-    pt_nfc, _, _ = classify_vehicle_powertrain(maker_nfc, None, None, None)
+    pt_nfd, _, _, _ = classify_vehicle_powertrain(maker_nfd, None, None, None)
+    pt_nfc, _, _, _ = classify_vehicle_powertrain(maker_nfc, None, None, None)
     
     assert pt_nfd == 'not_vehicle', f"NFD input should be not_vehicle, got {pt_nfd}"
     assert pt_nfc == 'not_vehicle', f"NFC input should be not_vehicle, got {pt_nfc}"

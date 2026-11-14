@@ -293,22 +293,30 @@ def classify_vehicle_powertrain(
     submodel: Optional[str],
     file_path: Optional[str],
     vin: Optional[str] = None,
+    plate_number: Optional[str] = None,
     has_bms_commands: bool = False
-) -> Tuple[str, str, float]:
+) -> Tuple[str, str, float, Optional[Dict[str, Any]]]:
     """Classify vehicle powertrain with source and confidence.
     
     Priority order:
-    1. VIN-based rules (highest confidence)
-    2. not_vehicle detection
-    3. File path folder evidence (e.g., "Ioniq HEV" folder, "Niro HEV" folder)
-    4. PHEV tokens (must win over HEV)
-    5. HEV tokens (but only 'hev' or 'hybrid', not substring of 'ev')
-    6. BEV specific tokens and combinations
-    7. Ambiguous base names without qualifiers → unknown
-    8. BMS evidence (if has_bms_commands=True)
+    1. Plate lookup (차량번호 via Wecar API) - PRIMARY source
+    2. VIN-based rules - CROSS-CHECK
+    3. not_vehicle detection
+    4. File path folder evidence (e.g., "Ioniq HEV" folder, "Niro HEV" folder)
+    5. PHEV tokens (must win over HEV)
+    6. HEV tokens (but only 'hev' or 'hybrid', not substring of 'ev')
+    7. BEV specific tokens and combinations
+    8. Ambiguous base names without qualifiers → unknown
+    9. BMS evidence (if has_bms_commands=True)
     
     Returns:
-        (powertrain, source, confidence)
+        (powertrain, source, confidence, conflict_info)
+        conflict_info is None if no conflict, or dict with:
+            - has_conflict: bool
+            - plate_powertrain: str
+            - plate_confidence: float
+            - vin_powertrain: str
+            - vin_confidence: float
     """
     # Normalize all text inputs to NFC (composed) for consistent Unicode matching
     # macOS file names use NFD (decomposed Hangul), but Python literals are NFC
@@ -321,7 +329,35 @@ def classify_vehicle_powertrain(
     if file_path:
         file_path = unicodedata.normalize('NFC', file_path)
     
-    # Priority 1: VIN-based (if available and database accessible)
+    # Track plate and VIN results for conflict detection
+    plate_result = None  # (powertrain, confidence)
+    vin_result = None    # (powertrain, confidence)
+    
+    # Priority 1: Plate lookup (PRIMARY source - official vehicle registration)
+    if plate_number:
+        try:
+            # Use existing car_info system to get vehicle data
+            from app.modules.scans import car_info
+            # Note: car_info.lookup requires a User object, which we don't have here
+            # In actual implementation, this should be called from a context with a user
+            # For now, we'll check if the plate is in cache
+            cached_fuel = db.session.execute(text("""
+                SELECT dto->>'diag_fuel' as fuel
+                FROM car_info_cache
+                WHERE car_no = :plate
+                ORDER BY fetched_at DESC
+                LIMIT 1
+            """), {"plate": plate_number}).fetchone()
+            
+            if cached_fuel and cached_fuel[0]:
+                plate_pt, plate_conf = map_fuel_to_powertrain(cached_fuel[0])
+                if plate_pt:
+                    plate_result = (plate_pt, plate_conf)
+        except Exception:
+            # Plate lookup failed or not available
+            pass
+    
+    # Priority 2: VIN-based (CROSS-CHECK)
     if vin and validate_vin(vin):
         try:
             vin_rules = db.session.execute(text("""
@@ -334,47 +370,77 @@ def classify_vehicle_powertrain(
             powertrain_vin, source_vin, conf_vin = decode_powertrain_from_vin(vin, rules_list)
             
             if powertrain_vin and powertrain_vin != 'unknown' and source_vin == 'vin_rule':
-                return (powertrain_vin, 'vin_rule', conf_vin)
+                vin_result = (powertrain_vin, conf_vin)
         except Exception:
             # Database not available (e.g., in tests without app context)
             pass
     
-    # Priority 2: Check if not_vehicle
-    if is_not_vehicle(maker, model, file_path):
-        return ('not_vehicle', 'path_token', 0.95)
+    # Check for conflicts between plate and VIN
+    if plate_result and vin_result:
+        plate_pt, plate_conf = plate_result
+        vin_pt, vin_conf = vin_result
+        
+        if plate_pt != vin_pt:
+            # CONFLICT: plate and VIN disagree
+            # Use plate result (primary source) but flag the conflict
+            conflict_info = {
+                'has_conflict': True,
+                'plate_powertrain': plate_pt,
+                'plate_confidence': plate_conf,
+                'vin_powertrain': vin_pt,
+                'vin_confidence': vin_conf
+            }
+            return (plate_pt, 'plate_lookup', plate_conf, conflict_info)
+        else:
+            # Agreement: both sources agree, use plate result
+            return (plate_pt, 'plate_lookup', plate_conf, None)
     
-    # Priority 3: File path folder evidence (explicit powertrain in folder name)
+    # If only plate result available, use it
+    if plate_result:
+        plate_pt, plate_conf = plate_result
+        return (plate_pt, 'plate_lookup', plate_conf, None)
+    
+    # If only VIN result available, use it
+    if vin_result:
+        vin_pt, vin_conf = vin_result
+        return (vin_pt, 'vin_rule', vin_conf, None)
+    
+    # Priority 3: Check if not_vehicle
+    if is_not_vehicle(maker, model, file_path):
+        return ('not_vehicle', 'path_token', 0.95, None)
+    
+    # Priority 4: File path folder evidence (explicit powertrain in folder name)
     # This wins over token matching because it's specific context
     if file_path:
         path_lower = file_path.lower()
         # Look for explicit folder markers like "Ioniq HEV", "Niro HEV", "Ioniq EV"
         # Use word boundaries to avoid false matches
         if re.search(r'/(.*?\s+|\b)hev\b', path_lower) or re.search(r'/.*?_hev[/_]', path_lower):
-            return ('HEV', 'path_folder:HEV', 0.95)
+            return ('HEV', 'path_folder:HEV', 0.95, None)
         if re.search(r'/(.*?\s+|\b)phev\b', path_lower) or re.search(r'/.*?_phev[/_]', path_lower):
-            return ('PHEV', 'path_folder:PHEV', 0.95)
+            return ('PHEV', 'path_folder:PHEV', 0.95, None)
         # EV folder markers (but not inside "HEV")
         if re.search(r'/.*?\s+ev\b', path_lower) or re.search(r'/.*?_ev[/_\-]', path_lower) or re.search(r'/.*?-ev[/_\-]', path_lower):
             # Double-check it's not "HEV"
             if not re.search(r'hev', path_lower):
-                return ('BEV', 'path_folder:EV', 0.95)
+                return ('BEV', 'path_folder:EV', 0.95, None)
     
     # Normalize all text for token matching
     all_text = ' '.join(filter(None, [maker, model, submodel, file_path or '']))
     normalized = normalize_text(all_text)
     tokens = extract_tokens(normalized)
     
-    # Priority 4: PHEV tokens and combinations (must win over HEV)
+    # Priority 5: PHEV tokens and combinations (must win over HEV)
     # Check PHEV combinations first
     for combo in PHEV_COMBINATIONS:
         if combo.issubset(tokens):
-            return ('PHEV', 'model_name:PHEV_combo', 0.90)
+            return ('PHEV', 'model_name:PHEV_combo', 0.90, None)
     
     # Check PHEV tokens
     if tokens & PHEV_TOKENS:
-        return ('PHEV', 'model_name:PHEV_token', 0.85)
+        return ('PHEV', 'model_name:PHEV_token', 0.85, None)
     
-    # Priority 5: Check for mixed powertrain (both HEV and BEV evidence)
+    # Priority 6: Check for mixed powertrain (both HEV and BEV evidence)
     # If both hybrid and BEV tokens appear (and no PHEV), it's ambiguous/mixed
     has_hev_token = 'hev' in tokens or 'hybrid' in tokens or 'selfcharging' in tokens or '하이브리드' in tokens
     has_bev_evidence = bool(tokens & (BEV_SPECIFIC_TOKENS | BEV_QUALIFIERS))
@@ -382,14 +448,14 @@ def classify_vehicle_powertrain(
     
     if has_hev_token and has_bev_evidence and not has_phev_evidence:
         # Mixed powertrain (e.g., "Ioniq Hybrid EV" covers both) → unknown
-        return ('unknown', 'mixed_powertrain', 0.0)
+        return ('unknown', 'mixed_powertrain', 0.0, None)
     
-    # Priority 6: HEV detection
+    # Priority 7: HEV detection
     # Check Toyota Prius models (all are HEV except Prime which is PHEV)
     if 'prius' in tokens or 'priusv' in tokens:
         # If it has PHEV tokens, it's already been caught above
         # Otherwise, Prius is HEV
-        return ('HEV', 'model_name:Prius_HEV', 0.90)
+        return ('HEV', 'model_name:Prius_HEV', 0.90, None)
     
     # Check Lexus/Toyota 'h' suffix (e.g., ES-300h, RX450h)
     # 'h' suffix = HEV, 'h+' or '450h+' = PHEV
@@ -397,26 +463,26 @@ def classify_vehicle_powertrain(
         text_for_suffix = ' '.join(filter(None, [maker, model]))
         # Check for PHEV h+ patterns
         if re.search(r'\d+h\+', text_for_suffix.lower()) or 'h+' in text_for_suffix.lower():
-            return ('PHEV', 'model_name:Lexus_h+', 0.90)
+            return ('PHEV', 'model_name:Lexus_h+', 0.90, None)
         # Check for HEV h suffix (but not h+)
         if re.search(r'\d+h\b', text_for_suffix.lower()) or re.search(r'-\d+h\b', text_for_suffix.lower()):
-            return ('HEV', 'model_name:Lexus_h', 0.90)
+            return ('HEV', 'model_name:Lexus_h', 0.90, None)
     
     if has_hev_token and not has_phev_evidence:
         # Also check HEV model tokens (other than Prius which is handled above)
         if tokens & HEV_MODEL_TOKENS:
-            return ('HEV', 'model_name:HEV_model', 0.80)
-        return ('HEV', 'model_name:HEV_token', 0.80)
+            return ('HEV', 'model_name:HEV_model', 0.80, None)
+        return ('HEV', 'model_name:HEV_token', 0.80, None)
     
-    # Priority 6: BEV specific tokens and combinations
+    # Priority 8: BEV specific tokens and combinations
     # Check BEV combinations first (more specific)
     for combo in BEV_COMBINATIONS:
         if combo.issubset(tokens):
-            return ('BEV', 'model_name:BEV_combo', 0.90)
+            return ('BEV', 'model_name:BEV_combo', 0.90, None)
     
     # Check BEV specific tokens
     if tokens & BEV_SPECIFIC_TOKENS:
-        return ('BEV', 'model_name:BEV_specific', 0.85)
+        return ('BEV', 'model_name:BEV_specific', 0.85, None)
     
     # Check BEV qualifiers (electric, bev, ev, e-tron)
     if tokens & BEV_QUALIFIERS:
@@ -430,29 +496,29 @@ def classify_vehicle_powertrain(
             
             # If we have both base and qualifier, it's BEV
             if base_names_present and qualifiers_present:
-                return ('BEV', 'model_name:base+BEV_qualifier', 0.85)
+                return ('BEV', 'model_name:base+BEV_qualifier', 0.85, None)
         else:
             # No ambiguous base, just qualifiers (e.g., "e-tron")
-            return ('BEV', 'model_name:BEV_qualifier', 0.85)
+            return ('BEV', 'model_name:BEV_qualifier', 0.85, None)
     
-    # Priority 7: Check if it's an ambiguous base name alone (no qualifiers)
+    # Priority 9: Check if it's an ambiguous base name alone (no qualifiers)
     if tokens & AMBIGUOUS_BASE_NAMES:
         # Check if there are NO powertrain qualifiers
         has_qualifiers = bool(tokens & (BEV_QUALIFIERS | PHEV_TOKENS | {'hev', 'hybrid', '하이브리드'}))
         if not has_qualifiers:
             # Ambiguous base name without qualifier → stay unknown
-            return ('unknown', 'ambiguous_base', 0.0)
+            return ('unknown', 'ambiguous_base', 0.0, None)
     
     # Check ICE indicators
     if tokens & ICE_TOKENS:
-        return ('ICE', 'model_name:ICE_token', 0.70)
+        return ('ICE', 'model_name:ICE_token', 0.70, None)
     
-    # Priority 8: BMS evidence (if has_bms_commands)
+    # Priority 10: BMS evidence (if has_bms_commands)
     if has_bms_commands:
-        return ('BEV', 'bms_evidence', 0.60)
+        return ('BEV', 'bms_evidence', 0.60, None)
     
     # Unable to classify
-    return ('unknown', 'no_match', 0.0)
+    return ('unknown', 'no_match', 0.0, None)
 
 
 def reclassify_all_vehicles():
@@ -488,12 +554,13 @@ def reclassify_all_vehicles():
     
     updated = 0
     for vehicle in vehicles:
-        powertrain, source, confidence = classify_vehicle_powertrain(
-            vehicle.maker,
-            vehicle.model,
-            vehicle.submodel,
-            vehicle.file_path,
-            vehicle.vin
+        powertrain, source, confidence, conflict = classify_vehicle_powertrain(
+            maker=vehicle.maker,
+            model=vehicle.model,
+            submodel=vehicle.submodel,
+            file_path=vehicle.file_path,
+            vin=vehicle.vin,
+            plate_number=None  # No plate available for bulk reclassification
         )
         
         # Update if changed
