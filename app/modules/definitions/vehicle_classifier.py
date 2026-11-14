@@ -411,19 +411,31 @@ def classify_vehicle_powertrain(
     
     # Priority 4: File path folder evidence (explicit powertrain in folder name)
     # This wins over token matching because it's specific context
+    # BUT: check for mixed profiles in folder names first
     if file_path:
         path_lower = file_path.lower()
-        # Look for explicit folder markers like "Ioniq HEV", "Niro HEV", "Ioniq EV"
-        # Use word boundaries to avoid false matches
-        if re.search(r'/(.*?\s+|\b)hev\b', path_lower) or re.search(r'/.*?_hev[/_]', path_lower):
-            return ('HEV', 'path_folder:HEV', 0.95, None)
-        if re.search(r'/(.*?\s+|\b)phev\b', path_lower) or re.search(r'/.*?_phev[/_]', path_lower):
-            return ('PHEV', 'path_folder:PHEV', 0.95, None)
-        # EV folder markers (but not inside "HEV")
-        if re.search(r'/.*?\s+ev\b', path_lower) or re.search(r'/.*?_ev[/_\-]', path_lower) or re.search(r'/.*?-ev[/_\-]', path_lower):
-            # Double-check it's not "HEV"
-            if not re.search(r'hev', path_lower):
-                return ('BEV', 'path_folder:EV', 0.95, None)
+        
+        # Extract folder/file name tokens to check for mixed patterns
+        path_tokens = extract_tokens(normalize_text(file_path))
+        has_hybrid_in_path = 'hybrid' in path_tokens or 'hev' in path_tokens
+        has_ev_in_path = 'ev' in path_tokens
+        
+        # If folder name has BOTH hybrid and EV tokens (excluding 'hev'), it's mixed
+        if has_hybrid_in_path and has_ev_in_path and 'hev' not in path_tokens:
+            # Mixed profile in folder name (e.g., "Ioniq Hybrid EV") → skip path evidence
+            pass
+        else:
+            # Look for explicit folder markers like "Ioniq HEV", "Niro HEV", "Ioniq EV"
+            # Use word boundaries to avoid false matches
+            if re.search(r'/(.*?\s+|\b)hev\b', path_lower) or re.search(r'/.*?_hev[/_]', path_lower):
+                return ('HEV', 'path_folder:HEV', 0.95, None)
+            if re.search(r'/(.*?\s+|\b)phev\b', path_lower) or re.search(r'/.*?_phev[/_]', path_lower):
+                return ('PHEV', 'path_folder:PHEV', 0.95, None)
+            # EV folder markers (but not inside "HEV")
+            if re.search(r'/.*?\s+ev\b', path_lower) or re.search(r'/.*?_ev[/_\-]', path_lower) or re.search(r'/.*?-ev[/_\-]', path_lower):
+                # Double-check it's not "HEV"
+                if not re.search(r'hev', path_lower):
+                    return ('BEV', 'path_folder:EV', 0.95, None)
     
     # Normalize all text for token matching
     all_text = ' '.join(filter(None, [maker, model, submodel, file_path or '']))

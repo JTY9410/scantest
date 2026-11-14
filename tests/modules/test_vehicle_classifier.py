@@ -313,9 +313,12 @@ def test_production_regression_cases(maker, model, submodel, file_path, expected
     # Lexus h+ suffix = PHEV
     ('Lexus', 'RX450h+', None, None, 'PHEV', 'Lexus RX450h+'),
     
-    # Mixed powertrain → unknown
+    # Mixed powertrain → unknown (exact production format with path)
     (None, 'Hyundai: Ioniq Hybrid EV (2016-2019)', None, None, 'unknown', 'Mixed Hybrid+EV model'),
     ('Hyundai_ Ioniq Hybrid EV (2016-2019)', None, None, None, 'unknown', 'Mixed Hybrid+EV maker'),
+    ('Hyundai_ Ioniq Hybrid EV (2016-2019)', 'Hyundai: Ioniq Hybrid EV (2016-2019)', None,
+     '03_WiCAN_PID/Hyundai/Hyundai_ Ioniq Hybrid EV (2016-2019)/profile.json', 'unknown', 
+     'Mixed Hybrid+EV production with path'),
     
     # Ford Mustang-Mach-E (hyphenated) → BEV
     ('Ford', 'Mustang-Mach-E', None, None, 'BEV', 'Ford Mustang Mach-E'),
