@@ -14,7 +14,7 @@ from app.utils.vin_decoder import (
 # Synthetic/public-documentation VINs only - never use real VINs
 SYNTHETIC_VINS = {
     'hyundai_ioniq5': 'KMHXXXXE0NX123456',  # Korean Hyundai, position 8='E' (BEV)
-    'kia_ev6': 'KNAEXXXXE0NX12345',         # Korean Kia, position 8='E' (BEV)
+    'kia_ev6': 'KNAXXXXE0NX123456',         # Korean Kia, position 8='E' (BEV) - fixed VDS
     'tesla_model3': '5YJ3XXXXNX1234567',    # Tesla Model 3
     'nissan_leaf': 'JN1AXXXXANX123456',     # Nissan Leaf
     'invalid_with_O': 'KMHXXXXEONX12345',   # Contains 'O' - invalid
@@ -82,16 +82,16 @@ def test_extract_vds():
 def test_decode_model_year():
     """Test model year decoding from position 10."""
     # 2020-2029 cycle (position 10 = index 9)
-    assert decode_model_year('KMHXXXXXLXX123456') == 2020  # L at pos 10
-    assert decode_model_year('KMHXXXXXMXX123456') == 2021  # M at pos 10
-    assert decode_model_year('KMHXXXXXNXX123456') == 2022  # N at pos 10
-    assert decode_model_year('KMHXXXXXPXX123456') == 2023  # P at pos 10
-    assert decode_model_year('KMHXXXXXRXX123456') == 2024  # R at pos 10
+    assert decode_model_year('KMHXXXXXXL0123456') == 2020  # L at pos 10
+    assert decode_model_year('KMHXXXXXXM0123456') == 2021  # M at pos 10
+    assert decode_model_year('KMHXXXXXXN0123456') == 2022  # N at pos 10
+    assert decode_model_year('KMHXXXXXXP0123456') == 2023  # P at pos 10
+    assert decode_model_year('KMHXXXXXXR0123456') == 2024  # R at pos 10
     
     # 2001-2009 cycle
-    assert decode_model_year('KMHXXXXX1XX123456') == 2001  # 1 at pos 10
-    assert decode_model_year('KMHXXXXX5XX123456') == 2005  # 5 at pos 10
-    assert decode_model_year('KMHXXXXX9XX123456') == 2009  # 9 at pos 10
+    assert decode_model_year('KMHXXXXXX10123456') == 2001  # 1 at pos 10
+    assert decode_model_year('KMHXXXXXX50123456') == 2005  # 5 at pos 10
+    assert decode_model_year('KMHXXXXXX90123456') == 2009  # 9 at pos 10
     
     # Invalid
     assert decode_model_year('SHORT') is None
@@ -100,7 +100,7 @@ def test_decode_model_year():
 def test_decode_manufacturer():
     """Test manufacturer decoding from WMI."""
     assert decode_manufacturer('KMHXXXXE0NX123456') == 'Hyundai'
-    assert decode_manufacturer('KNAEXXXXE0NX12345') == 'Kia'
+    assert decode_manufacturer('KNAXXXXE0NX123456') == 'Kia'
     assert decode_manufacturer('5YJ3XXXXNX1234567') == 'Tesla'
     assert decode_manufacturer('JN1AXXXXANX123456') == 'Nissan'
     assert decode_manufacturer('1G1XXXXXNX1234567') == 'Chevrolet'
@@ -151,7 +151,7 @@ def test_decode_powertrain_from_vin():
     assert confidence == 0.95
     
     # Kia BEV (position 8 = E)
-    vin2 = 'KNAEXXXXE0NX12345'
+    vin2 = 'KNAXXXXE0NX123456'
     powertrain2, source2, confidence2 = decode_powertrain_from_vin(vin2, sample_rules)
     assert powertrain2 == 'BEV'
     assert source2 == 'vin_rule'

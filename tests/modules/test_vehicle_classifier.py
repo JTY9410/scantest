@@ -374,3 +374,40 @@ def test_unicode_nfd_normalization():
     
     assert pt_nfd == 'not_vehicle', f"NFD input should be not_vehicle, got {pt_nfd}"
     assert pt_nfc == 'not_vehicle', f"NFC input should be not_vehicle, got {pt_nfc}"
+
+
+def test_ioniq_mixed_profile_production_regression():
+    """Regression test for production Ioniq Hybrid EV misclassification.
+    
+    Bug: 'Hyundai_ Ioniq Hybrid EV (2016-2019)' with path 
+    '03_WiCAN_PID/Hyundai/Hyundai_ Ioniq Hybrid EV (2016-2019)/profile.json'
+    was returning BEV instead of unknown due to path folder logic firing
+    before mixed token detection.
+    
+    This test uses the EXACT production data (NFD-encoded as macOS stores it)
+    to verify the classifier now correctly returns 'unknown' for mixed profiles.
+    """
+    import unicodedata
+    
+    # Use exact production data with NFD encoding (as macOS stores it)
+    maker_nfd = unicodedata.normalize('NFD', 'Hyundai_ Ioniq Hybrid EV (2016-2019)')
+    model_nfd = unicodedata.normalize('NFD', 'Hyundai: Ioniq Hybrid EV (2016-2019)')
+    path_nfd = unicodedata.normalize('NFD', 
+        '03_WiCAN_PID/Hyundai/Hyundai_ Ioniq Hybrid EV (2016-2019)/profile.json')
+    
+    # Classify with exact production parameters
+    powertrain, source, confidence, conflict = classify_vehicle_powertrain(
+        maker=maker_nfd,
+        model=model_nfd,
+        submodel=None,
+        file_path=path_nfd,
+        vin=None,
+        plate_number=None,
+        has_bms_commands=False
+    )
+    
+    # Must return unknown for mixed Hybrid+EV profile
+    assert powertrain == 'unknown', \
+        f"Expected 'unknown' for mixed Hybrid+EV, got '{powertrain}' with source '{source}'"
+    assert 'mixed' in source.lower(), \
+        f"Expected source to mention 'mixed', got '{source}'"
