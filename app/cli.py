@@ -3,7 +3,7 @@ import os
 import click
 from flask import Flask
 from flask.cli import AppGroup
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.core import audit
 from app.extensions import db
@@ -1279,7 +1279,8 @@ def register_cli(app: Flask) -> None:
     @definitions.command("reimport-canze-names")
     @click.option("--report-only", is_flag=True, help="Show what would change without modifying data")
     @click.option("--yes", is_flag=True, help="Apply changes without confirmation")
-    def reimport_canze_names(report_only: bool, yes: bool) -> None:
+    @click.option("--revert", is_flag=True, help="Revert previous changes")
+    def reimport_canze_names(report_only: bool, yes: bool, revert: bool) -> None:
         """Re-import CanZE field names from source CSV files with correct column index.
         
         Fixes parsing error where hex values (ff, 4ff) were imported as names
@@ -1288,15 +1289,66 @@ def register_cli(app: Flask) -> None:
         Usage:
             flask definitions reimport-canze-names --report-only  # Preview changes
             flask definitions reimport-canze-names --yes          # Apply fixes
+            flask definitions reimport-canze-names --revert       # Undo last changes
         """
         from pathlib import Path
         from app.modules.definitions.models import DefinitionSource, DiagnosticCommand
         import csv
+        import json
+        
+        revert_file = Path("/tmp/canze_label_revert.json")
         
         click.echo("=" * 80)
         click.echo("CANZE FIELD NAME RE-IMPORT")
         click.echo("=" * 80)
         click.echo()
+        
+        if revert:
+            click.echo("REVERT MODE: Restoring previous labels")
+            click.echo()
+            
+            if not revert_file.exists():
+                click.echo("✗ No revert data found. Run with --yes first to create revert data.", err=True)
+                return
+            
+            try:
+                with open(revert_file, 'r') as f:
+                    revert_data = json.load(f)
+            except Exception as e:
+                click.echo(f"✗ Error reading revert data: {e}", err=True)
+                return
+            
+            click.echo(f"Found {len(revert_data)} records to revert")
+            click.echo()
+            click.echo("Sample reverts (first 10):")
+            click.echo("-" * 80)
+            for item in revert_data[:10]:
+                click.echo(f"  Command {item['command']}: '{item['new_label']}' → '{item['old_label']}'")
+            click.echo()
+            
+            if not click.confirm(f"Revert {len(revert_data)} label changes?"):
+                click.echo("Aborted.")
+                return
+            
+            click.echo()
+            click.echo("Reverting changes...")
+            reverted = 0
+            
+            for item in revert_data:
+                db.session.execute(text("""
+                    UPDATE diagnostic_commands
+                    SET label = :old_label, updated_at = now()
+                    WHERE id = :id
+                """), {'old_label': item['old_label'], 'id': item['cmd_id']})
+                reverted += 1
+            
+            db.session.commit()
+            revert_file.unlink()  # Delete revert file after successful revert
+            
+            click.echo(f"✓ Reverted {reverted} label changes")
+            click.echo("=" * 80)
+            return
+        
         click.echo("Corrects column index: row[10] → row[11] for field name")
         click.echo("CanZE format: sid, ID, startBit, endBit, resolution, offset, decimals, unit,")
         click.echo("              requestId, responseId, options, name, ...")
@@ -1389,8 +1441,18 @@ def register_cli(app: Flask) -> None:
         # Apply changes
         click.echo()
         click.echo("Applying changes...")
-        updated = 0
         
+        # Save revert data before making changes
+        revert_data = []
+        for change in changes:
+            revert_data.append({
+                'cmd_id': change['cmd_id'],
+                'command': change['command'],
+                'old_label': change['old_name'],
+                'new_label': change['new_name']
+            })
+        
+        updated = 0
         for change in changes:
             db.session.execute(text("""
                 UPDATE diagnostic_commands
@@ -1401,5 +1463,11 @@ def register_cli(app: Flask) -> None:
         
         db.session.commit()
         
+        # Save revert data to file
+        with open(revert_file, 'w') as f:
+            json.dump(revert_data, f, indent=2)
+        
         click.echo(f"✓ Updated {updated} command names")
+        click.echo(f"✓ Revert data saved to {revert_file}")
+        click.echo("  (Use --revert to undo these changes)")
         click.echo("=" * 80)
