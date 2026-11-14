@@ -1,8 +1,15 @@
 import re
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
+from dotenv import load_dotenv
 from sqlalchemy import text
+
+# Load .env file for test configuration
+env_path = Path(__file__).parent.parent / '.env'
+if env_path.exists():
+    load_dotenv(env_path)
 
 from app import create_app
 from app.extensions import db, limiter
@@ -41,29 +48,39 @@ def app(_app_base):
 
 @pytest.fixture(autouse=True)
 def _clean_database(app):
+    """Clean database using TRUNCATE for reliable isolation.
+    
+    Uses TRUNCATE CASCADE which is faster than DELETE and properly handles
+    foreign key constraints. Preserves alembic_version table.
+    """
     yield
+    
     with app.app_context():
-        # Close all existing connections first
+        # Rollback any pending transactions
         db.session.rollback()
         db.session.remove()
-        db.engine.dispose()
         
-        if "sqlite" in app.config["SQLALCHEMY_DATABASE_URI"]:
-            for table in reversed(db.metadata.sorted_tables):
-                db.session.execute(text(f"DELETE FROM {table.name}"))
-            try:
-                db.session.execute(text("DELETE FROM sqlite_sequence"))
-            except Exception:
-                pass
+        # Get all table names except alembic_version
+        tables = [table.name for table in db.metadata.sorted_tables 
+                  if table.name != 'alembic_version']
+        
+        if tables:
+            # Use TRUNCATE CASCADE for PostgreSQL (faster and handles FKs)
+            if "postgresql" in app.config["SQLALCHEMY_DATABASE_URI"]:
+                db.session.execute(text("SET lock_timeout = '5s'"))
+                db.session.execute(text(f"TRUNCATE TABLE {', '.join(tables)} RESTART IDENTITY CASCADE"))
+            else:
+                # SQLite fallback
+                for table in reversed(db.metadata.sorted_tables):
+                    if table.name != 'alembic_version':
+                        db.session.execute(text(f"DELETE FROM {table.name}"))
+                try:
+                    db.session.execute(text("DELETE FROM sqlite_sequence"))
+                except Exception:
+                    pass
+            
             db.session.commit()
-        else:
-            # Postgres: TRUNCATE all tables excluding alembic_version
-            db.session.execute(text("SET lock_timeout = '5s'"))
-            tables = [t.name for t in db.metadata.sorted_tables if t.name != 'alembic_version']
-            if tables:
-                tables_str = ", ".join(tables)
-                db.session.execute(text(f"TRUNCATE {tables_str} RESTART IDENTITY CASCADE"))
-            db.session.commit()
+        
         db.session.remove()
     
     limiter.reset()

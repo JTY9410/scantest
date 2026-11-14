@@ -22,9 +22,9 @@ def test_normalize_makers_only_touches_vehicle_definitions(app):
         """))
         db.session.execute(text("""
             INSERT INTO vehicle_definitions (
-                id, source_id, maker, model, powertrain
+                id, source_id, maker, model, powertrain, created_at
             ) VALUES (
-                1, 1, 'Hyundai_ Ioniq', 'Ioniq', 'unknown'
+                1, 1, 'Hyundai_ Ioniq', 'Ioniq', 'unknown', NOW()
             )
         """))
         db.session.commit()
@@ -54,9 +54,9 @@ def test_normalize_makers_report_only_mode(app):
         """))
         db.session.execute(text("""
             INSERT INTO vehicle_definitions (
-                id, source_id, maker, model, powertrain
+                id, source_id, maker, model, powertrain, created_at
             ) VALUES (
-                1, 1, 'Hyundai_ Ioniq', 'Ioniq', 'unknown'
+                1, 1, 'Hyundai_ Ioniq', 'Ioniq', 'unknown', NOW()
             )
         """))
         db.session.commit()

@@ -29,11 +29,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.4.2,<9"]
+dev = ["pytest>=8.4.2,<9", "pytest-timeout>=2.3,<3"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "scanner*", "bridge*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q --timeout=30"
+timeout_method = "thread"
 markers = [
     "integration: marks tests as integration tests (deselect with '-m \"not integration\"')",
 ]
