@@ -1651,14 +1651,17 @@ def register_cli(app: Flask) -> None:
         click.echo("Overall Coverage:")
         click.echo("-" * 80)
         click.echo(f"  Total battery specs: {total}")
-        click.echo(f"  With source URL: {with_url} ({with_url/total*100:.1f}%)")
+        url_pct = (with_url/total*100) if total > 0 else 0
+        click.echo(f"  With source URL: {with_url} ({url_pct:.1f}%)")
         click.echo(f"  Missing URL: {total - with_url}")
         click.echo()
         
         click.echo("Source Type Distribution:")
         click.echo("-" * 80)
-        click.echo(f"  Manufacturer (official): {manufacturer} ({manufacturer/total*100:.1f}%)")
-        click.echo(f"  Third-party: {third_party} ({third_party/total*100:.1f}%)")
+        mfr_pct = (manufacturer/total*100) if total > 0 else 0
+        tp_pct = (third_party/total*100) if total > 0 else 0
+        click.echo(f"  Manufacturer (official): {manufacturer} ({mfr_pct:.1f}%)")
+        click.echo(f"  Third-party: {third_party} ({tp_pct:.1f}%)")
         click.echo(f"  Unclassified: {null_type}")
         click.echo()
         
@@ -1697,7 +1700,8 @@ def register_cli(app: Flask) -> None:
             filled = db.session.execute(text(f"""
                 SELECT COUNT(*) FROM battery_specs WHERE {field} IS NOT NULL
             """)).scalar()
-            click.echo(f"  {label:25s}: {filled:3d}/{total} ({filled/total*100:.1f}%)")
+            fill_pct = (filled/total*100) if total > 0 else 0
+            click.echo(f"  {label:25s}: {filled:3d}/{total} ({fill_pct:.1f}%)")
         
         # Per-maker breakdown
         if detail:
