@@ -86,7 +86,7 @@ def save_powertrain_override(
     else:  # scan_id
         # Similar logic for scans
         current = db.session.execute(text("""
-            SELECT type, powertrain_source, powertrain_conflict
+            SELECT type, type_source, powertrain_conflict
             FROM scans
             WHERE id = :id
         """), {"id": scan_id}).fetchone()
@@ -112,7 +112,7 @@ def save_powertrain_override(
         db.session.execute(text("""
             UPDATE scans
             SET type = :type,
-                powertrain_source = 'manual_override',
+                type_source = 'manual_override',
                 powertrain_conflict = false
             WHERE id = :id
         """), {
