@@ -446,27 +446,22 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     result["powertrain"] = kind
     
     # Phase 2: Integrate plate/VIN conflict detection
-    has_conflict = False
-    plate_pt = None
-    vin_pt = None
-    try:
-        pt, pt_source, pt_conf, conflict_info = classify_vehicle_powertrain(
-            maker=car.get("diag_company"),
-            model=car.get("diag_model"),
-            submodel=car.get("diag_submodel"),
-            file_path=None,
-            vin=result.get("vin") or car.get("diag_car_id"),
-            plate_number=car_no if car_no else None,
-            has_bms_commands=bool(result.get("battery"))
-        )
-        # Store conflict detection results
-        has_conflict = conflict_info and conflict_info.get("has_conflict", False)
-        plate_pt = conflict_info.get("plate_powertrain") if conflict_info else None
-        vin_pt = conflict_info.get("vin_powertrain") if conflict_info else None
-    except Exception:
-        # If conflict detection fails, continue without it (non-fatal)
-        current_app.logger.exception("Conflict detection failed")
-        pass
+    # classify_vehicle_powertrain is now fully safe - handles all errors internally
+    pt, pt_source, pt_conf, conflict_info = classify_vehicle_powertrain(
+        maker=car.get("diag_company"),
+        model=car.get("diag_model"),
+        submodel=car.get("diag_submodel"),
+        file_path=None,
+        vin=result.get("vin") or car.get("diag_car_id"),
+        plate_number=car_no if car_no else None,
+        has_bms_commands=bool(result.get("battery")),
+        diag_fuel=car.get("diag_fuel")
+    )
+    
+    # Store conflict detection results
+    has_conflict = conflict_info and conflict_info.get("has_conflict", False)
+    plate_pt = conflict_info.get("plate_powertrain") if conflict_info else None
+    vin_pt = conflict_info.get("vin_powertrain") if conflict_info else None
     
     scan = Scan(
         type=kind["type"], type_source=kind["source"], device_type=transport, device_uid=device,

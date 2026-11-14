@@ -294,7 +294,8 @@ def classify_vehicle_powertrain(
     file_path: Optional[str],
     vin: Optional[str] = None,
     plate_number: Optional[str] = None,
-    has_bms_commands: bool = False
+    has_bms_commands: bool = False,
+    diag_fuel: Optional[str] = None
 ) -> Tuple[str, str, float, Optional[Dict[str, Any]]]:
     """Classify vehicle powertrain with source and confidence.
     
@@ -334,45 +335,39 @@ def classify_vehicle_powertrain(
     vin_result = None    # (powertrain, confidence)
     
     # Priority 1: Plate lookup (PRIMARY source - official vehicle registration)
-    if plate_number:
-        try:
-            # Use existing car_info system to get vehicle data
-            from app.modules.scans import car_info
-            # Note: car_info.lookup requires a User object, which we don't have here
-            # In actual implementation, this should be called from a context with a user
-            # For now, we'll check if the plate is in cache
-            cached_fuel = db.session.execute(text("""
-                SELECT dto->>'diag_fuel' as fuel
-                FROM car_info_cache
-                WHERE car_no = :plate
-                ORDER BY fetched_at DESC
-                LIMIT 1
-            """), {"plate": plate_number}).fetchone()
-            
-            if cached_fuel and cached_fuel[0]:
-                plate_pt, plate_conf = map_fuel_to_powertrain(cached_fuel[0])
-                if plate_pt:
-                    plate_result = (plate_pt, plate_conf)
-        except Exception:
-            # Plate lookup failed or not available
-            pass
+    # CRITICAL: This must NEVER break classification
+    # Use diag_fuel if provided (from car_info.lookup), otherwise skip database query
+    if plate_number and diag_fuel:
+        plate_pt, plate_conf = map_fuel_to_powertrain(diag_fuel)
+        if plate_pt:
+            plate_result = (plate_pt, plate_conf)
     
     # Priority 2: VIN-based (CROSS-CHECK)
+    # CRITICAL: This must NEVER break classification
     if vin and validate_vin(vin):
         try:
-            vin_rules = db.session.execute(text("""
-                SELECT wmi_pattern, vds_position, vds_value_pattern, powertrain, confidence
-                FROM vin_decode_rules
-                ORDER BY confidence DESC
-            """)).fetchall()
+            # Check if vin_decode_rules table exists (may not exist in tests)
+            table_check = db.session.execute(text("""
+                SELECT EXISTS (
+                    SELECT FROM information_schema.tables 
+                    WHERE table_name = 'vin_decode_rules'
+                )
+            """)).scalar()
             
-            rules_list = [dict(row._mapping) for row in vin_rules]
-            powertrain_vin, source_vin, conf_vin = decode_powertrain_from_vin(vin, rules_list)
-            
-            if powertrain_vin and powertrain_vin != 'unknown' and source_vin == 'vin_rule':
-                vin_result = (powertrain_vin, conf_vin)
+            if table_check:
+                vin_rules = db.session.execute(text("""
+                    SELECT wmi_pattern, vds_position, vds_value_pattern, powertrain, confidence
+                    FROM vin_decode_rules
+                    ORDER BY confidence DESC
+                """)).fetchall()
+                
+                rules_list = [dict(row._mapping) for row in vin_rules]
+                powertrain_vin, source_vin, conf_vin = decode_powertrain_from_vin(vin, rules_list)
+                
+                if powertrain_vin and powertrain_vin != 'unknown' and source_vin == 'vin_rule':
+                    vin_result = (powertrain_vin, conf_vin)
         except Exception:
-            # Database not available (e.g., in tests without app context)
+            # VIN decoding failed - not fatal, continue without VIN source
             pass
     
     # Check for conflicts between plate and VIN

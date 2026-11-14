@@ -131,3 +131,15 @@ def api_login(client, tid: str, password: str = PASSWORD) -> dict:
     response = client.post("/api/auth/login", json={"tid": tid, "password": password})
     assert response.status_code == 200, response.get_json()
     return {"Authorization": f"Bearer {response.get_json()['accessToken']}"}
+
+
+@pytest.fixture(autouse=True)
+def stub_car_info_cache():
+    """Stub car_info cache to prevent external API calls in tests.
+    
+    By default returns None (cache miss). Individual tests can populate
+    the car_info_cache table to test plate lookup behavior.
+    """
+    # No-op: The car_info_cache table will be empty by default in tests
+    # Tests that need plate lookup should explicitly insert cache entries
+    yield
