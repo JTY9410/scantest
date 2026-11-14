@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Literal
 
 from sqlalchemy import CheckConstraint, Index, String, Text, func
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Mapped, mapped_column, validates
 
 from app.core.makers import normalize_maker
@@ -131,6 +132,10 @@ class DbcSignal(db.Model):
     ecu_module: Mapped[str | None] = mapped_column(String(50))  # BMS, MCU, OBC, VCU
     signal_category: Mapped[str | None] = mapped_column(String(30))  # battery_soc, battery_soh
     
+    # Backfill evidence (added by migration 45416e1b6e4d)
+    ecu_backfill_evidence: Mapped[dict | None] = mapped_column(postgresql.JSON)
+    category_backfill_evidence: Mapped[dict | None] = mapped_column(postgresql.JSON)
+    
     __table_args__ = (
         Index("ix_dbc_signals_message", "message_id"),
         Index("ix_dbc_signals_name", "signal_name"),
@@ -189,6 +194,9 @@ class DiagnosticCommand(db.Model):
     # Classification
     protocol: Mapped[str | None] = mapped_column(String(20))  # OBD-II, UDS, KWP2000
     ecu_module: Mapped[str | None] = mapped_column(String(50))  # BMS, MCU, ECM, TCM
+    
+    # Backfill evidence (added by migration 45416e1b6e4d)
+    ecu_backfill_evidence: Mapped[dict | None] = mapped_column(postgresql.JSON)
     
     created_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(default=func.now(), onupdate=func.now(), nullable=False)

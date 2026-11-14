@@ -687,9 +687,12 @@ def register_cli(app: Flask) -> None:
         
         click.echo("BEFORE Backfill:")
         click.echo("-" * 80)
-        click.echo(f"  Commands ECU UNKNOWN/NULL: {cmd_unknown:,} / {cmd_total:,} ({cmd_unknown/cmd_total*100:.1f}%)")
-        click.echo(f"  DBC signals ECU UNKNOWN/NULL: {sig_ecu_unknown:,} / {sig_total:,} ({sig_ecu_unknown/sig_total*100:.1f}%)")
-        click.echo(f"  DBC signals category UNKNOWN/other/NULL: {sig_cat_unknown:,} / {sig_total:,} ({sig_cat_unknown/sig_total*100:.1f}%)")
+        cmd_pct = (cmd_unknown/cmd_total*100) if cmd_total > 0 else 0
+        sig_ecu_pct = (sig_ecu_unknown/sig_total*100) if sig_total > 0 else 0
+        sig_cat_pct = (sig_cat_unknown/sig_total*100) if sig_total > 0 else 0
+        click.echo(f"  Commands ECU UNKNOWN/NULL: {cmd_unknown:,} / {cmd_total:,} ({cmd_pct:.1f}%)")
+        click.echo(f"  DBC signals ECU UNKNOWN/NULL: {sig_ecu_unknown:,} / {sig_total:,} ({sig_ecu_pct:.1f}%)")
+        click.echo(f"  DBC signals category UNKNOWN/other/NULL: {sig_cat_unknown:,} / {sig_total:,} ({sig_cat_pct:.1f}%)")
         click.echo()
         
         # Simulate backfill to get projections
@@ -725,9 +728,10 @@ def register_cli(app: Flask) -> None:
         
         # 2. Scan signals for ECU
         signals = db.session.execute(text("""
-            SELECT ds.id, ds.signal_name, ds.sender_ecu, ds.comment, src.file_path
+            SELECT ds.id, ds.signal_name, dm.sender, ds.comment, src.file_path
             FROM dbc_signals ds
-            LEFT JOIN definition_sources src ON ds.source_id = src.id
+            LEFT JOIN dbc_messages dm ON ds.message_id = dm.id
+            LEFT JOIN definition_sources src ON dm.source_id = src.id
             WHERE ds.ecu_module IS NULL OR ds.ecu_module = 'UNKNOWN'
         """)).fetchall()
         
@@ -754,7 +758,8 @@ def register_cli(app: Flask) -> None:
         signals_cat = db.session.execute(text("""
             SELECT ds.id, ds.signal_name, ds.comment, src.file_path
             FROM dbc_signals ds
-            LEFT JOIN definition_sources src ON ds.source_id = src.id
+            LEFT JOIN dbc_messages dm ON ds.message_id = dm.id
+            LEFT JOIN definition_sources src ON dm.source_id = src.id
             WHERE ds.signal_category IS NULL OR ds.signal_category IN ('UNKNOWN', 'other')
         """)).fetchall()
         
