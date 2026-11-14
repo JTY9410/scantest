@@ -58,11 +58,18 @@ def _clean_database(app):
             db.session.commit()
         else:
             # Postgres: TRUNCATE all tables excluding alembic_version
-            db.session.execute(text("SET lock_timeout = '5s'"))
-            tables = [t.name for t in db.metadata.sorted_tables if t.name != 'alembic_version']
-            if tables:
-                tables_str = ", ".join(tables)
-                db.session.execute(text(f"TRUNCATE {tables_str} RESTART IDENTITY CASCADE"))
+            # Close all active sessions first
+            db.session.rollback()
+            db.session.close()
+            db.session.remove()
+            
+            # Use DELETE instead of TRUNCATE to avoid lock issues
+            for table in reversed(db.metadata.sorted_tables):
+                if table.name != 'alembic_version':
+                    try:
+                        db.session.execute(text(f"DELETE FROM {table.name}"))
+                    except Exception:
+                        pass
             db.session.commit()
         db.session.remove()
     
