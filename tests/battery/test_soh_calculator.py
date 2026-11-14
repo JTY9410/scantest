@@ -13,7 +13,7 @@ def test_soh_bms_direct(app):
     with app.app_context():
         scan_data = {
             'battery': {'soh_pct': 92.5},
-            'vehicle': {'maker': 'Hyundai', 'model': 'EV6', 'year': 2022}
+            'vehicle': {'maker': '현대', 'model': 'EV6', 'year': 2022}
         }
         
         results = SOHCalculator.calculate(scan_data)
@@ -30,7 +30,7 @@ def test_soh_capacity_based(app):
     with app.app_context():
         # 배터리 사양 생성
         spec = BatterySpec(
-            maker='Hyundai',
+            maker='현대',
             model='EV6',
             trim_grade='Long Range',
             model_year=2022,
@@ -44,7 +44,7 @@ def test_soh_capacity_based(app):
         # 현재 용량 있는 스캔
         scan_data = {
             'battery': {'current_capacity_ah': 100.0},
-            'vehicle': {'maker': 'Hyundai', 'model': 'EV6', 'year': 2022}
+            'vehicle': {'maker': '현대', 'model': 'EV6', 'year': 2022}
         }
         
         results = SOHCalculator.calculate(scan_data)
@@ -60,7 +60,7 @@ def test_soh_coulomb_counting(app):
     """Coulomb Counting 방법 테스트."""
     with app.app_context():
         spec = BatterySpec(
-            maker='Kia',
+            maker='기아',
             model='Niro EV',
             capacity_ah=180,
             cell_chemistry='NMC',
@@ -74,7 +74,7 @@ def test_soh_coulomb_counting(app):
                 'cum_charge_ah': 9000.0,
                 'cum_discharge_ah': 8500.0
             },
-            'vehicle': {'maker': 'Kia', 'model': 'Niro EV', 'year': 2019}
+            'vehicle': {'maker': '기아', 'model': 'Niro EV', 'year': 2019}
         }
         
         results = SOHCalculator.calculate(scan_data)
@@ -89,7 +89,7 @@ def test_soh_multiple_methods(app):
     """여러 방법이 적용될 때 우선순위 테스트."""
     with app.app_context():
         spec = BatterySpec(
-            maker='Hyundai',
+            maker='현대',
             model='IONIQ 5',
             usable_kwh=68.0,
             capacity_ah=104,
@@ -107,7 +107,7 @@ def test_soh_multiple_methods(app):
                 'cum_charge_ah': 5000.0,  # Coulomb counting
                 'cum_discharge_ah': 4800.0
             },
-            'vehicle': {'maker': 'Hyundai', 'model': 'IONIQ 5', 'year': 2021}
+            'vehicle': {'maker': '현대', 'model': 'IONIQ 5', 'year': 2021}
         }
         
         results = SOHCalculator.calculate(scan_data)
@@ -140,7 +140,7 @@ def test_soh_result_storage(app):
             tester_id=user.id,
             car_no='12가****',
             car_vin='TEST*****',
-            car_maker='Hyundai',
+            car_maker='현대',
             car_model='EV6',
             car_year=2022
         )
@@ -149,7 +149,7 @@ def test_soh_result_storage(app):
         
         scan_data = {
             'battery': {'soh_pct': 88.5},
-            'vehicle': {'maker': 'Hyundai', 'model': 'EV6', 'year': 2022}
+            'vehicle': {'maker': '현대', 'model': 'EV6', 'year': 2022}
         }
         
         # scan_id와 함께 계산 (저장됨)
@@ -167,7 +167,7 @@ def test_soh_ground_truth_error(app):
     """Ground truth와 오차 계산 테스트."""
     with app.app_context():
         spec = BatterySpec(
-            maker='Kia',
+            maker='기아',
             model='EV6',
             capacity_ah=111,
             source_url='https://test.com'
@@ -186,7 +186,7 @@ def test_soh_ground_truth_error(app):
             tester_id=user.id,
             car_no='12가****',
             car_vin='TEST*****',
-            car_maker='Kia',
+            car_maker='기아',
             car_model='EV6',
             car_year=2022
         )
@@ -198,7 +198,7 @@ def test_soh_ground_truth_error(app):
                 'soh_pct': 90.0,  # BMS (ground truth)
                 'current_capacity_ah': 100.0  # 예측: 90.1%
             },
-            'vehicle': {'maker': 'Kia', 'model': 'EV6', 'year': 2022}
+            'vehicle': {'maker': '기아', 'model': 'EV6', 'year': 2022}
         }
         
         SOHCalculator.calculate(scan_data, scan.id)

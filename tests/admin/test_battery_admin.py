@@ -21,7 +21,7 @@ def test_spec_detail_for_admin(app, admin_client, make_user):
     """Admin은 사양 상세 조회 가능."""
     with app.app_context():
         spec = BatterySpec(
-            maker='Hyundai',
+            maker='현대',
             model='IONIQ 5',
             source_url='https://test.com'
         )
@@ -31,7 +31,7 @@ def test_spec_detail_for_admin(app, admin_client, make_user):
     
     resp = admin_client.get(f'/admin/battery/specs/{spec_id}')
     assert resp.status_code == 200
-    assert 'Hyundai' in resp.data.decode()
+    assert '현대' in resp.data.decode()
     assert 'IONIQ 5' in resp.data.decode()
 
 

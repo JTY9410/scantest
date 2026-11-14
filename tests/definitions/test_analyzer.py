@@ -26,7 +26,7 @@ def test_analyze_scan_basic(app):
             tester_id=user.id,
             car_no='12가3456',
             car_vin='TESTVIN123',
-            car_maker='Hyundai',
+            car_maker='현대',
             car_model='EV6',
             car_year=2022,
             raw={
@@ -51,7 +51,7 @@ def test_analyze_scan_basic(app):
         cmd = DiagnosticCommand(
             source_id=source.id,
             source_type='obdb',
-            maker='Hyundai',
+            maker='현대',
             model='EV6',
             ecu_address='7E4',
             service='22',
@@ -74,7 +74,7 @@ def test_analyze_scan_basic(app):
         result = analyze_scan_with_definitions(scan)
         
         # 검증
-        assert result['vehicle']['maker'] == 'Hyundai'
+        assert result['vehicle']['maker'] == '현대'
         assert result['vehicle']['model'] == 'EV6'
         assert result['definitions_applied']['total_commands'] >= 1
         assert 'battery' in result or 'powertrain' in result

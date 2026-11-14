@@ -29,7 +29,7 @@ def sample_definition(app):
         # 차량
         vehicle = VehicleDefinition(
             source_id=source.id,
-            maker='Hyundai',
+            maker='현대',
             model='IONIQ 6',
             year_from=2023,
             powertrain='BEV'
@@ -100,12 +100,12 @@ def test_definitions_vehicles_list(admin_client, sample_definition):
     html = response.get_data(as_text=True)
     assert '차량 정의' in html
     assert 'IONIQ 6' in html
-    assert 'Hyundai' in html
+    assert '현대' in html
 
 
 def test_definitions_vehicles_list_filter_by_maker(admin_client, sample_definition):
     """제조사로 필터링한다."""
-    response = admin_client.get('/admin/definitions/vehicles?maker=Hyundai')
+    response = admin_client.get('/admin/definitions/vehicles?maker=현대')
     assert response.status_code == 200
     assert 'IONIQ 6' in response.get_data(as_text=True)
     

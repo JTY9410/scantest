@@ -29,7 +29,7 @@ def test_workbook_import_is_idempotent_and_splits_generic_from_maker(app):
         _describe(described, "현대")
     assert first["sheet"] == 31 and first["saved"] == 31 and first["dtcs"] == 31 and first["terms"] >= 1
     assert saved[0] == "verified" and saved[1] and saved[2]
-    assert saved[4] == "Hyundai" and saved[5] == "draft"
+    assert saved[4] == "현대" and saved[5] == "draft"
     assert makers >= 1
     assert again["dtcs"] == 0 and again["terms"] == 0 and again["saved"] == 31 and copies == 1
     assert described[0]["desc"] == saved[1]

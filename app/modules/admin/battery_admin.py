@@ -6,6 +6,7 @@ from sqlalchemy import func, desc
 from werkzeug.utils import secure_filename
 
 from app.extensions import db
+from app.core.makers import normalize_maker
 from app.modules.battery.models import BatterySpec, SOHResult, LearnedFormula
 from app.modules.scans.models import Scan
 from flask_login import login_required as admin_required
@@ -169,9 +170,10 @@ def specs_import():
                         skipped += 1
                         continue
                     
-                    # 중복 검사
+                    # 중복 검사 (maker는 정규화하여 비교)
+                    normalized_maker = normalize_maker(row['maker'])
                     existing = db.session.query(BatterySpec).filter(
-                        BatterySpec.maker == row['maker'],
+                        BatterySpec.maker == normalized_maker,
                         BatterySpec.model == row['model'],
                         BatterySpec.model_year == (int(row['model_year']) if row.get('model_year') else None),
                         BatterySpec.trim_grade == (row.get('trim_grade') or None)

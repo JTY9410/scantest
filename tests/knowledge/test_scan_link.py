@@ -82,23 +82,23 @@ def test_seen_read_is_saved_once_and_writes_are_skipped(app):
     from app.modules.knowledge.service import remember_seen_commands
 
     steps = [
-        {"status": "ok", "header": "7E1", "command": "0105", "label": "덮어쓰면 안 됨"},
-        {"status": "ok", "header": "7E0", "command": "010C", "label": "엔진 회전수"},
-        {"status": "ok", "header": "7E0", "command": "010C", "label": "엔진 회전수"},
+        {"status": "ok", "header": "7E1", "command": "01F1", "label": "덮어쓰면 안 됨"},
+        {"status": "ok", "header": "7E0", "command": "0146", "label": "대기 온도"},
+        {"status": "ok", "header": "7E0", "command": "0146", "label": "대기 온도"},
         {"status": "no_data", "header": "7E4", "command": "220101", "label": "배터리"},
         {"status": "ok", "header": "7E0", "command": "2EF190", "label": "쓰기"},
         {"status": "negative", "header": "7E0", "command": "010D", "label": "차속"},
     ]
     with app.app_context():
         db.session.add(KnowledgeCommand(
-            maker="현대", header="7E1", command="0105", label="이미 검증", source="manual", status="verified"))
+            maker="현대", header="7E1", command="01F1", label="이미 검증", source="manual", status="verified"))
         db.session.commit()
         assert remember_seen_commands("현대", "아반떼", steps) == 1
         assert remember_seen_commands("현대", "아반떼", steps) == 0
-        saved = db.session.scalar(select(KnowledgeCommand).where(KnowledgeCommand.command == "010C"))
-        kept = db.session.scalar(select(KnowledgeCommand).where(KnowledgeCommand.command == "0105"))
+        saved = db.session.scalar(select(KnowledgeCommand).where(KnowledgeCommand.command == "0146"))
+        kept = db.session.scalar(select(KnowledgeCommand).where(KnowledgeCommand.command == "01F1"))
         blocked = db.session.scalar(select(KnowledgeCommand).where(KnowledgeCommand.command == "2EF190"))
-    assert saved.status == "draft" and saved.source == "scan_log" and saved.detail_name == "엔진 회전수"
+    assert saved.status == "draft" and saved.source == "scan_log" and saved.label == "대기 온도"
     assert saved.header == "7E0" and saved.maker == "현대"
     assert kept.status == "verified" and kept.label == "이미 검증"
     assert blocked is None

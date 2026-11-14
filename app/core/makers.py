@@ -13,8 +13,7 @@ import re
 # casefold 한 별칭 → 표시 이름
 _ALIASES: dict[str, str] = {
     # Korean/International makers
-    "hyundai": "Hyundai",
-    "현대": "Hyundai",
+    "hyundai": "현대",
     "kia": "기아",
     "genesis": "Genesis",
     "제네시스": "Genesis",
