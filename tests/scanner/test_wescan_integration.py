@@ -10,13 +10,14 @@ from app.extensions import db
 def wescan_test_commands(app):
     """Create test diagnostic commands for WESCAN profiling."""
     with app.app_context():
-        sha_hash = 'd' * 64
+        import uuid
+        sha_hash = str(uuid.uuid4()).replace('-', '') + str(uuid.uuid4()).replace('-', '')[:32]
         
         # Create definition source
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('dbc', '/test/wescan_test.dbc', :sha, 100, NOW())
-        """), {'sha': sha_hash})
+            VALUES ('dbc', :path, :sha, 100, NOW())
+        """), {'path': f'/test/wescan_test_{sha_hash[:8]}.dbc', 'sha': sha_hash})
         db.session.commit()
         
         source_id = db.session.execute(text("""
