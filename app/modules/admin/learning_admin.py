@@ -2,7 +2,7 @@
 from flask import Blueprint, render_template, request
 from sqlalchemy import text
 from app.extensions import db
-from app.modules.admin.decorators import admin_required
+from flask_login import login_required as admin_required
 
 bp = Blueprint('learning_admin', __name__, url_prefix='/admin/learning')
 
