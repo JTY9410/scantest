@@ -1720,7 +1720,8 @@ def register_cli(app: Flask) -> None:
             for maker, total, with_url, mfr, tp in makers:
                 click.echo(f"\n  {maker}:")
                 click.echo(f"    Total specs: {total}")
-                click.echo(f"    With URL: {with_url}/{total} ({with_url/total*100:.1f}%)")
+                url_pct = (with_url/total*100) if total > 0 else 0
+                click.echo(f"    With URL: {with_url}/{total} ({url_pct:.1f}%)")
                 click.echo(f"    Official: {mfr}, Third-party: {tp}")
         
         click.echo()
