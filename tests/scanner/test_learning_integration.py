@@ -155,11 +155,11 @@ def test_learning_stats_thompson_sampling_params(app):
     with app.app_context():
         stats = LearningStats()
         
-        # Record results: 7 successes, 3 failures
+        # Record results: 7 successes, 3 failures with unique maker
         for i in range(7):
-            stats.record_command_result('Kia', 'EV6', 'BMS', '220101', success=True)
+            stats.record_command_result('Chevrolet', 'Bolt', 'BMS', '220199', success=True)
         for i in range(3):
-            stats.record_command_result('Kia', 'EV6', 'BMS', '220101', success=False, error_type='nrc')
+            stats.record_command_result('Chevrolet', 'Bolt', 'BMS', '220199', success=False, error_type='nrc')
         
         # Persist
         stats.persist_to_database()
@@ -168,7 +168,7 @@ def test_learning_stats_thompson_sampling_params(app):
         result = db.session.execute(text("""
             SELECT thompson_alpha, thompson_beta
             FROM command_stats
-            WHERE maker = 'Kia' AND command = '220101'
+            WHERE maker = 'Chevrolet' AND command = '220199'
         """)).fetchone()
         
         # alpha = successes + 1 = 8, beta = failures + 1 = 4
