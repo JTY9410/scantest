@@ -1279,24 +1279,23 @@ def register_cli(app: Flask) -> None:
     @definitions.command("reimport-canze-names")
     @click.option("--report-only", is_flag=True, help="Show what would change without modifying data")
     @click.option("--yes", is_flag=True, help="Apply changes without confirmation")
-    @click.option("--revert", is_flag=True, help="Revert previous changes")
+    @click.option("--revert", is_flag=True, help="Revert previous changes from database")
     def reimport_canze_names(report_only: bool, yes: bool, revert: bool) -> None:
         """Re-import CanZE field names from source CSV files with correct column index.
         
         Fixes parsing error where hex values (ff, 4ff) were imported as names
         instead of actual field names from column 11.
         
+        Uses 1:1 matching: (source_id, ecu_address, command_bytes, response_start_byte, response_bit_offset)
+        
         Usage:
             flask definitions reimport-canze-names --report-only  # Preview changes
             flask definitions reimport-canze-names --yes          # Apply fixes
-            flask definitions reimport-canze-names --revert       # Undo last changes
+            flask definitions reimport-canze-names --revert --yes # Undo last changes
         """
         from pathlib import Path
         from app.modules.definitions.models import DefinitionSource, DiagnosticCommand
         import csv
-        import json
-        
-        revert_file = Path("/tmp/canze_label_revert.json")
         
         click.echo("=" * 80)
         click.echo("CANZE FIELD NAME RE-IMPORT")
@@ -1304,46 +1303,55 @@ def register_cli(app: Flask) -> None:
         click.echo()
         
         if revert:
-            click.echo("REVERT MODE: Restoring previous labels")
+            click.echo("REVERT MODE: Restoring previous labels from database")
             click.echo()
             
-            if not revert_file.exists():
-                click.echo("✗ No revert data found. Run with --yes first to create revert data.", err=True)
+            # Find unrever ted changes in label_change_history
+            history = db.session.execute(text("""
+                SELECT id, command_id, old_label, new_label
+                FROM label_change_history
+                WHERE operation = 'canze_reimport' AND reverted_at IS NULL
+                ORDER BY changed_at DESC
+            """)).fetchall()
+            
+            if not history:
+                click.echo("✗ No revert data found. Run with --yes first.", err=True)
                 return
             
-            try:
-                with open(revert_file, 'r') as f:
-                    revert_data = json.load(f)
-            except Exception as e:
-                click.echo(f"✗ Error reading revert data: {e}", err=True)
-                return
-            
-            click.echo(f"Found {len(revert_data)} records to revert")
+            click.echo(f"Found {len(history)} records to revert")
             click.echo()
             click.echo("Sample reverts (first 10):")
             click.echo("-" * 80)
-            for item in revert_data[:10]:
-                click.echo(f"  Command {item['command']}: '{item['new_label']}' → '{item['old_label']}'")
+            for h in history[:10]:
+                click.echo(f"  ID {h[1]}: '{h[3]}' → '{h[2]}'")
             click.echo()
             
-            if not click.confirm(f"Revert {len(revert_data)} label changes?"):
-                click.echo("Aborted.")
-                return
+            if not yes:
+                if not click.confirm(f"Revert {len(history)} label changes?"):
+                    click.echo("Aborted.")
+                    return
             
             click.echo()
             click.echo("Reverting changes...")
             reverted = 0
             
-            for item in revert_data:
+            for h in history:
+                # Restore old label
                 db.session.execute(text("""
                     UPDATE diagnostic_commands
                     SET label = :old_label, updated_at = now()
-                    WHERE id = :id
-                """), {'old_label': item['old_label'], 'id': item['cmd_id']})
+                    WHERE id = :cmd_id
+                """), {'old_label': h[2], 'cmd_id': h[1]})
+                
+                # Mark as reverted
+                db.session.execute(text("""
+                    UPDATE label_change_history
+                    SET reverted_at = now()
+                    WHERE id = :history_id
+                """), {'history_id': h[0]})
                 reverted += 1
             
             db.session.commit()
-            revert_file.unlink()  # Delete revert file after successful revert
             
             click.echo(f"✓ Reverted {reverted} label changes")
             click.echo("=" * 80)
@@ -1352,6 +1360,8 @@ def register_cli(app: Flask) -> None:
         click.echo("Corrects column index: row[10] → row[11] for field name")
         click.echo("CanZE format: sid, ID, startBit, endBit, resolution, offset, decimals, unit,")
         click.echo("              requestId, responseId, options, name, ...")
+        click.echo()
+        click.echo("Matching strategy: 1:1 by (source_id, ecu, command, startBit, endBit)")
         click.echo()
         
         # Find all CanZE sources
@@ -1365,6 +1375,8 @@ def register_cli(app: Flask) -> None:
         click.echo()
         
         changes = []
+        skipped_multiple = []
+        skipped_none = []
         errors = []
         
         for source in canze_sources:
@@ -1380,32 +1392,60 @@ def register_cli(app: Flask) -> None:
             try:
                 with open(file_path, 'r', encoding='utf-8-sig') as f:
                     reader = csv.reader(f)
-                    for row in reader:
+                    for row_idx, row in enumerate(reader):
                         if len(row) >= 12 and row[1] and row[8]:
+                            ecu_address = row[1]
                             request_id = row[8]
+                            start_bit = row[2] if len(row) > 2 else None
+                            end_bit = row[3] if len(row) > 3 else None
                             correct_name = row[11]
                             
-                            # Find corresponding command
-                            cmd = db.session.query(DiagnosticCommand).filter_by(
-                                source_id=source.id,
-                                command_bytes=request_id
-                            ).first()
+                            # Convert bit positions to byte/offset for matching
+                            # CanZE uses bit positions, DB uses byte + bit_offset
+                            try:
+                                start_byte = int(start_bit) // 8 if start_bit else None
+                                bit_offset = int(start_bit) % 8 if start_bit else None
+                            except (ValueError, TypeError):
+                                start_byte = None
+                                bit_offset = None
                             
-                            if cmd and cmd.label != correct_name:
-                                changes.append({
-                                    'source': source.file_path,
-                                    'command': request_id,
-                                    'old_name': cmd.label,
-                                    'new_name': correct_name,
-                                    'cmd_id': cmd.id
-                                })
+                            # Find corresponding command(s) with exact match
+                            candidates = db.session.query(DiagnosticCommand).filter_by(
+                                source_id=source.id,
+                                command_bytes=request_id,
+                                ecu_address=ecu_address
+                            )
+                            
+                            # Further filter by response position if available
+                            if start_byte is not None:
+                                candidates = candidates.filter_by(response_start_byte=start_byte)
+                            if bit_offset is not None:
+                                candidates = candidates.filter_by(response_bit_offset=bit_offset)
+                            
+                            candidates_list = candidates.all()
+                            
+                            if len(candidates_list) == 0:
+                                skipped_none.append(f"Row {row_idx}: {ecu_address} {request_id} bit {start_bit}-{end_bit}")
+                            elif len(candidates_list) > 1:
+                                skipped_multiple.append(f"Row {row_idx}: {ecu_address} {request_id} bit {start_bit}-{end_bit} ({len(candidates_list)} matches)")
+                            else:
+                                cmd = candidates_list[0]
+                                if cmd.label != correct_name:
+                                    changes.append({
+                                        'cmd_id': cmd.id,
+                                        'ecu': ecu_address,
+                                        'command': request_id,
+                                        'position': f"{start_bit}-{end_bit}",
+                                        'old_label': cmd.label,
+                                        'new_label': correct_name
+                                    })
             except Exception as e:
                 errors.append(f"Error reading {file_path}: {str(e)}")
         
         # Report
         click.echo()
         click.echo("=" * 80)
-        click.echo(f"SUMMARY: {len(changes)} changes found")
+        click.echo(f"SUMMARY: {len(changes)} changes, {len(skipped_multiple)} multi-match, {len(skipped_none)} no-match")
         click.echo("=" * 80)
         
         if changes:
@@ -1413,7 +1453,19 @@ def register_cli(app: Flask) -> None:
             click.echo("Sample changes (first 20):")
             click.echo("-" * 80)
             for change in changes[:20]:
-                click.echo(f"  Command {change['command']}: '{change['old_name']}' → '{change['new_name']}'")
+                click.echo(f"  {change['ecu']} {change['command']} bit{change['position']}: '{change['old_label']}' → '{change['new_label']}'")
+        
+        if skipped_multiple:
+            click.echo()
+            click.echo(f"Skipped {len(skipped_multiple)} multi-match rows (first 10):")
+            for skip in skipped_multiple[:10]:
+                click.echo(f"  {skip}")
+        
+        if skipped_none:
+            click.echo()
+            click.echo(f"Skipped {len(skipped_none)} no-match rows (first 10):")
+            for skip in skipped_none[:10]:
+                click.echo(f"  {skip}")
         
         if errors:
             click.echo()
@@ -1442,32 +1494,29 @@ def register_cli(app: Flask) -> None:
         click.echo()
         click.echo("Applying changes...")
         
-        # Save revert data before making changes
-        revert_data = []
-        for change in changes:
-            revert_data.append({
-                'cmd_id': change['cmd_id'],
-                'command': change['command'],
-                'old_label': change['old_name'],
-                'new_label': change['new_name']
-            })
-        
         updated = 0
         for change in changes:
+            # Save to history
+            db.session.execute(text("""
+                INSERT INTO label_change_history (command_id, old_label, new_label, operation)
+                VALUES (:cmd_id, :old_label, :new_label, 'canze_reimport')
+            """), {
+                'cmd_id': change['cmd_id'],
+                'old_label': change['old_label'],
+                'new_label': change['new_label']
+            })
+            
+            # Update label
             db.session.execute(text("""
                 UPDATE diagnostic_commands
-                SET label = :new_name, updated_at = now()
-                WHERE id = :id
-            """), {'new_name': change['new_name'], 'id': change['cmd_id']})
+                SET label = :new_label, updated_at = now()
+                WHERE id = :cmd_id
+            """), {'new_label': change['new_label'], 'cmd_id': change['cmd_id']})
             updated += 1
         
         db.session.commit()
         
-        # Save revert data to file
-        with open(revert_file, 'w') as f:
-            json.dump(revert_data, f, indent=2)
-        
         click.echo(f"✓ Updated {updated} command names")
-        click.echo(f"✓ Revert data saved to {revert_file}")
-        click.echo("  (Use --revert to undo these changes)")
+        click.echo("✓ Revert data saved to label_change_history table")
+        click.echo("  (Use --revert --yes to undo these changes)")
         click.echo("=" * 80)
