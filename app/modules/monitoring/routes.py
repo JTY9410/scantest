@@ -7,6 +7,8 @@ from app.modules.auth.access import admin_required
 from app.modules.monitoring import service
 from app.modules.scanner.learn import answered_commands, list_commands
 from app.modules.scans.models import ScanType
+# Import audit model to register with SQLAlchemy metadata
+from app.modules.definitions.audit_models import PowertrainOverrideAudit  # noqa: F401
 
 bp = Blueprint("monitoring", __name__, url_prefix="/admin")
 
@@ -73,8 +75,108 @@ def scan_show(scan_id: int):
     scan = service.get_scan(scan_id)
     data = scan.bms_data if isinstance(scan.bms_data, dict) else {}
     clear_logs = service.get_scan_clear_logs(scan_id)
+    audit_logs = service.get_powertrain_audit_logs(scan_id=scan_id)
     return render_template("monitoring/scan_show.html", scan=scan, answered=answered_commands(data.get("steps")),
-                          clear_logs=clear_logs)
+                          clear_logs=clear_logs, powertrain_audit_logs=audit_logs)
+
+
+@bp.post("/scan/<int:scan_id>/override-powertrain")
+@admin_required
+def override_scan_powertrain(scan_id: int):
+    """Manually override scan powertrain classification."""
+    from flask import jsonify, session
+    from app.extensions import db
+    from app.modules.definitions.audit_models import PowertrainOverrideAudit
+    
+    scan = service.get_scan(scan_id)
+    
+    new_powertrain = request.json.get("powertrain")
+    reason = request.json.get("reason", "").strip()
+    
+    # Validate powertrain value
+    valid_powertrains = ["BEV", "PHEV", "HEV", "FCEV", "ICE", "not_vehicle", "unknown"]
+    if new_powertrain not in valid_powertrains:
+        return jsonify({"error": "Invalid powertrain value"}), 400
+    
+    # Record audit
+    audit = PowertrainOverrideAudit(
+        scan_id=scan_id,
+        user_id=session.get("user_id"),
+        previous_powertrain=scan.type,
+        new_powertrain=new_powertrain,
+        previous_source=scan.type_source,
+        new_source="manual_override",
+        reason=reason or None
+    )
+    db.session.add(audit)
+    
+    # Update scan
+    scan.type = new_powertrain
+    scan.type_source = "manual_override"
+    scan.powertrain_conflict = False  # Resolved by manual override
+    
+    db.session.commit()
+    
+    return jsonify({
+        "success": True,
+        "scan_id": scan_id,
+        "new_powertrain": new_powertrain,
+        "audit_id": audit.id
+    })
+
+
+@bp.post("/scan/<int:scan_id>/revert-powertrain")
+@admin_required
+def revert_scan_powertrain(scan_id: int):
+    """Revert scan powertrain to automatic classification."""
+    from flask import jsonify, session
+    from app.extensions import db
+    from app.modules.definitions.audit_models import PowertrainOverrideAudit
+    from app.modules.definitions.vehicle_classifier import classify_vehicle_powertrain
+    
+    scan = service.get_scan(scan_id)
+    
+    # Reclassify automatically
+    pt, pt_source, pt_conf, conflict_info = classify_vehicle_powertrain(
+        maker=scan.car_maker,
+        model=scan.car_model,
+        submodel=scan.car_submodel,
+        file_path=None,
+        vin=scan.car_vin,
+        plate_number=scan.car_no,
+        has_bms_commands=bool(scan.bms_data and scan.bms_data.get("battery")),
+        diag_fuel=scan.car_fuel
+    )
+    
+    # Record audit
+    audit = PowertrainOverrideAudit(
+        scan_id=scan_id,
+        user_id=session.get("user_id"),
+        previous_powertrain=scan.type,
+        new_powertrain=pt,
+        previous_source=scan.type_source,
+        new_source=f"auto_revert:{pt_source}",
+        reason="Reverted to automatic classification"
+    )
+    db.session.add(audit)
+    
+    # Update scan
+    scan.type = pt
+    scan.type_source = pt_source
+    has_conflict = conflict_info and conflict_info.get("has_conflict", False)
+    scan.powertrain_conflict = has_conflict
+    scan.plate_powertrain = conflict_info.get("plate_powertrain") if conflict_info else None
+    scan.vin_powertrain = conflict_info.get("vin_powertrain") if conflict_info else None
+    
+    db.session.commit()
+    
+    return jsonify({
+        "success": True,
+        "scan_id": scan_id,
+        "new_powertrain": pt,
+        "new_source": pt_source,
+        "audit_id": audit.id
+    })
 
 
 @bp.get("/activities")

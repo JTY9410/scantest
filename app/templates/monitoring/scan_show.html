@@ -180,4 +180,44 @@
   </table>
 </section>
 {% endif %}
+
+{# Phase 3: Manual powertrain override form #}
+{% from "components/manual_powertrain_form.html" import manual_powertrain_form %}
+{{ manual_powertrain_form(scan.id, scan.type, scan.type_source) }}
+
+{# Phase 3: Audit log history #}
+{% if powertrain_audit_logs %}
+<section class="card mt-6" aria-labelledby="audit-title">
+  <div class="card-body">
+    <h2 id="audit-title" class="text-lg font-bold">동력원 수정 이력</h2>
+    <div class="overflow-x-auto mt-4">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>수정 일시</th>
+            <th>수정자</th>
+            <th>이전 값</th>
+            <th>새 값</th>
+            <th>출처</th>
+            <th>사유</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for log in powertrain_audit_logs %}
+          <tr>
+            <td class="tabular-nums">{{ log.created_at|kst }}</td>
+            <td>{{ log.user.name if log.user else "-" }}</td>
+            <td>{{ log.previous_powertrain or "-" }}</td>
+            <td><strong>{{ log.new_powertrain }}</strong></td>
+            <td class="text-sm text-muted">{{ log.new_source }}</td>
+            <td class="text-sm">{{ log.reason or "-" }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+{% endif %}
+
 {% endblock %}
