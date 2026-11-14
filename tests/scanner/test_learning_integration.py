@@ -87,11 +87,12 @@ def test_learning_cli_stats(app):
         
         try:
             runner = app.test_cli_runner()
-            result = runner.invoke(args=['learning', 'stats', '--limit', '5'])
+            # Use --maker filter to isolate our test data
+            result = runner.invoke(args=['learning', 'stats', '--maker', unique_maker])
             
             assert result.exit_code == 0
-            # Check if our unique maker appears in output
-            assert unique_maker in result.output or '220101' in result.output or 'TestModel' in result.output
+            # Our unique maker must appear in the filtered output
+            assert unique_maker in result.output
         finally:
             # Always cleanup
             db.session.execute(text("DELETE FROM command_stats WHERE maker = :maker"), {'maker': unique_maker})
