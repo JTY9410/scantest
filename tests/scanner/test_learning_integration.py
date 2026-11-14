@@ -70,30 +70,32 @@ def test_ucb_command_selection(app):
         assert '220101' in selected
 
 
-@pytest.mark.skip(reason="Flaky test - intermittent cleanup issues")
 def test_learning_cli_stats(app):
     """Test flask learning stats command."""
+    import uuid
+    
     with app.app_context():
-        # Cleanup first
-        db.session.execute(text("DELETE FROM command_stats WHERE maker = 'Genesis'"))
-        db.session.commit()
+        # Use unique maker to avoid conflicts
+        unique_maker = f'TestMaker_{uuid.uuid4().hex[:8]}'
         
         # Add test data with unique maker
         db.session.execute(text("""
             INSERT INTO command_stats (maker, model, ecu, command, attempts, successes, ucb_score)
-            VALUES ('Genesis', 'GV60', 'BMS', '220101', 10, 9, 0.95)
-        """))
+            VALUES (:maker, 'TestModel', 'BMS', '220101', 10, 9, 0.95)
+        """), {'maker': unique_maker})
         db.session.commit()
         
-        runner = app.test_cli_runner()
-        result = runner.invoke(args=['learning', 'stats', '--limit', '5'])
-        
-        assert result.exit_code == 0
-        assert 'Genesis' in result.output or 'GV60' in result.output or '220101' in result.output
-        
-        # Cleanup after
-        db.session.execute(text("DELETE FROM command_stats WHERE maker = 'Genesis'"))
-        db.session.commit()
+        try:
+            runner = app.test_cli_runner()
+            result = runner.invoke(args=['learning', 'stats', '--limit', '5'])
+            
+            assert result.exit_code == 0
+            # Check if our unique maker appears in output
+            assert unique_maker in result.output or '220101' in result.output or 'TestModel' in result.output
+        finally:
+            # Always cleanup
+            db.session.execute(text("DELETE FROM command_stats WHERE maker = :maker"), {'maker': unique_maker})
+            db.session.commit()
 
 
 def test_learning_promote_and_rollback(app):
