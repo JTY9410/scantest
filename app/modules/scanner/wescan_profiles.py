@@ -4,6 +4,7 @@ Phase 6: Build command profiles from diagnostic_commands and apply at scan time.
 """
 from typing import Optional
 from collections import defaultdict
+import unicodedata
 
 from app import db
 from sqlalchemy import text
@@ -74,20 +75,29 @@ def build_profiles() -> dict:
                             break
         
         # Check if this is a common/standard PID (SAE J1979)
-        if maker and maker in ('공통규격', '공용규격', '_공통_센서'):
-            # Store in common section
-            service_pid_key = f"{service}_{pid}"
-            ecu_key = ecu_address or 'unknown'
-            if ecu_key not in common_commands:
-                common_commands[ecu_key] = {}
-            common_commands[ecu_key][service_pid_key] = {
-                'command_bytes': command_bytes,
-                'label': label,
-                'formula': formula,
-                'unit': unit,
-                'source_type': source_type
+        # Normalize to NFC to handle macOS NFD filenames
+        if maker:
+            maker_normalized = unicodedata.normalize('NFC', maker)
+            common_markers = {
+                unicodedata.normalize('NFC', '공통규격'),
+                unicodedata.normalize('NFC', '공용규격'),
+                unicodedata.normalize('NFC', '_공통_센서'),
+                '공통규격', '공용규격', '_공통_센서'  # Both NFC and NFD forms
             }
-            continue
+            if maker_normalized in common_markers or maker in common_markers:
+                # Store in common section
+                service_pid_key = f"{service}_{pid}"
+                ecu_key = ecu_address or 'unknown'
+                if ecu_key not in common_commands:
+                    common_commands[ecu_key] = {}
+                common_commands[ecu_key][service_pid_key] = {
+                    'command_bytes': command_bytes,
+                    'label': label,
+                    'formula': formula,
+                    'unit': unit,
+                    'source_type': source_type
+                }
+                continue
         
         # Skip if still no maker after all attempts
         if not maker:
@@ -189,33 +199,45 @@ def get_profile_coverage() -> dict:
              OR dc.command_bytes IS NULL OR dc.label IS NULL)
     """)).scalar()
     
-    # Common commands (SAE standard)
-    common_count = db.session.execute(text("""
-        SELECT COUNT(*) 
-        FROM diagnostic_commands dc
-        LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
-        WHERE COALESCE(dc.maker, vd.maker) IN ('공통규격', '공용규격', '_공통_센서')
-    """)).scalar()
-    
-    # Get all makers (after vehicle_definitions join) and check which can be resolved
-    all_makers = db.session.execute(text("""
+    # Get all makers (after vehicle_definitions join) for classification
+    all_makers_raw = db.session.execute(text("""
         SELECT COALESCE(dc.maker, vd.maker) as maker, COUNT(*) as count
         FROM diagnostic_commands dc
         LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
-        WHERE COALESCE(dc.maker, vd.maker) IS NOT NULL 
-        AND COALESCE(dc.maker, vd.maker) NOT IN ('공통규격', '공용규격', '_공통_센서')
+        WHERE COALESCE(dc.maker, vd.maker) IS NOT NULL
         GROUP BY COALESCE(dc.maker, vd.maker)
     """)).fetchall()
     
+    # Helper to check if maker is common/standard
+    def is_common_marker(maker: str) -> bool:
+        if not maker:
+            return False
+        maker_normalized = unicodedata.normalize('NFC', maker)
+        common_markers = {
+            unicodedata.normalize('NFC', '공통규격'),
+            unicodedata.normalize('NFC', '공용규격'),
+            unicodedata.normalize('NFC', '_공통_센서'),
+            '공통규격', '공용규격', '_공통_센서'
+        }
+        return maker_normalized in common_markers or maker in common_markers
+    
+    # Separate common commands from regular makers
+    common_count = 0
     resolved_makers = {}
     unresolved_count = 0
+    unresolved_makers = []  # Track unresolved for reporting
     
-    for maker, count in all_makers:
+    for maker, count in all_makers_raw:
+        if is_common_marker(maker):
+            common_count += count
+            continue
+        
         resolved = resolve_maker(maker)
         if resolved:
             resolved_makers[resolved] = resolved_makers.get(resolved, 0) + count
         else:
             unresolved_count += count
+            unresolved_makers.append((maker, count))
     
     # Models count (after resolution)
     models_count = db.session.execute(text("""
@@ -281,6 +303,7 @@ def get_profile_coverage() -> dict:
             'total_in_db': total_in_db,
             'null_maker': null_maker_count,
             'unresolved_maker': unresolved_count,
+            'unresolved_makers': unresolved_makers[:10],  # Top 10 for reporting
             'missing_fields': missing_fields_count,
             'by_source': {s: c for s, c in excluded_by_source}
         }

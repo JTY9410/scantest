@@ -438,3 +438,110 @@ def test_nissan_infiniti_alias(app):
         # Should have resolved to nissan
         assert 'nissan' in profiles
         assert 'nissan' in coverage['commands_by_maker']
+
+
+def test_nfd_common_marker(app):
+    """Test that NFD-normalized 공통규격 is properly detected."""
+    with app.app_context():
+        from app.modules.scanner.wescan_profiles import build_profiles, get_profile_coverage
+        import unicodedata
+        
+        # Create unique identifiers
+        unique_id = str(uuid.uuid4())[:8]
+        sha_hash = uuid.uuid4().hex + uuid.uuid4().hex[:32]
+        file_path = f'/test/nfd_common_{unique_id}.dbc'
+        
+        # Create definition source
+        db.session.execute(text("""
+            INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
+            VALUES ('obdb', :path, :sha, 100, NOW())
+        """), {'path': file_path, 'sha': sha_hash})
+        db.session.commit()
+        
+        source_id = db.session.execute(text("""
+            SELECT id FROM definition_sources WHERE file_path = :path
+        """), {'path': file_path}).scalar()
+        
+        # Use NFD form (macOS file system behavior)
+        maker_nfd = unicodedata.normalize('NFD', '공통규격')
+        
+        # Create diagnostic command with NFD 공통규격
+        db.session.execute(text("""
+            INSERT INTO diagnostic_commands 
+                (source_id, source_type, maker, model, ecu_address, service, pid, 
+                 command_bytes, label, formula, unit, verification_status,
+                 verification_count, success_count, failure_count,
+                 created_at, updated_at)
+            VALUES 
+                (:sid, 'obdb', :maker, NULL, '7E0', '01', '05', '0105', 
+                 'Coolant Temp', 'A-40', 'C', 'verified', 0, 0, 0, now(), now())
+        """), {'sid': source_id, 'maker': maker_nfd})
+        db.session.commit()
+        
+        # Build profiles should recognize NFD form as common
+        profiles = build_profiles()
+        coverage = get_profile_coverage()
+        
+        # Should be in _common, not in regular makers
+        assert '_common' in profiles
+        assert coverage['common_commands'] >= 1
+        
+        # Should NOT appear in makers list (neither NFC nor NFD form)
+        assert '공통규격' not in coverage['commands_by_maker']
+        assert maker_nfd not in coverage['commands_by_maker']
+
+
+def test_nissaninfiniti_with_maker_aliases_db(app):
+    """Test NissanInfiniti resolution when maker_aliases table exists in DB."""
+    with app.app_context():
+        from app.core.makers import resolve_maker
+        from app.modules.scanner.wescan_profiles import build_profiles, get_profile_coverage
+        
+        # Run migration to add NissanInfiniti
+        from flask import current_app
+        from flask_migrate import upgrade
+        upgrade()
+        
+        # Clear cache to reload from DB
+        import app.core.makers as makers_module
+        makers_module._ALIASES_CACHE = None
+        makers_module._REVERSE_LOOKUP_CACHE = None
+        
+        # Verify NissanInfiniti resolves to nissan via DB
+        assert resolve_maker('NissanInfiniti') == 'nissan'
+        
+        # Create test data
+        unique_id = str(uuid.uuid4())[:8]
+        sha_hash = uuid.uuid4().hex + uuid.uuid4().hex[:32]
+        file_path = f'/test/nissan_db_{unique_id}.dbc'
+        
+        db.session.execute(text("""
+            INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
+            VALUES ('obdb', :path, :sha, 100, NOW())
+        """), {'path': file_path, 'sha': sha_hash})
+        db.session.commit()
+        
+        source_id = db.session.execute(text("""
+            SELECT id FROM definition_sources WHERE file_path = :path
+        """), {'path': file_path}).scalar()
+        
+        db.session.execute(text("""
+            INSERT INTO diagnostic_commands 
+                (source_id, source_type, maker, model, ecu_address, service, pid, 
+                 command_bytes, label, formula, unit, verification_status,
+                 verification_count, success_count, failure_count,
+                 created_at, updated_at)
+            VALUES 
+                (:sid, 'obdb', 'NissanInfiniti', 'Leaf', '79B', '22', '1002', '221002', 
+                 'SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now())
+        """), {'sid': source_id})
+        db.session.commit()
+        
+        # Build profiles with DB-based maker_aliases
+        profiles = build_profiles()
+        coverage = get_profile_coverage()
+        
+        # Should resolve to nissan
+        assert 'nissan' in profiles
+        assert 'nissan' in coverage['commands_by_maker']
+        assert 'NissanInfiniti' not in coverage['commands_by_maker']

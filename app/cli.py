@@ -945,6 +945,13 @@ def register_cli(app: Flask) -> None:
             click.echo(f"    - Unresolved maker: {excluded.get('unresolved_maker', 0)}")
             click.echo(f"    - Missing required fields: {excluded.get('missing_fields', 0)}")
             
+            # Show unresolved makers
+            unresolved_list = excluded.get('unresolved_makers', [])
+            if unresolved_list:
+                click.echo(f"\n  Top unresolved makers (need aliases):")
+                for maker, count in unresolved_list:
+                    click.echo(f"    {repr(maker)}: {count} commands")
+            
             by_source = excluded.get('by_source', {})
             if by_source:
                 click.echo(f"\n  Excluded by source type:")
