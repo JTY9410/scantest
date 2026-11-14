@@ -425,3 +425,49 @@ def is_not_vehicle_maker(name: str | None) -> bool:
 def maker_aliases(name: str | None) -> set[str]:
     """Alias for get_maker_aliases (backward compatibility)."""
     return get_maker_aliases(name)
+
+
+def get_maker_info(maker: str | None) -> dict | None:
+    """Get maker information (Korean name, English name, aliases).
+    
+    Args:
+        maker: Maker name (any variant)
+    
+    Returns:
+        dict with korean_name, english_name, aliases, or None
+    """
+    if not maker:
+        return None
+    
+    resolved = resolve_maker(maker)
+    if not resolved:
+        return None
+    
+    # Load aliases from DB
+    aliases_map, reverse_map = _load_aliases_from_db()
+    
+    # Find the maker row
+    from app.extensions import db
+    from sqlalchemy import text
+    
+    result = db.session.execute(text("""
+        SELECT standard_key, english_name, korean_name, aliases
+        FROM maker_aliases
+        WHERE standard_key = :key
+    """), {'key': resolved}).fetchone()
+    
+    if result:
+        return {
+            'standard_key': result[0],
+            'english_name': result[1],
+            'korean_name': result[2],
+            'aliases': result[3]
+        }
+    
+    # Fallback
+    return {
+        'standard_key': resolved,
+        'english_name': resolved.title(),
+        'korean_name': resolved,
+        'aliases': []
+    }

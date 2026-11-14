@@ -1,0 +1,112 @@
+{% extends "layouts/admin.html" %}
+{% from "components/ui.html" import page_header, empty, pager as render_pagination %}
+{% block title %}명령어 분류 관리{% endblock %}
+
+{% block content %}
+{% call page_header("명령어 분류", "제조사/모델/동력원별 명령어 통계") %}{% endcall %}
+
+<div class="card card-body">
+  <form method="get" class="mb-4 grid grid-cols-5 gap-2">
+    <select name="maker" class="input">
+      <option value="">모든 제조사</option>
+      {% for m in makers %}
+      <option value="{{ m }}" {{ 'selected' if current_maker == m }}>{{ m }}</option>
+      {% endfor %}
+    </select>
+    <input type="text" name="model" value="{{ current_model }}" placeholder="모델 검색" class="input">
+    <select name="powertrain" class="input">
+      <option value="">모든 동력원</option>
+      {% for pt in powertrains %}
+      <option value="{{ pt }}" {{ 'selected' if current_powertrain == pt }}>{{ pt }}</option>
+      {% endfor %}
+    </select>
+    <input type="text" name="search" value="{{ current_search }}" placeholder="전체 검색" class="input">
+    <div class="flex gap-2">
+      <button type="submit" class="btn btn-secondary flex-1">검색</button>
+      <a href="{{ url_for('definitions_admin.classification_list') }}" class="btn">초기화</a>
+    </div>
+  </form>
+
+  <div class="mb-4 grid grid-cols-4 gap-4">
+    <div class="bg-gray-50 p-3 rounded">
+      <p class="text-xs text-muted mb-1">총 제조사</p>
+      <p class="text-2xl font-bold">{{ total_makers }}</p>
+    </div>
+    <div class="bg-gray-50 p-3 rounded">
+      <p class="text-xs text-muted mb-1">총 모델</p>
+      <p class="text-2xl font-bold">{{ total_models }}</p>
+    </div>
+    <div class="bg-gray-50 p-3 rounded">
+      <p class="text-xs text-muted mb-1">총 명령</p>
+      <p class="text-2xl font-bold">{{ total_commands }}</p>
+    </div>
+    <div class="bg-gray-50 p-3 rounded">
+      <p class="text-xs text-muted mb-1">검증 완료</p>
+      <p class="text-2xl font-bold text-green-600">{{ total_verified }}</p>
+    </div>
+  </div>
+
+  {% if classifications %}
+  <div class="overflow-x-auto">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>제조사 (한글/영문)</th>
+          <th>모델</th>
+          <th>동력원</th>
+          <th class="text-right">명령 수</th>
+          <th class="text-right">검증 완료</th>
+          <th class="text-right">검증 필요</th>
+          <th class="text-right">실험 단계</th>
+          <th>최종 업데이트</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for cls in classifications %}
+        <tr>
+          <td>
+            <div class="font-medium">{{ cls.maker_kr }}</div>
+            <div class="text-xs text-muted">{{ cls.maker_en }}</div>
+          </td>
+          <td class="font-medium">{{ cls.model }}</td>
+          <td>
+            <span class="badge {{ 'badge-green' if cls.powertrain in ['전기', '하이브리드'] else 'badge-gray' }}">
+              {{ cls.powertrain }}
+            </span>
+          </td>
+          <td class="text-right font-mono">{{ cls.command_count }}</td>
+          <td class="text-right">
+            <span class="text-green-600 font-medium">{{ cls.verified_count }}</span>
+          </td>
+          <td class="text-right">
+            <span class="text-yellow-600 font-medium">{{ cls.needs_verification_count }}</span>
+          </td>
+          <td class="text-right">
+            <span class="text-gray-500 font-medium">{{ cls.experimental_count }}</span>
+          </td>
+          <td class="text-sm text-muted">
+            {% if cls.last_updated %}
+              {{ cls.last_updated.strftime('%Y-%m-%d') }}
+            {% else %}
+              -
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+    {% call empty() %}
+      <p>분류된 명령어가 없습니다.</p>
+    {% endcall %}
+  {% endif %}
+
+  {% if classifications %}
+  <div class="mt-4">
+    {{ render_pagination(page, (classifications|length < 50), 'definitions_admin.classification_list', 
+       maker=current_maker, model=current_model, powertrain=current_powertrain, search=current_search) }}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

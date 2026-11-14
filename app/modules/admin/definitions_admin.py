@@ -1,6 +1,6 @@
 """정의파일 데이터 조회 관리자 페이지."""
-from flask import Blueprint, render_template, request
-from sqlalchemy import func, or_
+from flask import Blueprint, render_template, request, jsonify
+from sqlalchemy import func, or_, text
 
 from app.extensions import db
 from app.modules.definitions.models import (
@@ -9,6 +9,7 @@ from app.modules.definitions.models import (
     DbcSignal,
     DiagnosticCommand,
 )
+from app.core.makers import get_maker_info
 from flask_login import login_required as admin_required
 
 bp = Blueprint('definitions_admin', __name__, url_prefix='/admin/definitions')
@@ -217,5 +218,119 @@ def commands_list():
         by_ecu=by_ecu,
         current_protocol=protocol,
         current_ecu_module=ecu_module,
+        current_search=search
+    )
+
+
+@bp.route('/classification')
+@admin_required
+def classification_list():
+    """명령어 제조사/모델/동력원 분류 목록."""
+    page = request.args.get('page', 1, type=int)
+    maker = request.args.get('maker', '')
+    model = request.args.get('model', '')
+    powertrain = request.args.get('powertrain', '')
+    verification_status = request.args.get('verification_status', '')
+    search = request.args.get('search', '')
+    
+    # 제조사, 모델, 동력원별 명령 수 집계 (vehicle_definitions 참조)
+    query = text("""
+        WITH maker_model_stats AS (
+            SELECT 
+                COALESCE(dc.maker, vd.maker) as maker,
+                COALESCE(dc.model, vd.model) as model,
+                vd.powertrain,
+                COUNT(DISTINCT dc.id) as command_count,
+                COUNT(DISTINCT CASE WHEN dc.verification_status = 'verified' THEN dc.id END) as verified_count,
+                COUNT(DISTINCT CASE WHEN dc.verification_status = 'needs_verification' THEN dc.id END) as needs_verification_count,
+                COUNT(DISTINCT CASE WHEN dc.verification_status = 'experimental' THEN dc.id END) as experimental_count,
+                MAX(dc.updated_at) as last_updated
+            FROM diagnostic_commands dc
+            LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
+            WHERE COALESCE(dc.maker, vd.maker) IS NOT NULL
+                AND (:maker = '' OR COALESCE(dc.maker, vd.maker) LIKE :maker_pattern)
+                AND (:model = '' OR COALESCE(dc.model, vd.model) LIKE :model_pattern)
+                AND (:powertrain = '' OR vd.powertrain = :powertrain)
+                AND (:search = '' OR 
+                     COALESCE(dc.maker, vd.maker) LIKE :search_pattern OR 
+                     COALESCE(dc.model, vd.model) LIKE :search_pattern)
+            GROUP BY COALESCE(dc.maker, vd.maker), COALESCE(dc.model, vd.model), vd.powertrain
+        )
+        SELECT * FROM maker_model_stats
+        ORDER BY maker, model
+        LIMIT :limit OFFSET :offset
+    """)
+    
+    params = {
+        'maker': maker,
+        'maker_pattern': f'%{maker}%',
+        'model': model,
+        'model_pattern': f'%{model}%',
+        'powertrain': powertrain,
+        'search': search,
+        'search_pattern': f'%{search}%',
+        'limit': 50,
+        'offset': (page - 1) * 50
+    }
+    
+    results = db.session.execute(query, params).fetchall()
+    
+    # 제조사 정보 추가 (한글/영문)
+    classifications = []
+    for row in results:
+        maker_info = get_maker_info(row[0])
+        classifications.append({
+            'maker': row[0],
+            'maker_kr': maker_info.get('korean_name', row[0]) if maker_info else row[0],
+            'maker_en': maker_info.get('english_name', row[0]) if maker_info else row[0],
+            'model': row[1],
+            'powertrain': row[2] or '미분류',
+            'command_count': row[3],
+            'verified_count': row[4],
+            'needs_verification_count': row[5],
+            'experimental_count': row[6],
+            'last_updated': row[7]
+        })
+    
+    # 전체 통계
+    stats_query = text("""
+        SELECT 
+            COUNT(DISTINCT COALESCE(dc.maker, vd.maker)) as total_makers,
+            COUNT(DISTINCT CONCAT(COALESCE(dc.maker, vd.maker), ':', COALESCE(dc.model, vd.model))) as total_models,
+            COUNT(dc.id) as total_commands,
+            COUNT(CASE WHEN dc.verification_status = 'verified' THEN 1 END) as total_verified
+        FROM diagnostic_commands dc
+        LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
+        WHERE COALESCE(dc.maker, vd.maker) IS NOT NULL
+    """)
+    stats = db.session.execute(stats_query).fetchone()
+    
+    # 제조사 목록 (필터용)
+    makers_query = text("""
+        SELECT DISTINCT COALESCE(dc.maker, vd.maker) as maker
+        FROM diagnostic_commands dc
+        LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
+        WHERE COALESCE(dc.maker, vd.maker) IS NOT NULL
+        ORDER BY maker
+    """)
+    makers = [row[0] for row in db.session.execute(makers_query).fetchall()]
+    
+    # 동력원 목록 (필터용)
+    powertrains = ['전기', '하이브리드', '플러그인 하이브리드', '가솔린', '디젤', 'LPG']
+    
+    return render_template(
+        'admin/definitions/classification_list.html',
+        classifications=classifications,
+        page=page,
+        total_makers=stats[0] if stats else 0,
+        total_models=stats[1] if stats else 0,
+        total_commands=stats[2] if stats else 0,
+        total_verified=stats[3] if stats else 0,
+        makers=makers,
+        powertrains=powertrains,
+        current_maker=maker,
+        current_model=model,
+        current_powertrain=powertrain,
+        current_verification_status=verification_status,
         current_search=search
     )
