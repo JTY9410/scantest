@@ -38,14 +38,16 @@ def canze_multifield_data(app, tmp_path):
         db.session.execute(text("""
             INSERT INTO diagnostic_commands 
                 (source_id, source_type, ecu_address, service, pid, command_bytes, label,
-                 response_start_byte, response_bit_offset, verification_status, created_at, updated_at)
+                 response_start_byte, response_bit_offset, 
+                 verification_status, verification_count, success_count, failure_count,
+                 created_at, updated_at)
             VALUES 
-                (:sid, 'canze', '7DF', '19', '020F', '19020F', 'ff', 2, 0, 'needs_verification', now(), now()),
-                (:sid, 'canze', '7DF', '19', '020F', '19020F', '2ff', 2, 2, 'needs_verification', now(), now()),
-                (:sid, 'canze', '7DF', '19', '020F', '19020F', '4ff', 2, 4, 'needs_verification', now(), now()),
-                (:sid, 'canze', '7DF', '19', '020F', '19020F', '1ff', 3, 0, 'needs_verification', now(), now()),
-                (:sid, 'canze', '7E4', '21', '01', '2101', 'ff', 0, 0, 'needs_verification', now(), now()),
-                (:sid, 'canze', '7E4', '21', '01', '2101', '4ff', 1, 0, 'needs_verification', now(), now())
+                (:sid, 'canze', '7DF', '19', '020F', '19020F', 'ff', 2, 0, 'needs_verification', 0, 0, 0, now(), now()),
+                (:sid, 'canze', '7DF', '19', '020F', '19020F', '2ff', 2, 2, 'needs_verification', 0, 0, 0, now(), now()),
+                (:sid, 'canze', '7DF', '19', '020F', '19020F', '4ff', 2, 4, 'needs_verification', 0, 0, 0, now(), now()),
+                (:sid, 'canze', '7DF', '19', '020F', '19020F', '1ff', 3, 0, 'needs_verification', 0, 0, 0, now(), now()),
+                (:sid, 'canze', '7E4', '21', '01', '2101', 'ff', 0, 0, 'needs_verification', 0, 0, 0, now(), now()),
+                (:sid, 'canze', '7E4', '21', '01', '2101', '4ff', 1, 0, 'needs_verification', 0, 0, 0, now(), now())
         """), {'sid': source_id})
         db.session.commit()
         
