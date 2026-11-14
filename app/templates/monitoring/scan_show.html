@@ -19,6 +19,32 @@
 {% endcall %}
 {% include "scanner/_path.html" %}
 
+{# Phase 2: Show conflict modal if plate ≠ VIN powertrain #}
+{% if scan.powertrain_conflict %}
+{% from "components/powertrain_conflict_modal.html" import powertrain_conflict_modal %}
+<div class="flash flash-warning mb-6" id="powertrain-conflict-alert">
+  <span aria-hidden="true" class="font-bold">⚠</span>
+  <p>동력원 불일치 감지: 차량번호 조회({{ scan.plate_powertrain }})와 VIN 규칙({{ scan.vin_powertrain }})이 다릅니다.
+    <button type="button" class="underline font-medium" onclick="document.querySelector('.powertrain-conflict-modal').classList.remove('hidden')">
+      해결하기
+    </button>
+  </p>
+</div>
+{{ powertrain_conflict_modal({
+  'has_conflict': true,
+  'plate_powertrain': scan.plate_powertrain,
+  'plate_confidence': 0.95,
+  'vin_powertrain': scan.vin_powertrain,
+  'vin_confidence': 0.90
+}, scan_id=scan.id) }}
+<script>
+  // Auto-open conflict modal on page load
+  if (document.querySelector('.powertrain-conflict-modal')) {
+    document.querySelector('.powertrain-conflict-modal').classList.remove('hidden');
+  }
+</script>
+{% endif %}
+
 {% if scanned and scanned.errors %}
 <div class="flash flash-warning mb-6"><span aria-hidden="true" class="font-bold">!</span>
   <p>스캔 오류 {{ scanned.errors|length }}건:

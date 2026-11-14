@@ -102,6 +102,10 @@ class Scan(TimestampMixin, SoftDeleteMixin, db.Model):
     # 유형 판별 근거(manual·fuel·model·ecu·bms·default·reclassified)와 변경 이력([{from,to,source,by,at,reason}]).
     type_source: Mapped[str | None] = mapped_column(String(20))
     type_history: Mapped[Any | None] = mapped_column(JSON)
+    # Phase 2: Plate/VIN conflict detection
+    powertrain_conflict: Mapped[bool | None] = mapped_column(default=False)
+    plate_powertrain: Mapped[str | None] = mapped_column(String(20))
+    vin_powertrain: Mapped[str | None] = mapped_column(String(20))
     car_distance: Mapped[int | None] = mapped_column(Integer)
     car_battery_capacity: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
     car_discharge_energy: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))

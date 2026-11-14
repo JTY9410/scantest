@@ -40,13 +40,15 @@ def _size() -> int:
 
 def search_scans(*, q: str, scan_type: str, user_id: int | None, start: date | None,
                  end: date | None, page: int, device: str = "", maker: str = "", model: str = "",
-                 role: str = "") -> Page:
+                 role: str = "", conflict: bool = False) -> Page:
     stmt = (
         select(Scan)
         .options(joinedload(Scan.tester), joinedload(Scan.owner), joinedload(Scan.company),
                  selectinload(Scan.scan_codes))
         .where(Scan.deleted_at.is_(None), *_day_range(Scan.created_at, start, end))
     )
+    if conflict:
+        stmt = stmt.where(Scan.powertrain_conflict == True)
     if scan_type in ("ev", "hev", "ice"):
         stmt = stmt.where(Scan.type == scan_type)
     if user_id:
@@ -74,6 +76,16 @@ def scan_type_counts() -> dict[str, int]:
     rows = db.session.execute(select(Scan.type, func.count()).where(Scan.deleted_at.is_(None)).group_by(Scan.type))
     counts = {str(kind): int(count) for kind, count in rows}
     return {"": sum(counts.values()), **counts}
+
+
+def conflict_count() -> int:
+    """동력원 불일치 건수."""
+    return db.session.scalar(
+        select(func.count()).select_from(Scan).where(
+            Scan.deleted_at.is_(None),
+            Scan.powertrain_conflict == True
+        )
+    ) or 0
 
 
 def get_scan(scan_id: int) -> Scan:

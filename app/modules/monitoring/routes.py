@@ -47,12 +47,15 @@ def scans():
     maker = (request.args.get("maker") or "").strip()[:50]
     model = (request.args.get("model") or "").strip()[:50]
     role = request.args.get("role", "") if request.args.get("role") in ("tester", "owner") else ""
+    conflict_filter = request.args.get("conflict") == "true"
     page = service.search_scans(
-        scan_type=scan_type, device=device, maker=maker, model=model, role=role, **params)
+        scan_type=scan_type, device=device, maker=maker, model=model, role=role, conflict=conflict_filter, **params)
+    conflict_count = service.conflict_count()
     return render_template(
         "monitoring/scans.html", page=page, params=params, scan_type=scan_type, device=device,
-        maker=maker, model=model, role=role, types=list(ScanType), type_counts=service.scan_type_counts(),
-        filters=_filters(params, type=scan_type, device=device, maker=maker, model=model, role=role),
+        maker=maker, model=model, role=role, conflict_filter=conflict_filter, conflict_count=conflict_count,
+        types=list(ScanType), type_counts=service.scan_type_counts(),
+        filters=_filters(params, type=scan_type, device=device, maker=maker, model=model, role=role, conflict=conflict_filter if conflict_filter else None),
         member=service.member_name(params["user_id"]),
     )
 

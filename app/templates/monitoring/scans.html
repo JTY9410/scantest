@@ -30,11 +30,17 @@
 {% endcall %}
 
 {% set tab_args = filters.copy() %}{% set _ = tab_args.pop("type", None) %}
+{% set _ = tab_args.pop("conflict", None) %}
 <nav class="mb-4 flex flex-wrap gap-2 print:hidden" aria-label="차량 유형별 최종결과">
   {% for value, label in [("", "전체"), ("ev", "전기차"), ("hev", "하이브리드"), ("ice", "내연기관")] %}
   <a href="{{ url_for('monitoring.scans', type=value or None, **tab_args) }}"
-     class="btn {{ 'btn-primary' if scan_type == value else 'btn-secondary' }}"{% if scan_type == value %} aria-current="page"{% endif %}>{{ label }} <span class="tabular-nums">{{ type_counts.get(value, 0) }}</span></a>
+     class="btn {{ 'btn-primary' if scan_type == value and not conflict_filter else 'btn-secondary' }}"{% if scan_type == value and not conflict_filter %} aria-current="page"{% endif %}>{{ label }} <span class="tabular-nums">{{ type_counts.get(value, 0) }}</span></a>
   {% endfor %}
+  <a href="{{ url_for('monitoring.scans', conflict='true', **tab_args) }}"
+     class="btn {{ 'btn-warning' if conflict_filter else 'btn-secondary' }}"{% if conflict_filter %} aria-current="page"{% endif %}>
+    동력원 불일치 
+    {% if conflict_count > 0 %}<span class="badge badge-warning tabular-nums">{{ conflict_count }}</span>{% endif %}
+  </a>
 </nav>
 
 <section class="card overflow-hidden" aria-label="스캔 목록">

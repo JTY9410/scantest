@@ -28,6 +28,7 @@ from app.modules.canlab.service import (
 )
 from app.modules.obd.models import ObdDialect
 from app.modules.scanner import pdf
+from app.modules.definitions.vehicle_classifier import classify_vehicle_powertrain
 from app.modules.scanner.interpret import detect_protocol, interpret, record_text
 from app.modules.scanner.learn import remember
 from app.modules.scanner.powertrain import classify
@@ -443,6 +444,30 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     odometer = next((v["value"] for v in result["values"] if v["key"] == "odometer"), None)
     kind = classify(car, result)
     result["powertrain"] = kind
+    
+    # Phase 2: Integrate plate/VIN conflict detection
+    has_conflict = False
+    plate_pt = None
+    vin_pt = None
+    try:
+        pt, pt_source, pt_conf, conflict_info = classify_vehicle_powertrain(
+            maker=car.get("diag_company"),
+            model=car.get("diag_model"),
+            submodel=car.get("diag_submodel"),
+            file_path=None,
+            vin=result.get("vin") or car.get("diag_car_id"),
+            plate_number=car_no if car_no else None,
+            has_bms_commands=bool(result.get("battery"))
+        )
+        # Store conflict detection results
+        has_conflict = conflict_info and conflict_info.get("has_conflict", False)
+        plate_pt = conflict_info.get("plate_powertrain") if conflict_info else None
+        vin_pt = conflict_info.get("vin_powertrain") if conflict_info else None
+    except Exception:
+        # If conflict detection fails, continue without it (non-fatal)
+        current_app.logger.exception("Conflict detection failed")
+        pass
+    
     scan = Scan(
         type=kind["type"], type_source=kind["source"], device_type=transport, device_uid=device,
         tester_id=actor.id, company_id=actor.company_id, scan_vin=result["vin"], car_no=car_no,
@@ -450,6 +475,9 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
         car_model=str(car.get("diag_model") or "미확인"), car_submodel=car.get("diag_submodel"),
         car_cc=_int(car.get("diag_displacement")), car_year=_int(car.get("diag_year")),
         car_fuel=car.get("diag_fuel"), car_distance=int(odometer) if odometer is not None else None,
+        powertrain_conflict=has_conflict,
+        plate_powertrain=plate_pt,
+        vin_powertrain=vin_pt,
         raw=[d["code"] for d in result["dtcs"]],
         bms_data={
             "source": "scanner", "report_id": report.id, "dataset_id": dataset.id, "status": result["status"],
