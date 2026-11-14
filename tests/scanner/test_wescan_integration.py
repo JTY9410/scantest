@@ -19,7 +19,7 @@ def wescan_test_commands(app):
         # Create definition source
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('dbc', :path, :sha, 100, NOW())
+            VALUES ('canze', :path, :sha, 100, NOW())
         """), {'path': file_path, 'sha': sha_hash})
         db.session.commit()
         
@@ -34,11 +34,11 @@ def wescan_test_commands(app):
                  formula, unit, verification_status, verification_count, success_count, failure_count,
                  created_at, updated_at)
             VALUES 
-                (:sid, 'dbc', '현대', 'Ioniq 5', '7E4', '22', '1050', '221050', 'SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now()),
-                (:sid, 'dbc', '현대', 'Ioniq 5', '7E4', '22', '1051', '221051', 'Battery Voltage', 'A*0.1', 'V', 'verified', 0, 0, 0, now(), now()),
-                (:sid, 'dbc', '현대', 'Ioniq 6', '7E4', '22', '1050', '221050', 'SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now()),
-                (:sid, 'dbc', '기아', 'EV6', '7E4', '22', '1050', '221050', 'SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now()),
-                (:sid, 'dbc', '기아', 'EV6', '7E2', '22', '1060', '221060', 'Speed', 'A', 'km/h', 'verified', 0, 0, 0, now(), now())
+                (:sid, 'canze', '현대', 'Ioniq 5', '7E4', '22', '1050', '221050', 'SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now()),
+                (:sid, 'canze', '현대', 'Ioniq 5', '7E4', '22', '1051', '221051', 'Battery Voltage', 'A*0.1', 'V', 'verified', 0, 0, 0, now(), now()),
+                (:sid, 'canze', '현대', 'Ioniq 6', '7E4', '22', '1050', '221050', 'SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now()),
+                (:sid, 'canze', '기아', 'EV6', '7E4', '22', '1050', '221050', 'SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now()),
+                (:sid, 'canze', '기아', 'EV6', '7E2', '22', '1060', '221060', 'Speed', 'A', 'km/h', 'verified', 0, 0, 0, now(), now())
         """), {'sid': source_id})
         db.session.commit()
         
