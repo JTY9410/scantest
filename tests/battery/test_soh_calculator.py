@@ -285,8 +285,8 @@ def test_soh_priority_order(app):
         assert results[0].method == 'bms_direct'
         assert results[0].confidence == 0.95
         
-        # Verify BMS 0105 bytes reference
-        assert 'BMS 0105' in results[0].calculation_details.get('source', '')
+    # Verify BMS direct read reference
+    assert 'BMS direct read' in results[0].calculation_details.get('source', '')
 
 
 def test_soh_confidence_levels(app):

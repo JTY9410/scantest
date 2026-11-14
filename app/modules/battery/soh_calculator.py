@@ -50,7 +50,7 @@ class SOHCalculator:
                 method_label_ko='BMS 직접 읽기',
                 confidence=0.95,
                 input_features={'bms_soh_pct': bms_soh},
-                calculation_details={'source': 'BMS 0105 bytes 25-26'}
+                calculation_details={'source': 'BMS direct read (e.g. Nissan LEAF 79B 2101)'}
             ))
         
         # 배터리 사양 조회 (나머지 방법들에 필요)

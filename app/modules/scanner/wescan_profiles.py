@@ -55,8 +55,8 @@ def build_profiles() -> dict:
     for row in commands:
         maker, model, ecu_address, service, pid, command_bytes, label, formula, unit, source_type, source_id, file_path = row
         
-        # Skip rows without essential info (ecu_address can be NULL)
-        if not all([service, pid, command_bytes, label]):
+        # Skip rows without essential info (ecu_address and pid can be NULL/empty)
+        if not service or not command_bytes or not label:
             continue
         
         # Infer maker/model from file_path if still NULL
