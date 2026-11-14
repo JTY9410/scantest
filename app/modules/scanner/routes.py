@@ -315,3 +315,45 @@ def clear_save(scan_id: int):
         return {"message": error.message}, error.status
     return {"id": log.id, "status": log.status, "result": log.result}, 201
 
+
+@bp.get("/<int:scan_id>/progress")
+@admin_required
+def scan_progress(scan_id: int):
+    """Get current scan progress (polling endpoint)."""
+    from app.modules.scanner.progress import get_scan_progress
+    
+    scan = get_visible_scan(current_user, scan_id)
+    progress = get_scan_progress(scan_id)
+    
+    if not progress:
+        return {"error": "No progress data available"}, 404
+    
+    return progress, 200
+
+
+@bp.get("/<int:scan_id>/progress/stream")
+@admin_required
+def scan_progress_stream(scan_id: int):
+    """Stream scan progress via Server-Sent Events (SSE)."""
+    from app.modules.scanner.progress import progress_tracker
+    
+    scan = get_visible_scan(current_user, scan_id)
+    return progress_tracker.stream_progress(scan_id)
+
+
+@bp.get("/<int:scan_id>/errors")
+@admin_required
+def scan_errors(scan_id: int):
+    """Get structured error log for a scan."""
+    from app.modules.scanner.error_logging import error_logger
+    
+    scan = get_visible_scan(current_user, scan_id)
+    errors = error_logger.get_errors(scan_id)
+    summary = error_logger.get_error_summary(scan_id)
+    
+    return {
+        "scan_id": scan_id,
+        "errors": [e.to_dict() for e in errors],
+        "summary": summary
+    }, 200
+
