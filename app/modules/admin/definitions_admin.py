@@ -1,6 +1,5 @@
 """정의파일 데이터 조회 관리자 페이지."""
-from flask import Blueprint, render_template, request, jsonify, current_app
-from flask_login import current_user
+from flask import Blueprint, render_template, request, jsonify
 from sqlalchemy import func, or_, text
 
 from app.extensions import db
@@ -339,61 +338,3 @@ def classification_list():
         current_verification_status=verification_status,
         current_search=search
     )
-
-
-@bp.route('/powertrain/override', methods=['POST'])
-@admin_required
-def powertrain_override():
-    """Handle manual powertrain override for conflict resolution.
-    
-    사용자 요구사항: /admin/powertrain/override로 수동 선택 저장
-    """
-    from flask import jsonify
-    from app.modules.scans.models import Scan
-    
-    data = request.get_json()
-    scan_id = data.get('scan_id')
-    new_powertrain = data.get('new_powertrain')
-    reason = data.get('reason', '수동 선택')
-    
-    if not scan_id or not new_powertrain:
-        return jsonify({'error': 'scan_id와 new_powertrain이 필요합니다'}), 400
-    
-    # Validate powertrain value
-    valid_powertrains = ['BEV', 'PHEV', 'HEV', 'FCEV', 'ICE', 'not_vehicle', 'unknown']
-    if new_powertrain not in valid_powertrains:
-        return jsonify({'error': f'올바른 동력원을 선택하세요: {valid_powertrains}'}), 400
-    
-    # Get scan
-    scan = Scan.query.get(scan_id)
-    if not scan:
-        return jsonify({'error': '스캔을 찾을 수 없습니다'}), 404
-    
-    # Update scan powertrain
-    old_powertrain = scan.powertrain
-    scan.powertrain = new_powertrain
-    scan.powertrain_source = 'manual_override'
-    scan.powertrain_conflict = False  # Conflict resolved
-    
-    # Save to database
-    try:
-        db.session.commit()
-        
-        current_app.logger.info(
-            f"Powertrain override: scan_id={scan_id}, "
-            f"car_no={scan.car_no}, "
-            f"{old_powertrain} -> {new_powertrain}, "
-            f"by {current_user.tid}, reason: {reason}"
-        )
-        
-        return jsonify({
-            'success': True,
-            'message': '동력원이 수동으로 변경되었습니다',
-            'scan_id': scan_id,
-            'old_powertrain': old_powertrain,
-            'new_powertrain': new_powertrain
-        }), 200
-    except Exception as e:
-        db.session.rollback()
-        current_app.logger.error(f"Powertrain override failed: {e}", exc_info=True)
-        return jsonify({'error': '저장에 실패했습니다'}), 500
