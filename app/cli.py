@@ -302,24 +302,44 @@ def register_cli(app: Flask) -> None:
         click.echo(click.style(f"  {status} VIN rules without citation: {no_citation_rules}", fg=color))
         if no_citation_rules > 0: failed_count += 1
         
-        # 4. Unclassified Counts by Maker
+        # 4. Unclassified Counts by Maker  
         click.echo("\nUnclassified Counts by Maker")
         click.echo("-" * 80)
         
+        # Get powertrain breakdown
+        powertrain_counts = db.session.execute(text("""
+            SELECT powertrain, COUNT(*) as count
+            FROM vehicle_definitions
+            GROUP BY powertrain
+            ORDER BY count DESC
+        """)).fetchall()
+        
+        click.echo("  Powertrain distribution:")
+        for row in powertrain_counts:
+            pt = row[0] or 'NULL'
+            click.echo(f"    {pt}: {row[1]}")
+        
+        # Get unclassified (unknown) by maker
         unclassified = db.session.execute(text("""
             SELECT maker, COUNT(*) as count
             FROM vehicle_definitions
-            WHERE (powertrain IS NULL OR powertrain = 'unknown')
+            WHERE powertrain = 'unknown'
             AND maker IS NOT NULL
             GROUP BY maker
             ORDER BY count DESC
-            LIMIT 10
         """)).fetchall()
         
-        total_unclassified = sum(row[1] for row in unclassified)
-        click.echo(f"  Total unclassified: {total_unclassified} across {len(unclassified)} makers")
-        for row in unclassified[:5]:
+        total_unknown = sum(row[1] for row in unclassified)
+        click.echo(f"\n  Unknown by maker (total {total_unknown}):")
+        for row in unclassified:
             click.echo(f"    • {row[0]}: {row[1]}")
+        
+        # Get not_vehicle separately
+        not_vehicle = db.session.execute(text("""
+            SELECT COUNT(*) FROM vehicle_definitions
+            WHERE powertrain = 'not_vehicle'
+        """)).scalar()
+        click.echo(f"\n  Not vehicle: {not_vehicle}")
         
         # 5. Conflicts & Overrides
         click.echo("\nConflicts & Overrides")
@@ -342,30 +362,64 @@ def register_cli(app: Flask) -> None:
         click.echo("\nUNKNOWN Ratios")
         click.echo("-" * 80)
         
-        unknown_cmds = db.session.execute(text("""
+        # Commands with UNKNOWN/NULL ecu_module
+        unknown_cmd_ecu = db.session.execute(text("""
             SELECT COUNT(*) FROM diagnostic_commands
-            WHERE UPPER(label) LIKE '%UNKNOWN%'
-            OR UPPER(notes) LIKE '%UNKNOWN%'
+            WHERE ecu_module IS NULL OR UPPER(ecu_module) = 'UNKNOWN'
+        """)).scalar()
+        
+        # Commands with unknown protocol
+        unknown_cmd_protocol = db.session.execute(text("""
+            SELECT COUNT(*) FROM diagnostic_commands
+            WHERE protocol IS NULL OR LOWER(protocol) = 'unknown'
         """)).scalar()
         
         total_cmds = db.session.execute(text("SELECT COUNT(*) FROM diagnostic_commands")).scalar()
-        unknown_ratio = (unknown_cmds / total_cmds * 100) if total_cmds > 0 else 0
-        status = "✓" if unknown_ratio < 10 else "✗"
-        color = "green" if unknown_ratio < 10 else "red"
-        click.echo(click.style(f"  {status} Commands with UNKNOWN: {unknown_cmds}/{total_cmds} ({unknown_ratio:.1f}%)", fg=color))
-        if unknown_ratio >= 10: failed_count += 1
+        ecu_ratio = (unknown_cmd_ecu / total_cmds * 100) if total_cmds > 0 else 0
+        protocol_ratio = (unknown_cmd_protocol / total_cmds * 100) if total_cmds > 0 else 0
         
-        unknown_signals = db.session.execute(text("""
+        ecu_fail = ecu_ratio >= 10
+        protocol_fail = protocol_ratio >= 10
+        
+        status = "✓" if not ecu_fail else "✗"
+        color = "green" if not ecu_fail else "red"
+        click.echo(click.style(f"  {status} Commands ecu_module UNKNOWN/NULL: {unknown_cmd_ecu}/{total_cmds} ({ecu_ratio:.1f}%)", fg=color))
+        if ecu_fail: failed_count += 1
+        
+        status = "✓" if not protocol_fail else "✗"
+        color = "green" if not protocol_fail else "red"
+        click.echo(click.style(f"  {status} Commands protocol unknown/NULL: {unknown_cmd_protocol}/{total_cmds} ({protocol_ratio:.1f}%)", fg=color))
+        if protocol_fail: failed_count += 1
+        
+        # DBC signals with UNKNOWN/NULL ecu_module
+        unknown_sig_ecu = db.session.execute(text("""
             SELECT COUNT(*) FROM dbc_signals
-            WHERE UPPER(signal_name) LIKE '%UNKNOWN%'
+            WHERE ecu_module IS NULL OR UPPER(ecu_module) = 'UNKNOWN'
+        """)).scalar()
+        
+        # DBC signals with other/UNKNOWN/NULL signal_category
+        unknown_sig_cat = db.session.execute(text("""
+            SELECT COUNT(*) FROM dbc_signals
+            WHERE signal_category IS NULL 
+            OR UPPER(signal_category) IN ('UNKNOWN', 'OTHER')
         """)).scalar()
         
         total_signals = db.session.execute(text("SELECT COUNT(*) FROM dbc_signals")).scalar()
-        unknown_sig_ratio = (unknown_signals / total_signals * 100) if total_signals > 0 else 0
-        status = "✓" if unknown_sig_ratio < 10 else "✗"
-        color = "green" if unknown_sig_ratio < 10 else "red"
-        click.echo(click.style(f"  {status} DBC signals with UNKNOWN: {unknown_signals}/{total_signals} ({unknown_sig_ratio:.1f}%)", fg=color))
-        if unknown_sig_ratio >= 10: failed_count += 1
+        sig_ecu_ratio = (unknown_sig_ecu / total_signals * 100) if total_signals > 0 else 0
+        sig_cat_ratio = (unknown_sig_cat / total_signals * 100) if total_signals > 0 else 0
+        
+        sig_ecu_fail = sig_ecu_ratio >= 10
+        sig_cat_fail = sig_cat_ratio >= 10
+        
+        status = "✓" if not sig_ecu_fail else "✗"
+        color = "green" if not sig_ecu_fail else "red"
+        click.echo(click.style(f"  {status} DBC signals ecu_module UNKNOWN/NULL: {unknown_sig_ecu}/{total_signals} ({sig_ecu_ratio:.1f}%)", fg=color))
+        if sig_ecu_fail: failed_count += 1
+        
+        status = "✓" if not sig_cat_fail else "✗"
+        color = "green" if not sig_cat_fail else "red"
+        click.echo(click.style(f"  {status} DBC signals signal_category other/UNKNOWN/NULL: {unknown_sig_cat}/{total_signals} ({sig_cat_ratio:.1f}%)", fg=color))
+        if sig_cat_fail: failed_count += 1
         
         # Summary
         click.echo()
