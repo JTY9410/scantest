@@ -490,6 +490,212 @@ def register_cli(app: Flask) -> None:
         click.echo(f"SUMMARY: Makers {distinct_makers_before} → {distinct_makers_after} (-{maker_reduction}), NULL {null_makers_before} → {null_makers_after} (-{null_reduction})")
         click.echo("=" * 80)
 
+    @definitions.command("backfill-ecu")
+    @click.option("--report-only", is_flag=True, help="Show before/after stats without applying changes")
+    @click.option("--yes", is_flag=True, help="Apply backfill without confirmation")
+    def backfill_ecu(report_only: bool, yes: bool) -> None:
+        """Backfill ECU module and signal category from explicit source file evidence.
+        
+        Phase 6: Evidence-based classification only - no guessing or inference.
+        
+        Usage:
+            flask definitions backfill-ecu --report-only  # Show before stats only
+            flask definitions backfill-ecu --yes          # Apply backfill
+        """
+        from sqlalchemy import text
+        from app.modules.definitions.ecu_backfill import extract_ecu_from_evidence, extract_category_from_evidence
+        
+        click.echo("=" * 80)
+        click.echo("ECU/CATEGORY BACKFILL (Evidence-Based Only)")
+        click.echo("=" * 80)
+        click.echo()
+        
+        # BEFORE stats
+        click.echo("BEFORE Backfill:")
+        click.echo("-" * 80)
+        
+        # Commands ECU stats
+        cmd_total = db.session.execute(text("""
+            SELECT COUNT(*) FROM diagnostic_commands
+        """)).scalar()
+        
+        cmd_unknown = db.session.execute(text("""
+            SELECT COUNT(*) FROM diagnostic_commands
+            WHERE ecu_module IS NULL OR ecu_module = 'UNKNOWN'
+        """)).scalar()
+        
+        cmd_unknown_pct = (cmd_unknown / cmd_total * 100) if cmd_total > 0 else 0
+        click.echo(f"  Commands ECU UNKNOWN/NULL: {cmd_unknown:,} / {cmd_total:,} ({cmd_unknown_pct:.1f}%)")
+        
+        # DBC signals ECU stats
+        sig_total = db.session.execute(text("""
+            SELECT COUNT(*) FROM dbc_signals
+        """)).scalar()
+        
+        sig_ecu_unknown = db.session.execute(text("""
+            SELECT COUNT(*) FROM dbc_signals
+            WHERE ecu_module IS NULL OR ecu_module = 'UNKNOWN'
+        """)).scalar()
+        
+        sig_ecu_unknown_pct = (sig_ecu_unknown / sig_total * 100) if sig_total > 0 else 0
+        click.echo(f"  DBC signals ECU UNKNOWN/NULL: {sig_ecu_unknown:,} / {sig_total:,} ({sig_ecu_unknown_pct:.1f}%)")
+        
+        # DBC signals category stats
+        sig_cat_unknown = db.session.execute(text("""
+            SELECT COUNT(*) FROM dbc_signals
+            WHERE signal_category IS NULL OR signal_category IN ('UNKNOWN', 'other')
+        """)).scalar()
+        
+        sig_cat_unknown_pct = (sig_cat_unknown / sig_total * 100) if sig_total > 0 else 0
+        click.echo(f"  DBC signals category UNKNOWN/other/NULL: {sig_cat_unknown:,} / {sig_total:,} ({sig_cat_unknown_pct:.1f}%)")
+        
+        if report_only:
+            click.echo("\n(Use --yes to apply backfill)")
+            return
+        
+        if not yes:
+            click.echo("\nThis will:")
+            click.echo("  1. Extract ECU modules from file paths, command labels, and signal names")
+            click.echo("  2. Extract signal categories from signal names and descriptions")
+            click.echo("  3. Update only where explicit evidence exists (no guessing)")
+            
+            if not click.confirm("\nProceed with backfill?"):
+                click.echo("Aborted.")
+                return
+        
+        click.echo("\nApplying backfill...")
+        click.echo("-" * 80)
+        
+        # Step 1: Backfill diagnostic_commands ECU
+        click.echo("  1. Backfilling diagnostic_commands ECU module...")
+        
+        commands = db.session.execute(text("""
+            SELECT dc.id, dc.label, ds.file_path
+            FROM diagnostic_commands dc
+            LEFT JOIN definition_sources ds ON dc.source_id = ds.id
+            WHERE dc.ecu_module IS NULL OR dc.ecu_module = 'UNKNOWN'
+        """)).fetchall()
+        
+        cmd_updated = 0
+        for cmd_id, label, file_path in commands:
+            ecu = extract_ecu_from_evidence(
+                file_path=file_path,
+                command_label=label
+            )
+            
+            if ecu:
+                db.session.execute(text("""
+                    UPDATE diagnostic_commands
+                    SET ecu_module = :ecu
+                    WHERE id = :id
+                """), {'id': cmd_id, 'ecu': ecu})
+                cmd_updated += 1
+        
+        db.session.commit()
+        click.echo(f"     → Updated {cmd_updated} commands")
+        
+        # Step 2: Backfill dbc_signals ECU
+        click.echo("  2. Backfilling dbc_signals ECU module...")
+        
+        signals = db.session.execute(text("""
+            SELECT ds.id, ds.signal_name, ds.sender_ecu, ds.comment, src.file_path
+            FROM dbc_signals ds
+            LEFT JOIN definition_sources src ON ds.source_id = src.id
+            WHERE ds.ecu_module IS NULL OR ds.ecu_module = 'UNKNOWN'
+        """)).fetchall()
+        
+        sig_ecu_updated = 0
+        for sig_id, signal_name, sender_ecu, comment, file_path in signals:
+            ecu = extract_ecu_from_evidence(
+                file_path=file_path,
+                signal_name=signal_name,
+                dbc_comment=comment
+            )
+            
+            # Also check sender_ecu field if available
+            if not ecu and sender_ecu:
+                ecu = extract_ecu_from_evidence(command_label=sender_ecu)
+            
+            if ecu:
+                db.session.execute(text("""
+                    UPDATE dbc_signals
+                    SET ecu_module = :ecu
+                    WHERE id = :id
+                """), {'id': sig_id, 'ecu': ecu})
+                sig_ecu_updated += 1
+        
+        db.session.commit()
+        click.echo(f"     → Updated {sig_ecu_updated} signals")
+        
+        # Step 3: Backfill dbc_signals category
+        click.echo("  3. Backfilling dbc_signals category...")
+        
+        signals_cat = db.session.execute(text("""
+            SELECT ds.id, ds.signal_name, ds.comment
+            FROM dbc_signals ds
+            WHERE ds.signal_category IS NULL OR ds.signal_category IN ('UNKNOWN', 'other')
+        """)).fetchall()
+        
+        sig_cat_updated = 0
+        for sig_id, signal_name, comment in signals_cat:
+            category = extract_category_from_evidence(
+                signal_name=signal_name,
+                dbc_comment=comment
+            )
+            
+            if category:
+                db.session.execute(text("""
+                    UPDATE dbc_signals
+                    SET signal_category = :category
+                    WHERE id = :id
+                """), {'id': sig_id, 'category': category})
+                sig_cat_updated += 1
+        
+        db.session.commit()
+        click.echo(f"     → Updated {sig_cat_updated} signals")
+        
+        # AFTER stats
+        click.echo()
+        click.echo("AFTER Backfill:")
+        click.echo("-" * 80)
+        
+        cmd_unknown_after = db.session.execute(text("""
+            SELECT COUNT(*) FROM diagnostic_commands
+            WHERE ecu_module IS NULL OR ecu_module = 'UNKNOWN'
+        """)).scalar()
+        
+        cmd_unknown_pct_after = (cmd_unknown_after / cmd_total * 100) if cmd_total > 0 else 0
+        click.echo(f"  Commands ECU UNKNOWN/NULL: {cmd_unknown_after:,} / {cmd_total:,} ({cmd_unknown_pct_after:.1f}%)")
+        
+        sig_ecu_unknown_after = db.session.execute(text("""
+            SELECT COUNT(*) FROM dbc_signals
+            WHERE ecu_module IS NULL OR ecu_module = 'UNKNOWN'
+        """)).scalar()
+        
+        sig_ecu_unknown_pct_after = (sig_ecu_unknown_after / sig_total * 100) if sig_total > 0 else 0
+        click.echo(f"  DBC signals ECU UNKNOWN/NULL: {sig_ecu_unknown_after:,} / {sig_total:,} ({sig_ecu_unknown_pct_after:.1f}%)")
+        
+        sig_cat_unknown_after = db.session.execute(text("""
+            SELECT COUNT(*) FROM dbc_signals
+            WHERE signal_category IS NULL OR signal_category IN ('UNKNOWN', 'other')
+        """)).scalar()
+        
+        sig_cat_unknown_pct_after = (sig_cat_unknown_after / sig_total * 100) if sig_total > 0 else 0
+        click.echo(f"  DBC signals category UNKNOWN/other/NULL: {sig_cat_unknown_after:,} / {sig_total:,} ({sig_cat_unknown_pct_after:.1f}%)")
+        
+        # Summary
+        click.echo()
+        click.echo("=" * 80)
+        cmd_reduction = cmd_unknown - cmd_unknown_after
+        sig_ecu_reduction = sig_ecu_unknown - sig_ecu_unknown_after
+        sig_cat_reduction = sig_cat_unknown - sig_cat_unknown_after
+        
+        click.echo(f"SUMMARY:")
+        click.echo(f"  Commands ECU: {cmd_unknown:,} → {cmd_unknown_after:,} (-{cmd_reduction:,}, {cmd_unknown_pct:.1f}% → {cmd_unknown_pct_after:.1f}%)")
+        click.echo(f"  Signals ECU: {sig_ecu_unknown:,} → {sig_ecu_unknown_after:,} (-{sig_ecu_reduction:,}, {sig_ecu_unknown_pct:.1f}% → {sig_ecu_unknown_pct_after:.1f}%)")
+        click.echo(f"  Signals Category: {sig_cat_unknown:,} → {sig_cat_unknown_after:,} (-{sig_cat_reduction:,}, {sig_cat_unknown_pct:.1f}% → {sig_cat_unknown_pct_after:.1f}%)")
+        click.echo("=" * 80)
+
     app.cli.add_command(definitions)
     
     # Database audit command
