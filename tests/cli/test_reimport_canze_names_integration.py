@@ -10,16 +10,20 @@ def canze_multifield_data(app, tmp_path):
     """Create realistic CanZE CSV with multiple fields per command."""
     with app.app_context():
         # Create test CSV file with SAME command (19020F) for multiple fields
+        # Real CanZE format: NO HEADER, UTF-8 BOM
         csv_file = tmp_path / "test_canze_multifield.csv"
-        csv_content = """sid,ID,startBit,endBit,resolution,offset,decimals,unit,requestId,responseId,options,FieldName
-100,7DF,16,17,1,0,0,,19020F,5902,ff,DTCStatus.testFailed
+        # Format: sid, ECU, startBit, endBit, resolution, offset, decimals, unit, request, response, options, name
+        csv_content = """100,7DF,16,17,1,0,0,,19020F,5902,ff,DTCStatus.testFailed
 101,7DF,18,19,1,0,0,,19020F,5902,2ff,DTCStatus.testFailedThisOperationCycle
 102,7DF,20,21,1,0,0,,19020F,5902,4ff,DTCStatus.pendingDTC
 103,7DF,24,31,1,0,0,,19020F,5902,1ff,DTC.Byte0
 104,7E4,0,7,0.1,0,1,V,2101,6101,ff,Battery.Voltage
 105,7E4,8,15,0.1,0,1,A,2101,6101,4ff,Battery.Current
 """
-        csv_file.write_text(csv_content)
+        # Write with UTF-8 BOM
+        import codecs
+        with codecs.open(csv_file, 'w', encoding='utf-8-sig') as f:
+            f.write(csv_content)
         
         # Create definition source
         sha_hash = '0' * 64

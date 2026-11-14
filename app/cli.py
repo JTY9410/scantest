@@ -1518,98 +1518,146 @@ def register_cli(app: Flask) -> None:
             click.echo(f"Processing: {file_path}")
             
             # Read CSV with correct column
+            # Format: [0]SID, [1]ECU, [2]startBit, [3]endBit, [4]multiplier, [5]offset, 
+            #         [6]decimals, [7]unit, [8]request, [9]response, [10]options, [11]name
+            # '#' prefix = disabled/comment field
             try:
                 with open(file_path, 'r', encoding='utf-8-sig') as f:
                     reader = csv.reader(f)
-                    for row_idx, row in enumerate(reader):
-                        if len(row) >= 12 and row[1] and row[8]:
-                            ecu_address = row[1]
-                            request_id = row[8]
-                            start_bit = row[2] if len(row) > 2 else None
-                            end_bit = row[3] if len(row) > 3 else None
-                            correct_name = row[11]
-                            
-                            # Convert bit positions to byte/offset for matching
-                            # CanZE uses bit positions, DB uses byte + bit_offset
-                            try:
-                                start_byte = int(start_bit) // 8 if start_bit else None
-                                bit_offset = int(start_bit) % 8 if start_bit else None
-                            except (ValueError, TypeError):
-                                start_byte = None
-                                bit_offset = None
-                            
-                            # Find corresponding command(s) with exact match
-                            candidates = db.session.query(DiagnosticCommand).filter_by(
-                                source_id=source.id,
-                                command_bytes=request_id,
-                                ecu_address=ecu_address
-                            )
-                            
-                            # Further filter by response position if available
-                            if start_byte is not None:
-                                candidates = candidates.filter_by(response_start_byte=start_byte)
-                            if bit_offset is not None:
-                                candidates = candidates.filter_by(response_bit_offset=bit_offset)
-                            
-                            candidates_list = candidates.all()
-                            
-                            if len(candidates_list) == 0:
-                                skipped_none.append(f"Row {row_idx}: {ecu_address} {request_id} bit {start_bit}-{end_bit}")
-                            elif len(candidates_list) > 1:
-                                # Multiple matches: try to distinguish by unit/formula or use combined name
-                                csv_unit = row[7] if len(row) > 7 else None
-                                csv_formula = f"resolution={row[4]}, offset={row[5]}" if len(row) > 5 else None
+                    csv_rows = []  # Track CSV rows for 1:1 matching
+                    
+                    for row_idx, row in enumerate(reader, 1):
+                        if len(row) < 12:
+                            continue
+                        
+                        # Check if comment row (starts with '#')
+                        is_comment = row[0].startswith('#') if row[0] else False
+                        
+                        # Parse fields (strip '#' from comment rows)
+                        sid = row[0].lstrip('#').strip() if row[0] else None
+                        ecu_address = row[1].strip() if row[1] else None
+                        start_bit = row[2].strip() if row[2] else None
+                        end_bit = row[3].strip() if row[3] else None
+                        multiplier = row[4].strip() if len(row) > 4 else None
+                        offset_val = row[5].strip() if len(row) > 5 else None
+                        decimals = row[6].strip() if len(row) > 6 else None
+                        csv_unit = row[7].strip() if len(row) > 7 else None
+                        request_id = row[8].strip() if len(row) > 8 else None
+                        response_id = row[9].strip() if len(row) > 9 else None
+                        options = row[10].strip() if len(row) > 10 else None
+                        correct_name = row[11].strip() if len(row) > 11 else None
+                        
+                        if not ecu_address or not request_id or not correct_name:
+                            continue
+                        
+                        # Skip 'ff' and hex values (these are not real labels)
+                        if correct_name == 'ff' or correct_name.startswith('0x'):
+                            continue
+                        
+                        # Convert bit positions to byte/offset for matching
+                        try:
+                            start_byte = int(start_bit) // 8 if start_bit else None
+                            bit_offset = int(start_bit) % 8 if start_bit else None
+                        except (ValueError, TypeError):
+                            start_byte = None
+                            bit_offset = None
+                        
+                        # Find corresponding command(s) with exact match
+                        candidates = db.session.query(DiagnosticCommand).filter_by(
+                            source_id=source.id,
+                            command_bytes=request_id,
+                            ecu_address=ecu_address
+                        )
+                        
+                        # Further filter by response position if available
+                        if start_byte is not None:
+                            candidates = candidates.filter_by(response_start_byte=start_byte)
+                        if bit_offset is not None:
+                            candidates = candidates.filter_by(response_bit_offset=bit_offset)
+                        
+                        candidates_list = candidates.order_by(DiagnosticCommand.id).all()
+                        
+                        csv_rows.append({
+                            'row_idx': row_idx,
+                            'ecu': ecu_address,
+                            'command': request_id,
+                            'position': f"{start_bit}-{end_bit}",
+                            'name': correct_name,
+                            'unit': csv_unit,
+                            'sid': sid,
+                            'is_comment': is_comment,
+                            'candidates': candidates_list
+                        })
+                    
+                    # Process CSV rows: match CSV order with DB id order for 1:1 mapping
+                    csv_by_key = {}
+                    for csv_row in csv_rows:
+                        key = (csv_row['ecu'], csv_row['command'], csv_row['position'])
+                        if key not in csv_by_key:
+                            csv_by_key[key] = []
+                        csv_by_key[key].append(csv_row)
+                    
+                    for key, csv_group in csv_by_key.items():
+                        if not csv_group[0]['candidates']:
+                            skipped_none.append(f"Row {csv_group[0]['row_idx']}: {key[0]} {key[1]} {key[2]}")
+                            continue
+                        
+                        candidates_list = csv_group[0]['candidates']
+                        
+                        if len(csv_group) == len(candidates_list):
+                            # 1:1 mapping: match CSV row order to DB id order
+                            for csv_row, cmd in zip(csv_group, candidates_list):
+                                label_changed = cmd.label != csv_row['name']
+                                unit_needs_fill = csv_row['unit'] and not cmd.unit
                                 
-                                # Try to find exact match by unit
-                                exact_match = None
-                                if csv_unit:
-                                    for cmd in candidates_list:
-                                        if cmd.unit and cmd.unit.strip() == csv_unit.strip():
-                                            exact_match = cmd
-                                            break
-                                
-                                if exact_match:
-                                    # Found unique match by unit
-                                    if exact_match.label != correct_name:
-                                        changes.append({
-                                            'cmd_id': exact_match.id,
-                                            'ecu': ecu_address,
-                                            'command': request_id,
-                                            'position': f"{start_bit}-{end_bit}",
-                                            'old_label': exact_match.label,
-                                            'new_label': correct_name,
-                                            'match_method': 'unit'
-                                        })
-                                else:
-                                    # Cannot distinguish: combine all existing names with CSV name
-                                    existing_names = [cmd.label for cmd in candidates_list if cmd.label and not cmd.label.startswith('0x')]
-                                    if correct_name not in existing_names:
-                                        combined_name = ' / '.join(sorted(set(existing_names + [correct_name])))
-                                        
-                                        # Update all matching commands with combined name
-                                        for cmd in candidates_list:
-                                            if cmd.label != combined_name:
-                                                changes.append({
-                                                    'cmd_id': cmd.id,
-                                                    'ecu': ecu_address,
-                                                    'command': request_id,
-                                                    'position': f"{start_bit}-{end_bit}",
-                                                    'old_label': cmd.label,
-                                                    'new_label': combined_name,
-                                                    'match_method': 'multi_combined'
-                                                })
-                            else:
-                                cmd = candidates_list[0]
-                                if cmd.label != correct_name:
-                                    changes.append({
+                                if label_changed or unit_needs_fill:
+                                    change = {
                                         'cmd_id': cmd.id,
-                                        'ecu': ecu_address,
-                                        'command': request_id,
-                                        'position': f"{start_bit}-{end_bit}",
+                                        'ecu': csv_row['ecu'],
+                                        'command': csv_row['command'],
+                                        'position': csv_row['position'],
                                         'old_label': cmd.label,
-                                        'new_label': correct_name,
-                                        'match_method': 'single'
-                                    })
+                                        'new_label': csv_row['name'] if label_changed else cmd.label,
+                                        'match_method': '1:1_order',
+                                        'is_comment': csv_row['is_comment']
+                                    }
+                                    if unit_needs_fill:
+                                        change['old_unit'] = cmd.unit or ''
+                                        change['new_unit'] = csv_row['unit']
+                                    changes.append(change)
+                        elif len(candidates_list) == 1:
+                            # Single DB row, possibly multiple CSV rows: use first non-comment
+                            csv_row = next((r for r in csv_group if not r['is_comment']), csv_group[0])
+                            cmd = candidates_list[0]
+                            if cmd.label != csv_row['name']:
+                                changes.append({
+                                    'cmd_id': cmd.id,
+                                    'ecu': csv_row['ecu'],
+                                    'command': csv_row['command'],
+                                    'position': csv_row['position'],
+                                    'old_label': cmd.label,
+                                    'new_label': csv_row['name'],
+                                    'match_method': 'single'
+                                })
+                        else:
+                            # Count mismatch: combine names (excluding ff/hex)
+                            all_names = [r['name'] for r in csv_group]
+                            all_names = [n for n in all_names if n != 'ff' and not n.startswith('0x')]
+                            if all_names:
+                                combined_name = ' / '.join(sorted(set(all_names)))
+                                for cmd in candidates_list:
+                                    if cmd.label != combined_name:
+                                        changes.append({
+                                            'cmd_id': cmd.id,
+                                            'ecu': csv_group[0]['ecu'],
+                                            'command': csv_group[0]['command'],
+                                            'position': csv_group[0]['position'],
+                                            'old_label': cmd.label,
+                                            'new_label': combined_name,
+                                            'match_method': 'multi_combined'
+                                        })
+                            else:
+                                skipped_multiple.append(f"Row {csv_group[0]['row_idx']}: {key[0]} {key[1]} {key[2]} (count mismatch: {len(csv_group)} CSV vs {len(candidates_list)} DB)")
             except Exception as e:
                 errors.append(f"Error reading {file_path}: {str(e)}")
         
@@ -1677,12 +1725,23 @@ def register_cli(app: Flask) -> None:
                 'new_label': change['new_label']
             })
             
-            # Update label
-            db.session.execute(text("""
-                UPDATE diagnostic_commands
-                SET label = :new_label, updated_at = now()
-                WHERE id = :cmd_id
-            """), {'new_label': change['new_label'], 'cmd_id': change['cmd_id']})
+            # Update label and/or unit
+            if 'new_unit' in change:
+                db.session.execute(text("""
+                    UPDATE diagnostic_commands
+                    SET label = :new_label, unit = :new_unit, updated_at = now()
+                    WHERE id = :cmd_id
+                """), {
+                    'new_label': change['new_label'],
+                    'new_unit': change['new_unit'],
+                    'cmd_id': change['cmd_id']
+                })
+            else:
+                db.session.execute(text("""
+                    UPDATE diagnostic_commands
+                    SET label = :new_label, updated_at = now()
+                    WHERE id = :cmd_id
+                """), {'new_label': change['new_label'], 'cmd_id': change['cmd_id']})
             updated += 1
         
         db.session.commit()

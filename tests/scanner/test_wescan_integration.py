@@ -646,3 +646,101 @@ def test_opel_alias_normalization(app):
         assert 'opel' in profiles
         assert 'opel' in coverage['commands_by_maker']
         assert 'Opel' not in coverage['commands_by_maker']
+
+
+def test_canze_multirow_1to1_matching(app, tmp_path):
+    """Test CanZE CSV multi-match resolves with 1:1 order mapping.
+    
+    Real case: 222002 has 2 CSV rows (row 12 and row 297) and 2 DB rows (id 56584, 56869).
+    CSV format: no header, UTF-8 BOM, 12 columns, '#' for comments.
+    Expected: Each DB row gets its corresponding CSV name by order, not combined.
+    """
+    with app.app_context():
+        from app.extensions import db
+        from sqlalchemy import text
+        import codecs
+        import glob as glob_module
+        
+        # Create source with CanZE data
+        unique_id = str(uuid.uuid4())[:8]
+        sha_hash = uuid.uuid4().hex + uuid.uuid4().hex[:32]
+        
+        # Use tmp_path for actual file
+        csv_file = tmp_path / f"ZOE_Ph2_{unique_id}.csv"
+        file_path = str(csv_file)  # Store actual path in DB
+        
+        db.session.execute(text("""
+            INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
+            VALUES ('canze', :path, :sha, 100, NOW())
+        """), {'path': file_path, 'sha': sha_hash})
+        db.session.commit()
+        
+        source_id = db.session.execute(text("""
+            SELECT id FROM definition_sources WHERE file_path = :path
+        """), {'path': file_path}).scalar()
+        
+        # Create 2 DB rows with same ECU/command but different bit positions
+        # Initial labels are 'ff' (placeholder)
+        # response_start_byte = start_bit // 8, response_bit_offset = start_bit % 8
+        # Row 1: start_bit=32 → byte=4, offset=0
+        # Row 2: start_bit=40 → byte=5, offset=0
+        db.session.execute(text("""
+            INSERT INTO diagnostic_commands 
+                (source_id, source_type, maker, model, ecu_address, service, pid,
+                 command_bytes, response_start_byte, response_bit_offset, label,
+                 unit, verification_status, verification_count, success_count, failure_count,
+                 created_at, updated_at)
+            VALUES 
+                (:sid, 'canze', 'renault', 'ZOE Phase 2', '7BB', '22', '2002',
+                 '222002', 4, 0, 'ff', '%', 'verified', 0, 0, 0, now(), now()),
+                (:sid, 'canze', 'renault', 'ZOE Phase 2', '7BB', '22', '2002',
+                 '222002', 5, 0, 'ff', '%', 'verified', 0, 0, 0, now(), now())
+        """), {'sid': source_id})
+        db.session.commit()
+        
+        # Get DB row IDs (order by id ascending)
+        db_ids = db.session.execute(text("""
+            SELECT id FROM diagnostic_commands 
+            WHERE source_id = :sid
+            ORDER BY id ASC
+        """), {'sid': source_id}).fetchall()
+        assert len(db_ids) == 2
+        
+        # Create actual ZOE_Ph2 format CSV file (BOM, no header, 12 columns, '#' comments)
+        # Real ZOE_Ph2 format: 2002,7BB,32,39,0.392156862745098,0,1,%,222002,62xxxx,ff,State of Charge
+        # Comment row: #2002,7BB,40,47,1,0,0,,222002,62xxxx,ff,State Of Charge (SOC) HV battery
+        csv_content = """2002,7BB,32,39,0.392,0,1,%,222002,62xxxx,ff,State of Charge
+#2002,7BB,40,47,1,0,0,,222002,62xxxx,ff,State Of Charge (SOC) HV battery"""
+        
+        with codecs.open(csv_file, 'w', encoding='utf-8-sig') as f:
+            f.write(csv_content)
+        
+        # Run reimport (dry-run first)
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=['definitions', 'reimport-canze-names', '--report-only'])
+        
+        # Should find 2 changes (1:1 matching, not combined)
+        assert 'SUMMARY: 2 changes' in result.output
+        
+        # Apply changes
+        result = runner.invoke(args=['definitions', 'reimport-canze-names', '--yes'])
+        assert result.exit_code == 0
+        
+        # Verify each DB row got its corresponding CSV name
+        labels = db.session.execute(text("""
+            SELECT label FROM diagnostic_commands
+            WHERE source_id = :sid
+            ORDER BY id ASC
+        """), {'sid': source_id}).fetchall()
+        
+        # Row 1 (id=56584 in real, first in order) should get first CSV row name
+        assert labels[0][0] == 'State of Charge'
+        
+        # Row 2 (id=56869 in real, second in order) should get second CSV row name
+        # Even though it's commented in CSV, we still parse the name
+        assert labels[1][0] == 'State Of Charge (SOC) HV battery'
+        
+        # Verify NOT combined like "State of Charge / State Of Charge (SOC) HV battery"
+        for label in labels:
+            assert ' / ' not in label[0], f"Label should not be combined: {label[0]}"
+            assert 'ff' not in label[0], f"Label should not contain 'ff': {label[0]}"
