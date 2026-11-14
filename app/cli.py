@@ -939,6 +939,92 @@ def register_cli(app: Flask) -> None:
                   f"{coverage['total_models']} models, {coverage['total_commands']} commands")
         click.echo("=" * 80)
     
+    @wescan.command("coverage")
+    @click.option("--maker", help="Filter by maker name")
+    @click.option("--detail", is_flag=True, help="Show per-model breakdown")
+    def wescan_coverage(maker: str | None, detail: bool) -> None:
+        """Show WESCAN command profile coverage by maker/model.
+        
+        Usage:
+            flask wescan coverage                    # Overall summary
+            flask wescan coverage --maker 현대       # Filter by maker
+            flask wescan coverage --detail           # Per-model breakdown
+        """
+        from app.modules.scanner.wescan_profiles import get_profile_coverage
+        
+        click.echo("=" * 80)
+        click.echo("WESCAN PROFILE COVERAGE REPORT")
+        click.echo("=" * 80)
+        click.echo()
+        
+        coverage = get_profile_coverage()
+        
+        # Overall summary
+        click.echo("Overall Coverage:")
+        click.echo("-" * 80)
+        click.echo(f"  Total makers: {coverage['total_makers']}")
+        click.echo(f"  Total maker/model combinations: {coverage['total_models']}")
+        click.echo(f"  Total commands: {coverage['total_commands']}")
+        click.echo()
+        
+        # Commands by maker
+        click.echo("Commands by Maker:")
+        click.echo("-" * 80)
+        
+        makers_sorted = sorted(coverage['commands_by_maker'].items(), 
+                              key=lambda x: x[1], reverse=True)
+        
+        if maker:
+            makers_sorted = [(m, c) for m, c in makers_sorted if maker.lower() in m.lower()]
+        
+        for maker_name, count in makers_sorted:
+            percentage = (count / coverage['total_commands'] * 100) if coverage['total_commands'] > 0 else 0
+            click.echo(f"  {maker_name:20s}: {count:5d} commands ({percentage:5.1f}%)")
+        
+        # ECU breakdown
+        click.echo()
+        click.echo("Commands by ECU:")
+        click.echo("-" * 80)
+        for ecu, count in sorted(coverage['commands_by_ecu'].items(), key=lambda x: x[1], reverse=True):
+            click.echo(f"  {ecu:10s}: {count:5d} commands")
+        
+        # Source breakdown
+        click.echo()
+        click.echo("Commands by Source:")
+        click.echo("-" * 80)
+        for source, count in coverage['top_sources']:
+            click.echo(f"  {source:15s}: {count:5d} commands")
+        
+        # Detailed per-model breakdown
+        if detail:
+            click.echo()
+            click.echo("Per-Model Breakdown:")
+            click.echo("-" * 80)
+            
+            # Get per-model data
+            model_data = db.session.execute(text("""
+                SELECT maker, model, COUNT(*) as cmd_count
+                FROM diagnostic_commands
+                WHERE maker IS NOT NULL
+                GROUP BY maker, model
+                ORDER BY maker, model
+            """)).fetchall()
+            
+            current_maker = None
+            for maker_name, model_name, cmd_count in model_data:
+                if maker and maker.lower() not in maker_name.lower():
+                    continue
+                
+                if maker_name != current_maker:
+                    click.echo(f"\n  {maker_name}:")
+                    current_maker = maker_name
+                
+                model_display = model_name or 'generic'
+                click.echo(f"    {model_display:30s}: {cmd_count:4d} commands")
+        
+        click.echo()
+        click.echo("=" * 80)
+    
     app.cli.add_command(wescan)
     
     # Database audit command
@@ -1520,3 +1606,132 @@ def register_cli(app: Flask) -> None:
         click.echo("✓ Revert data saved to label_change_history table")
         click.echo("  (Use --revert --yes to undo these changes)")
         click.echo("=" * 80)
+    
+    # Battery specs CLI
+    battery = AppGroup("battery", help="Battery specification management")
+    
+    @battery.command("check-sources")
+    @click.option("--detail", is_flag=True, help="Show per-maker breakdown")
+    def check_battery_sources(detail: bool) -> None:
+        """Check battery_specs source URL coverage and quality.
+        
+        Verifies that all battery specs have proper source citations.
+        Reports coverage, source types, and missing citations.
+        
+        Usage:
+            flask battery check-sources           # Overall summary
+            flask battery check-sources --detail  # Per-maker breakdown
+        """
+        from app.modules.battery.models import BatterySpec
+        
+        click.echo("=" * 80)
+        click.echo("BATTERY SPECS SOURCE VERIFICATION")
+        click.echo("=" * 80)
+        click.echo()
+        
+        # Overall statistics
+        total = db.session.query(BatterySpec).count()
+        with_url = db.session.query(BatterySpec).filter(
+            BatterySpec.source_url != None,
+            BatterySpec.source_url != ''
+        ).count()
+        
+        manufacturer = db.session.query(BatterySpec).filter(
+            BatterySpec.source_type == 'manufacturer'
+        ).count()
+        
+        third_party = db.session.query(BatterySpec).filter(
+            BatterySpec.source_type == 'third_party'
+        ).count()
+        
+        null_type = db.session.query(BatterySpec).filter(
+            BatterySpec.source_type == None
+        ).count()
+        
+        click.echo("Overall Coverage:")
+        click.echo("-" * 80)
+        click.echo(f"  Total battery specs: {total}")
+        click.echo(f"  With source URL: {with_url} ({with_url/total*100:.1f}%)")
+        click.echo(f"  Missing URL: {total - with_url}")
+        click.echo()
+        
+        click.echo("Source Type Distribution:")
+        click.echo("-" * 80)
+        click.echo(f"  Manufacturer (official): {manufacturer} ({manufacturer/total*100:.1f}%)")
+        click.echo(f"  Third-party: {third_party} ({third_party/total*100:.1f}%)")
+        click.echo(f"  Unclassified: {null_type}")
+        click.echo()
+        
+        # Top sources
+        top_sources = db.session.execute(text("""
+            SELECT source_url, COUNT(*) as count
+            FROM battery_specs
+            WHERE source_url IS NOT NULL AND source_url != ''
+            GROUP BY source_url
+            ORDER BY count DESC
+            LIMIT 10
+        """)).fetchall()
+        
+        click.echo("Top Source URLs:")
+        click.echo("-" * 80)
+        for url, count in top_sources:
+            # Truncate long URLs
+            display_url = url if len(url) <= 60 else url[:57] + "..."
+            click.echo(f"  {count:3d}x {display_url}")
+        
+        # Missing data analysis
+        click.echo()
+        click.echo("Data Completeness:")
+        click.echo("-" * 80)
+        
+        fields = [
+            ('gross_kwh', 'Gross capacity (kWh)'),
+            ('usable_kwh', 'Usable capacity (kWh)'),
+            ('capacity_ah', 'Capacity (Ah)'),
+            ('nominal_voltage_v', 'Nominal voltage (V)'),
+            ('cell_chemistry', 'Cell chemistry'),
+            ('cell_count', 'Cell count')
+        ]
+        
+        for field, label in fields:
+            filled = db.session.execute(text(f"""
+                SELECT COUNT(*) FROM battery_specs WHERE {field} IS NOT NULL
+            """)).scalar()
+            click.echo(f"  {label:25s}: {filled:3d}/{total} ({filled/total*100:.1f}%)")
+        
+        # Per-maker breakdown
+        if detail:
+            click.echo()
+            click.echo("Per-Maker Breakdown:")
+            click.echo("-" * 80)
+            
+            makers = db.session.execute(text("""
+                SELECT 
+                    maker,
+                    COUNT(*) as total,
+                    SUM(CASE WHEN source_url IS NOT NULL AND source_url != '' THEN 1 ELSE 0 END) as with_url,
+                    SUM(CASE WHEN source_type = 'manufacturer' THEN 1 ELSE 0 END) as manufacturer,
+                    SUM(CASE WHEN source_type = 'third_party' THEN 1 ELSE 0 END) as third_party
+                FROM battery_specs
+                GROUP BY maker
+                ORDER BY total DESC
+            """)).fetchall()
+            
+            for maker, total, with_url, mfr, tp in makers:
+                click.echo(f"\n  {maker}:")
+                click.echo(f"    Total specs: {total}")
+                click.echo(f"    With URL: {with_url}/{total} ({with_url/total*100:.1f}%)")
+                click.echo(f"    Official: {mfr}, Third-party: {tp}")
+        
+        click.echo()
+        click.echo("=" * 80)
+        click.echo("Recommendation:")
+        if total - with_url > 0:
+            click.echo(f"  ⚠ {total - with_url} specs missing source URL - should be cited or removed")
+        if null_type > 0:
+            click.echo(f"  ⚠ {null_type} specs need source_type classification (manufacturer/third_party)")
+        if total - with_url == 0 and null_type == 0:
+            click.echo("  ✓ All specs have proper source citations")
+        click.echo("=" * 80)
+    
+    app.cli.add_command(battery)
