@@ -9,16 +9,17 @@ def destroyed_makers_data(app):
     """Create test data with truncated maker names."""
     with app.app_context():
         # Create test sources with file paths indicating full maker names
+        sha_hash = '0' * 64
         db.session.execute(text("""
             INSERT INTO definition_sources (id, source_type, file_path, sha256, file_size, imported_at)
             VALUES 
-                (1001, 'dbc', '/data/dbc/Aston_Martin_DB11.dbc', '0'*64, 100, NOW()),
-                (1002, 'dbc', '/data/dbc/MV_Agusta_F4.dbc', '0'*64, 100, NOW()),
-                (1003, 'dbc', '/data/dbc/Legend_Cars_34.dbc', '0'*64, 100, NOW()),
-                (1004, 'dbc', '/data/dbc/SCCA_Enterprises_Formula.dbc', '0'*64, 100, NOW()),
-                (1005, 'dbc', '/data/dbc/BT1_Chevy.dbc', '0'*64, 100, NOW()),
-                (1006, 'dbc', '/data/dbc/공통규격.dbc', '0'*64, 100, NOW())
-        """))
+                (1001, 'dbc', '/data/dbc/Aston_Martin_DB11.dbc', :sha, 100, NOW()),
+                (1002, 'dbc', '/data/dbc/MV_Agusta_F4.dbc', :sha, 100, NOW()),
+                (1003, 'dbc', '/data/dbc/Legend_Cars_34.dbc', :sha, 100, NOW()),
+                (1004, 'dbc', '/data/dbc/SCCA_Enterprises_Formula.dbc', :sha, 100, NOW()),
+                (1005, 'dbc', '/data/dbc/BT1_Chevy.dbc', :sha, 100, NOW()),
+                (1006, 'dbc', '/data/dbc/공통규격.dbc', :sha, 100, NOW())
+        """), {'sha': sha_hash})
         
         # Create vehicle definitions with truncated makers
         db.session.execute(text("""
