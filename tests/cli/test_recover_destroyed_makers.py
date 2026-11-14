@@ -38,9 +38,9 @@ def destroyed_makers_data(app):
         db.session.execute(text("""
             INSERT INTO vehicle_definitions (source_id, maker, model, powertrain, created_at)
             VALUES 
-                (:aston_id, 'Aston', 'DB11', 'ice', NOW()),
-                (:mv_id, 'MV', 'F4', 'ice', NOW()),
-                (:legend_id, 'Legend', '34', 'ice', NOW())
+                (:aston_id, 'Aston', 'DB11', 'ICE', NOW()),
+                (:mv_id, 'MV', 'F4', 'ICE', NOW()),
+                (:legend_id, 'Legend', '34', 'ICE', NOW())
         """), {'aston_id': aston_id, 'mv_id': mv_id, 'legend_id': legend_id})
         db.session.commit()
         
