@@ -228,3 +228,141 @@ def test_soh_unrated_when_no_data(app):
         
         # 결과 없거나 매우 낮은 신뢰도만
         assert len(results) == 0 or (len(results) > 0 and results[0].confidence <= 0.60)
+
+
+def test_soh_priority_order(app):
+    """SOH 계산 방법 우선순위 검증 테스트.
+    
+    우선순위 (2026-10-18 기술개발 정의):
+    1. BMS SOH 직접 읽기 (0.95)
+    2. 현재 용량 ÷ 공칭 용량 (0.85-0.90)
+    3. Coulomb counting (0.75)
+    4. Energy counting (0.70)
+    5. OCV-SOC (0.60)
+    6. Internal resistance (0.55)
+    7. Throughput heuristic (0.40, fallback)
+    """
+    with app.app_context():
+        spec = BatterySpec(
+            maker='현대',
+            model='IONIQ 5',
+            capacity_ah=104,
+            gross_kwh=72.6,
+            usable_kwh=68.0,
+            source_url='https://www.hyundai.com/spec.pdf'
+        )
+        db.session.add(spec)
+        db.session.commit()
+        
+        # All methods available
+        scan_data = {
+            'battery': {
+                'soh_pct': 95.0,  # BMS direct
+                'current_capacity_ah': 98.0,  # Capacity-based
+                'cum_charge_ah': 5000.0,
+                'cum_discharge_ah': 4800.0,  # Coulomb counting
+                'cum_charge_kwh': 3400.0,
+                'cum_discharge_kwh': 3200.0,  # Energy counting
+                'ocv_v': 350.0,
+                'soc_pct': 50.0,  # OCV-SOC
+                'internal_resistance_mohm': 45.0,  # Resistance
+                'odometer_km': 50000  # Throughput heuristic
+            },
+            'vehicle': {'maker': '현대', 'model': 'IONIQ 5', 'year': 2021}
+        }
+        
+        results = SOHCalculator.calculate(scan_data)
+        
+        # All methods should be present
+        assert len(results) >= 3
+        
+        # Verify priority order by confidence
+        for i in range(len(results) - 1):
+            assert results[i].confidence >= results[i+1].confidence, \
+                f"Priority violation: {results[i].method} ({results[i].confidence}) should have higher confidence than {results[i+1].method} ({results[i+1].confidence})"
+        
+        # First result should be BMS direct
+        assert results[0].method == 'bms_direct'
+        assert results[0].confidence == 0.95
+        
+        # Verify BMS 0105 bytes reference
+        assert 'BMS 0105' in results[0].calculation_details.get('source', '')
+
+
+def test_soh_confidence_levels(app):
+    """SOH 방법별 confidence 레벨 검증."""
+    with app.app_context():
+        spec = BatterySpec(
+            maker='기아',
+            model='EV6',
+            capacity_ah=111,
+            cell_chemistry='NMC',  # Required for coulomb_counting confidence 0.75
+            source_url='https://www.kia.com/spec.pdf'
+        )
+        db.session.add(spec)
+        db.session.commit()
+        
+        # Test each method individually
+        test_cases = [
+            ({'soh_pct': 90.0}, 'bms_direct', 0.95),
+            ({'current_capacity_ah': 100.0}, 'capacity_based_ah', 0.90),
+            ({'cum_charge_ah': 5000.0, 'cum_discharge_ah': 4800.0}, 'coulomb_counting', 0.75),
+        ]
+        
+        for battery_data, expected_method, expected_confidence in test_cases:
+            scan_data = {
+                'battery': battery_data,
+                'vehicle': {'maker': '기아', 'model': 'EV6', 'year': 2022}
+            }
+            
+            results = SOHCalculator.calculate(scan_data)
+            
+            method_result = next((r for r in results if r.method == expected_method), None)
+            assert method_result is not None, f"Method {expected_method} not found"
+            assert method_result.confidence == expected_confidence, \
+                f"Expected confidence {expected_confidence} for {expected_method}, got {method_result.confidence}"
+
+
+def test_soh_calculation_basis_recorded(app):
+    """SOH 계산 근거와 입력값이 기록되는지 검증."""
+    with app.app_context():
+        user = User(
+            tid='test_basis',
+            name='Test',
+            type='tester',
+            password=hash_password('test123')
+        )
+        db.session.add(user)
+        db.session.commit()
+        
+        scan = Scan(
+            type='ev',
+            device_type='test',
+            device_uid='test-basis',
+            tester_id=user.id,
+            car_no='12가****',
+            car_vin='TEST12345',  # Required field
+            car_maker='현대',
+            car_model='EV6',
+            car_year=2022
+        )
+        db.session.add(scan)
+        db.session.commit()
+        
+        scan_data = {
+            'battery': {'soh_pct': 92.0},
+            'vehicle': {'maker': '현대', 'model': 'EV6', 'year': 2022}
+        }
+        
+        SOHCalculator.calculate(scan_data, scan.id)
+        
+        # Check saved result
+        result = db.session.query(SOHResult).filter_by(scan_id=scan.id).first()
+        
+        assert result is not None
+        assert result.method == 'bms_direct'
+        assert result.input_features is not None
+        assert 'bms_soh_pct' in result.input_features
+        assert result.calculation_details is not None
+        assert 'source' in result.calculation_details
+        assert result.confidence == 0.95
