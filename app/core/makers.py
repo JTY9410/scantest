@@ -66,8 +66,12 @@ _ALIASES: dict[str, str] = {
     "land_rover": "Land Rover",
     "landrover": "Land Rover",
     "랜드로버": "Land Rover",
-    "mini": "Mini",
-    "미니": "Mini",
+    "aston martin": "Aston Martin",
+    "aston_martin": "Aston Martin",
+    "astonmartin": "Aston Martin",
+    "mini": "MINI",
+    "mini cooper": "MINI",
+    "미니": "MINI",
     
     # European - Swedish
     "volvo": "Volvo",
@@ -78,6 +82,15 @@ _ALIASES: dict[str, str] = {
     # European - Other
     "opel": "Opel",
     "오펠": "Opel",
+    
+    # Motorcycle/Specialty
+    "mv agusta": "MV Agusta",
+    "mv_agusta": "MV Agusta",
+    "mvagusta": "MV Agusta",
+    "legend cars": "Legend Cars",
+    "legend_cars": "Legend Cars",
+    "scca enterprises": "SCCA Enterprises",
+    "scca_enterprises": "SCCA Enterprises",
     
     # Japanese
     "nissan": "Nissan",
@@ -105,6 +118,7 @@ _ALIASES: dict[str, str] = {
     "chevy": "Chevrolet",
     "쉐보레": "Chevrolet",
     "gmc": "GMC",
+    "gm": "GMC",
     "cadillac": "Cadillac",
     "캐딜락": "Cadillac",
     "tesla": "Tesla",
@@ -139,12 +153,16 @@ _ALIASES: dict[str, str] = {
     "장성": "Great Wall Motors",
     "geely": "Geely",
     "지리": "Geely",
+    "zeekr": "Zeekr",
     
     # EV Startups
     "rivian": "Rivian",
     "lucid motors": "Lucid Motors",
     "lucid": "Lucid Motors",
     "fisker": "Fisker",
+    
+    # Other
+    "smart": "Smart",
 }
 
 # Test/Generic entries that should be marked as not_vehicle
@@ -164,12 +182,14 @@ def normalize_maker(name: str | None) -> str | None:
     1. 'Maker_ Model' 패턴: 언더스코어 앞까지만 추출해 정규화
     2. 비차량 항목: None 반환 (나중에 not_vehicle로 분류됨)
     3. 모델명 포함된 패턴 (예: 'Subaru Outback 2.5na Gen6'): 첫 단어만 추출
+    
+    Returns maker name only (model extraction happens separately in CLI)
     """
     if name is None:
         return None
     
     text = str(name).strip()
-    if not text:
+    if not text or text == '_':
         return None
     
     # Check for not_vehicle markers
@@ -177,28 +197,35 @@ def normalize_maker(name: str | None) -> str | None:
         return None
     
     # First, check if the text (as-is) matches a known alias
-    # This handles maker names like 'Mercedes_Benz', 'Land_Rover', etc.
+    # This handles maker names like 'Mercedes_Benz', 'Land_Rover', 'Aston_Martin', etc.
     normalized = _ALIASES.get(text.casefold())
     if normalized:
         return normalized
     
-    # Handle 'Maker_ Model' patterns (e.g., 'Hyundai_ Ioniq Hybrid EV (2016-2019)')
-    # Only if it didn't match a known alias
+    # Handle 'Maker_ Model' patterns (e.g., 'BMW_ i3', 'Fiat_ 600e')
+    # Extract maker part before underscore+space
     if '_' in text:
-        # Check if it's a 'Maker_ Model' pattern (underscore followed by space or capital letter)
-        match = re.match(r'^([^_]+)_\s*[A-Z]', text)
-        if match:
-            # Extract maker part before underscore
-            maker_part = match.group(1).strip()
-            # Try to normalize the extracted maker
-            normalized = _ALIASES.get(maker_part.casefold(), maker_part)
-            return normalized if normalized and not normalized.startswith('_') else None
+        # Pattern: 'Maker_<space/letter><rest>'
+        # Split on underscore and check if there's content after
+        parts = text.split('_', 1)
+        if len(parts) == 2:
+            maker_part = parts[0].strip()
+            model_part = parts[1].strip()
+            
+            # If there's a model part, try to normalize just the maker
+            if model_part or not maker_part:  # Empty maker or has model
+                if maker_part:
+                    normalized = _ALIASES.get(maker_part.casefold(), maker_part)
+                    return normalized if normalized and not normalized.startswith('_') else None
+                else:
+                    # Maker is empty (e.g., '_Tesla'), skip
+                    return None
     
-    # Handle 'Maker Model Year Variant' patterns (e.g., 'Subaru Outback 2.5na Gen6')
+    # Handle 'Maker Model Year Variant' patterns (e.g., 'Subaru Outback 2.5na Gen6', 'Renault Zoe R110')
     # Extract only the first word if it looks like a full model path
     if ' ' in text:
         # Check if it contains year patterns or multiple words suggesting it's a full model path
-        if re.search(r'\d{4}|Gen\d|\d\.\d|[Nn]a\b', text):
+        if re.search(r'\d{4}|Gen\d|\d\.\d|[Nn]a\b|R\d{3}|Ph\d', text):
             # Extract first word as maker
             maker_part = text.split()[0].strip()
             # Try to normalize the extracted maker
@@ -207,6 +234,97 @@ def normalize_maker(name: str | None) -> str | None:
     
     # If no special patterns matched, return the text as-is (after trimming)
     return text if text and not text.startswith('_') else None
+
+
+def extract_model_from_maker_field(maker_value: str | None) -> tuple[str | None, str | None]:
+    """Extract (maker, model) from a combined maker field.
+    
+    Used by CLI to split 'Maker_ Model' patterns where model column is empty.
+    Returns: (maker, model) where model is None if no extraction needed
+    """
+    if not maker_value:
+        return (None, None)
+    
+    text = maker_value.strip()
+    
+    # Check for 'Maker_ Model' pattern or 'Maker_' (trailing underscore)
+    if '_' in text:
+        parts = text.split('_', 1)
+        if len(parts) == 2:
+            maker_part = parts[0].strip()
+            model_part = parts[1].strip()
+            
+            if maker_part:
+                # Normalize maker
+                normalized_maker = _ALIASES.get(maker_part.casefold(), maker_part)
+                if model_part:
+                    # Has model part
+                    return (normalized_maker, model_part)
+                else:
+                    # Trailing underscore only (e.g., 'Toyota_')
+                    return (normalized_maker, None)
+    
+    # Check for 'Maker Model Year' pattern (e.g., 'Renault Zoe R110')
+    if ' ' in text:
+        if re.search(r'\d{4}|Gen\d|\d\.\d|[Nn]a\b|R\d{3}|Ph\d', text):
+            parts = text.split(None, 1)  # Split on first whitespace
+            if len(parts) == 2:
+                maker_part = parts[0].strip()
+                model_part = parts[1].strip()
+                
+                normalized_maker = _ALIASES.get(maker_part.casefold(), maker_part)
+                return (normalized_maker, model_part)
+    
+    # No extraction needed
+    return (normalize_maker(text), None)
+
+
+def derive_maker_from_path(file_path: str | None, model: str | None) -> str | None:
+    """Derive maker from file path when maker is NULL.
+    
+    Common patterns:
+    - '05_CanZE_조회필드/ZOE' or '05_CanZE_조회필드/Twingo*' → Renault (CanZE is Renault-only)
+    - '04_Torque_PID/Ray EV' → Kia
+    - Path contains 'Hyundai', 'Kia', etc. → that maker
+    - Model 'Ioniq*', 'Kona*' → Hyundai
+    - Model 'Niro*', 'Soul*', 'Ray*' → Kia
+    - Model 'Zoe', 'Twingo' → Renault
+    """
+    if not file_path and not model:
+        return None
+    
+    # CanZE is Renault-only
+    if file_path and ('canze' in file_path.lower() or 'can-ze' in file_path.lower()):
+        return 'Renault'
+    
+    # Check path for explicit maker names
+    if file_path:
+        path_lower = file_path.lower()
+        for maker_key, maker_name in _ALIASES.items():
+            if maker_key in path_lower:
+                return maker_name
+    
+    # Check model for known model→maker mappings
+    if model:
+        model_lower = model.lower()
+        
+        # Hyundai models
+        if any(m in model_lower for m in ['ioniq', 'kona', 'venue']):
+            return 'Hyundai'
+        
+        # Kia models
+        if any(m in model_lower for m in ['niro', 'soul', 'ray', 'ev6', 'ev9']):
+            return 'Kia'
+        
+        # Renault models
+        if any(m in model_lower for m in ['zoe', 'twingo', 'kangoo']):
+            return 'Renault'
+        
+        # Tesla models
+        if any(m in model_lower for m in ['model 3', 'model s', 'model x', 'model y']):
+            return 'Tesla'
+    
+    return None
 
 
 def is_not_vehicle_maker(name: str | None) -> bool:
