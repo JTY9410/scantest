@@ -228,6 +228,154 @@ def register_cli(app: Flask) -> None:
 
     app.cli.add_command(definitions)
     
+    # Database audit command
+    @app.cli.command("audit")
+    @click.argument("scope", default="db")
+    def audit_db(scope: str) -> None:
+        """Run database integrity audit. Usage: flask audit db"""
+        if scope != "db":
+            click.echo(f"Unknown audit scope: {scope}")
+            return
+        
+        from sqlalchemy import text
+        
+        click.echo("=" * 80)
+        click.echo("DATABASE INTEGRITY AUDIT")
+        click.echo("=" * 80)
+        click.echo()
+        
+        results = {}
+        failed_count = 0
+        
+        # 1. Orphans & FK Integrity
+        click.echo("\nOrphans & Foreign Key Integrity")
+        click.echo("-" * 80)
+        
+        orphan_scans = db.session.execute(text("""
+            SELECT COUNT(*) FROM scans 
+            WHERE tester_id IS NOT NULL 
+            AND NOT EXISTS (SELECT 1 FROM users WHERE id = scans.tester_id)
+        """)).scalar()
+        status = "✓" if orphan_scans == 0 else "✗"
+        color = "green" if orphan_scans == 0 else "red"
+        click.echo(click.style(f"  {status} Orphaned scans (no tester): {orphan_scans}", fg=color))
+        if orphan_scans > 0: failed_count += 1
+        
+        # 2. Duplicates
+        click.echo("\nDuplicates")
+        click.echo("-" * 80)
+        
+        dup_specs = db.session.execute(text("""
+            SELECT COUNT(*) FROM (
+                SELECT maker, model, trim_grade, model_year, COUNT(*) as cnt
+                FROM battery_specs
+                WHERE is_active = true
+                GROUP BY maker, model, trim_grade, model_year
+                HAVING COUNT(*) > 1
+            ) sub
+        """)).scalar()
+        status = "✓" if dup_specs == 0 else "✗"
+        color = "green" if dup_specs == 0 else "red"
+        click.echo(click.style(f"  {status} Duplicate battery specs: {dup_specs} groups", fg=color))
+        if dup_specs > 0: failed_count += 1
+        
+        # 3. Values Without Source
+        click.echo("\nValues Without Source")
+        click.echo("-" * 80)
+        
+        no_source_specs = db.session.execute(text("""
+            SELECT COUNT(*) FROM battery_specs
+            WHERE is_active = true
+            AND (source_url IS NULL OR source_url = '')
+        """)).scalar()
+        status = "✓" if no_source_specs == 0 else "✗"
+        color = "green" if no_source_specs == 0 else "red"
+        click.echo(click.style(f"  {status} Battery specs without source_url: {no_source_specs}", fg=color))
+        if no_source_specs > 0: failed_count += 1
+        
+        no_citation_rules = db.session.execute(text("""
+            SELECT COUNT(*) FROM vin_decode_rules
+            WHERE citation_url IS NULL OR citation_url = ''
+        """)).scalar()
+        status = "✓" if no_citation_rules == 0 else "✗"
+        color = "green" if no_citation_rules == 0 else "red"
+        click.echo(click.style(f"  {status} VIN rules without citation: {no_citation_rules}", fg=color))
+        if no_citation_rules > 0: failed_count += 1
+        
+        # 4. Unclassified Counts by Maker
+        click.echo("\nUnclassified Counts by Maker")
+        click.echo("-" * 80)
+        
+        unclassified = db.session.execute(text("""
+            SELECT maker, COUNT(*) as count
+            FROM vehicle_definitions
+            WHERE (powertrain IS NULL OR powertrain = 'unknown')
+            AND maker IS NOT NULL
+            GROUP BY maker
+            ORDER BY count DESC
+            LIMIT 10
+        """)).fetchall()
+        
+        total_unclassified = sum(row[1] for row in unclassified)
+        click.echo(f"  Total unclassified: {total_unclassified} across {len(unclassified)} makers")
+        for row in unclassified[:5]:
+            click.echo(f"    • {row[0]}: {row[1]}")
+        
+        # 5. Conflicts & Overrides
+        click.echo("\nConflicts & Overrides")
+        click.echo("-" * 80)
+        
+        conflict_scans = db.session.execute(text("""
+            SELECT COUNT(*) FROM scans
+            WHERE powertrain_conflict = true
+            AND deleted_at IS NULL
+        """)).scalar()
+        click.echo(click.style(f"  ✓ Scans with powertrain conflicts: {conflict_scans}", fg="green"))
+        
+        override_count = db.session.execute(text("""
+            SELECT COUNT(DISTINCT COALESCE(scan_id, vehicle_definition_id))
+            FROM powertrain_override_audit
+        """)).scalar()
+        click.echo(click.style(f"  ✓ Records with manual overrides: {override_count}", fg="green"))
+        
+        # 6. UNKNOWN Ratios
+        click.echo("\nUNKNOWN Ratios")
+        click.echo("-" * 80)
+        
+        unknown_cmds = db.session.execute(text("""
+            SELECT COUNT(*) FROM diagnostic_commands
+            WHERE UPPER(label) LIKE '%UNKNOWN%'
+            OR UPPER(notes) LIKE '%UNKNOWN%'
+        """)).scalar()
+        
+        total_cmds = db.session.execute(text("SELECT COUNT(*) FROM diagnostic_commands")).scalar()
+        unknown_ratio = (unknown_cmds / total_cmds * 100) if total_cmds > 0 else 0
+        status = "✓" if unknown_ratio < 10 else "✗"
+        color = "green" if unknown_ratio < 10 else "red"
+        click.echo(click.style(f"  {status} Commands with UNKNOWN: {unknown_cmds}/{total_cmds} ({unknown_ratio:.1f}%)", fg=color))
+        if unknown_ratio >= 10: failed_count += 1
+        
+        unknown_signals = db.session.execute(text("""
+            SELECT COUNT(*) FROM dbc_signals
+            WHERE UPPER(signal_name) LIKE '%UNKNOWN%'
+        """)).scalar()
+        
+        total_signals = db.session.execute(text("SELECT COUNT(*) FROM dbc_signals")).scalar()
+        unknown_sig_ratio = (unknown_signals / total_signals * 100) if total_signals > 0 else 0
+        status = "✓" if unknown_sig_ratio < 10 else "✗"
+        color = "green" if unknown_sig_ratio < 10 else "red"
+        click.echo(click.style(f"  {status} DBC signals with UNKNOWN: {unknown_signals}/{total_signals} ({unknown_sig_ratio:.1f}%)", fg=color))
+        if unknown_sig_ratio >= 10: failed_count += 1
+        
+        # Summary
+        click.echo()
+        click.echo("=" * 80)
+        if failed_count > 0:
+            click.echo(click.style(f"SUMMARY: {failed_count} checks failed", fg="red", bold=True))
+        else:
+            click.echo(click.style("SUMMARY: All checks passed!", fg="green", bold=True))
+        click.echo("=" * 80)
+    
     # Battery management commands
     from app.modules.battery.cli import battery
     app.cli.add_command(battery)
