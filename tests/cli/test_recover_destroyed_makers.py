@@ -8,16 +8,19 @@ from app.extensions import db
 def destroyed_makers_data(app):
     """Create test data with truncated maker names."""
     with app.app_context():
-        sha_hash = '0' * 64
-        
         # Create test sources with file paths indicating full maker names
+        # Use different sha256 for each to avoid unique constraint violation
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
             VALUES 
-                ('dbc', '/data/dbc/Aston_Martin_DB11.dbc', :sha, 100, NOW()),
-                ('dbc', '/data/dbc/MV_Agusta_F4.dbc', :sha, 100, NOW()),
-                ('dbc', '/data/dbc/Legend_Cars_34.dbc', :sha, 100, NOW())
-        """), {'sha': sha_hash})
+                ('dbc', '/data/dbc/Aston_Martin_DB11.dbc', :sha1, 100, NOW()),
+                ('dbc', '/data/dbc/MV_Agusta_F4.dbc', :sha2, 100, NOW()),
+                ('dbc', '/data/dbc/Legend_Cars_34.dbc', :sha3, 100, NOW())
+        """), {
+            'sha1': 'a' + '0' * 63,
+            'sha2': 'b' + '0' * 63,
+            'sha3': 'c' + '0' * 63
+        })
         db.session.commit()
         
         # Get source IDs
