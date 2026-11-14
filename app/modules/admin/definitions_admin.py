@@ -233,6 +233,10 @@ def classification_list():
     verification_status = request.args.get('verification_status', '')
     search = request.args.get('search', '')
     
+    # Resolve maker alias if provided
+    from app.core.makers import resolve_maker
+    resolved_maker = resolve_maker(maker) if maker else None
+    
     # 제조사, 모델, 동력원별 명령 수 집계 (vehicle_definitions 참조)
     query = text("""
         WITH maker_model_stats AS (
@@ -243,12 +247,12 @@ def classification_list():
                 COUNT(DISTINCT dc.id) as command_count,
                 COUNT(DISTINCT CASE WHEN dc.verification_status = 'verified' THEN dc.id END) as verified_count,
                 COUNT(DISTINCT CASE WHEN dc.verification_status = 'needs_verification' THEN dc.id END) as needs_verification_count,
-                COUNT(DISTINCT CASE WHEN dc.verification_status = 'experimental' THEN dc.id END) as experimental_count,
+                COUNT(DISTINCT CASE WHEN dc.verification_status = 'failed' THEN dc.id END) as failed_count,
                 MAX(dc.updated_at) as last_updated
             FROM diagnostic_commands dc
             LEFT JOIN vehicle_definitions vd ON dc.source_id = vd.source_id
             WHERE COALESCE(dc.maker, vd.maker) IS NOT NULL
-                AND (:maker = '' OR COALESCE(dc.maker, vd.maker) LIKE :maker_pattern)
+                AND (:maker = '' OR LOWER(COALESCE(dc.maker, vd.maker)) = :maker_lower)
                 AND (:model = '' OR COALESCE(dc.model, vd.model) LIKE :model_pattern)
                 AND (:powertrain = '' OR vd.powertrain = :powertrain)
                 AND (:search = '' OR 
@@ -263,7 +267,7 @@ def classification_list():
     
     params = {
         'maker': maker,
-        'maker_pattern': f'%{maker}%',
+        'maker_lower': (resolved_maker or maker).lower() if maker else '',
         'model': model,
         'model_pattern': f'%{model}%',
         'powertrain': powertrain,
@@ -288,7 +292,7 @@ def classification_list():
             'command_count': row[3],
             'verified_count': row[4],
             'needs_verification_count': row[5],
-            'experimental_count': row[6],
+            'failed_count': row[6],
             'last_updated': row[7]
         })
     

@@ -57,7 +57,7 @@
           <th class="text-right">명령 수</th>
           <th class="text-right">검증 완료</th>
           <th class="text-right">검증 필요</th>
-          <th class="text-right">실험 단계</th>
+          <th class="text-right">검증 실패</th>
           <th>최종 업데이트</th>
         </tr>
       </thead>
@@ -82,7 +82,7 @@
             <span class="text-yellow-600 font-medium">{{ cls.needs_verification_count }}</span>
           </td>
           <td class="text-right">
-            <span class="text-gray-500 font-medium">{{ cls.experimental_count }}</span>
+            <span class="text-red-600 font-medium">{{ cls.failed_count }}</span>
           </td>
           <td class="text-sm text-muted">
             {% if cls.last_updated %}
@@ -102,10 +102,21 @@
     {% endcall %}
   {% endif %}
 
-  {% if classifications %}
-  <div class="mt-4">
-    {{ render_pagination(page, (classifications|length < 50), 'definitions_admin.classification_list', 
-       maker=current_maker, model=current_model, powertrain=current_powertrain, search=current_search) }}
+  {% if page > 1 or classifications|length >= 50 %}
+  <div class="mt-4 flex justify-between items-center border-t border-line px-4 py-3">
+    <div class="flex gap-2">
+      {% if page > 1 %}
+      <a class="btn btn-secondary" href="{{ url_for('definitions_admin.classification_list', page=page-1, maker=current_maker, model=current_model, powertrain=current_powertrain, search=current_search) }}">이전</a>
+      {% else %}
+      <span class="btn btn-secondary" aria-disabled="true">이전</span>
+      {% endif %}
+      <span class="px-3 py-2 text-sm">{{ page }}페이지</span>
+      {% if classifications|length >= 50 %}
+      <a class="btn btn-secondary" href="{{ url_for('definitions_admin.classification_list', page=page+1, maker=current_maker, model=current_model, powertrain=current_powertrain, search=current_search) }}">다음</a>
+      {% else %}
+      <span class="btn btn-secondary" aria-disabled="true">다음</span>
+      {% endif %}
+    </div>
   </div>
   {% endif %}
 </div>
