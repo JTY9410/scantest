@@ -15,8 +15,7 @@ _ALIASES: dict[str, str] = {
     # Korean/International makers
     "hyundai": "Hyundai",
     "현대": "Hyundai",
-    "kia": "Kia",
-    "기아": "Kia",
+    "kia": "기아",
     "genesis": "Genesis",
     "제네시스": "Genesis",
     
@@ -93,8 +92,7 @@ _ALIASES: dict[str, str] = {
     "scca_enterprises": "SCCA Enterprises",
     
     # Japanese
-    "nissan": "Nissan",
-    "닛산": "Nissan",
+    "nissan": "닛산",
     "infiniti": "Infiniti",
     "nissaninfiniti": "Infiniti",
     "인피니티": "Infiniti",
