@@ -42,7 +42,7 @@ def test_map_vpic_to_powertrain():
     assert conf6 == 0.0
 
 
-@patch('app.utils.vpic_client.requests.get')
+@patch('app.utils.vpic_client.httpx.get')
 def test_decode_vin_vpic_success(mock_get):
     """Test successful vPIC API call (mocked)."""
     # Mock HTTP response
@@ -77,7 +77,7 @@ def test_decode_vin_vpic_success(mock_get):
     assert 'vpic.nhtsa.dot.gov' in mock_get.call_args[0][0]
 
 
-@patch('app.utils.vpic_client.requests.get')
+@patch('app.utils.vpic_client.httpx.get')
 def test_decode_vin_vpic_cached(mock_get):
     """Test vPIC with cached result (no HTTP call)."""
     # Mock database connection with cached data
@@ -102,11 +102,11 @@ def test_decode_vin_vpic_cached(mock_get):
     mock_get.assert_not_called()
 
 
-@patch('app.utils.vpic_client.requests.get')
+@patch('app.utils.vpic_client.httpx.get')
 def test_decode_vin_vpic_timeout(mock_get):
     """Test vPIC API timeout (graceful failure)."""
-    import requests
-    mock_get.side_effect = requests.exceptions.Timeout()
+    import httpx
+    mock_get.side_effect = httpx.TimeoutException('Timeout')
     
     mock_conn = Mock()
     mock_conn.execute.return_value.fetchone.return_value = None
@@ -119,11 +119,11 @@ def test_decode_vin_vpic_timeout(mock_get):
     assert confidence == 0.0
 
 
-@patch('app.utils.vpic_client.requests.get')
+@patch('app.utils.vpic_client.httpx.get')
 def test_decode_vin_vpic_offline(mock_get):
     """Test vPIC API offline (graceful failure)."""
-    import requests
-    mock_get.side_effect = requests.exceptions.ConnectionError()
+    import httpx
+    mock_get.side_effect = httpx.ConnectError('Connection failed')
     
     mock_conn = Mock()
     mock_conn.execute.return_value.fetchone.return_value = None
@@ -136,13 +136,13 @@ def test_decode_vin_vpic_offline(mock_get):
     assert confidence == 0.0
 
 
-@patch('app.utils.vpic_client.requests.get')
+@patch('app.utils.vpic_client.httpx.get')
 def test_decode_vin_vpic_http_error(mock_get):
     """Test vPIC API HTTP error (404, etc.)."""
-    import requests
+    import httpx
     mock_response = Mock()
     mock_response.status_code = 404
-    mock_get.side_effect = requests.exceptions.HTTPError(response=mock_response)
+    mock_get.side_effect = httpx.HTTPStatusError('Not found', request=Mock(), response=mock_response)
     
     mock_conn = Mock()
     mock_conn.execute.return_value.fetchone.return_value = None
