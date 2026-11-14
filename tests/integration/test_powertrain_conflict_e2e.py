@@ -112,14 +112,15 @@ def test_conflict_modal_in_html(app, client, conflict_e2e_cleanup):
     
     사용자 요구사항: 결과 페이지 모달
     """
-    # Ensure CSRF is disabled for this test (isolation issue)
+    # Save and restore CSRF setting (isolation issue fix)
+    original_csrf = app.config.get("WTF_CSRF_ENABLED")
     app.config["WTF_CSRF_ENABLED"] = False
-    
-    from app.modules.scanner.service import run_scan
-    
-    with app.app_context():
-        # Create admin user
-        admin = User(
+    try:
+        from app.modules.scanner.service import run_scan
+        
+        with app.app_context():
+            # Create admin user
+            admin = User(
             type='admin',
             tid='admin_conflict_e2e',
             name='Admin User',
@@ -156,31 +157,37 @@ def test_conflict_modal_in_html(app, client, conflict_e2e_cleanup):
         )
         
         scan_id = scan.id
-    
-    # Login and get scan page
-    login_response = client.post('/admin/login', data={
-        'tid': 'admin_conflict_e2e',
-        'password': 'adminpass123'
-    }, follow_redirects=True)
-    
-    assert login_response.status_code == 200, f"Login failed: {login_response.status_code}"
-    
-    response = client.get(f'/admin/scans/{scan_id}')
-    
-    if response.status_code == 302:
-        print(f"Redirected to: {response.location}")
-    
-    assert response.status_code == 200, f"Expected 200, got {response.status_code}"
-    html = response.data.decode('utf-8')
-    
-    # Check for conflict indicators in HTML
-    has_conflict = (
-        'powertrain_conflict_modal' in html or
-        'powertrain-conflict' in html or
-        '동력원 불일치' in html or
-        f'data-scan-id="{scan_id}"' in html
-    )
-    assert has_conflict, "Conflict modal not found in HTML"
+        
+        # Login and get scan page
+        login_response = client.post('/admin/login', data={
+            'tid': 'admin_conflict_e2e',
+            'password': 'adminpass123'
+        }, follow_redirects=True)
+        
+        assert login_response.status_code == 200, f"Login failed: {login_response.status_code}"
+        
+        response = client.get(f'/admin/scans/{scan_id}')
+        
+        if response.status_code == 302:
+            print(f"Redirected to: {response.location}")
+        
+        assert response.status_code == 200, f"Expected 200, got {response.status_code}"
+        html = response.data.decode('utf-8')
+        
+        # Check for conflict indicators in HTML
+        has_conflict = (
+            'powertrain_conflict_modal' in html or
+            'powertrain-conflict' in html or
+            '동력원 불일치' in html or
+            f'data-scan-id="{scan_id}"' in html
+        )
+        assert has_conflict, "Conflict modal not found in HTML"
+    finally:
+        # Restore CSRF setting
+        if original_csrf is None:
+            app.config.pop("WTF_CSRF_ENABLED", None)
+        else:
+            app.config["WTF_CSRF_ENABLED"] = original_csrf
 
 
 def test_override_saves_to_db(app, client, conflict_e2e_cleanup):
@@ -188,14 +195,15 @@ def test_override_saves_to_db(app, client, conflict_e2e_cleanup):
     
     사용자 요구사항: /admin/powertrain/override 저장
     """
-    # Ensure CSRF is disabled for this test (isolation issue)
+    # Save and restore CSRF setting (isolation issue fix)
+    original_csrf = app.config.get("WTF_CSRF_ENABLED")
     app.config["WTF_CSRF_ENABLED"] = False
-    
-    from app.modules.scanner.service import run_scan
-    
-    with app.app_context():
-        # Create admin
-        admin = User(
+    try:
+        from app.modules.scanner.service import run_scan
+        
+        with app.app_context():
+            # Create admin
+            admin = User(
             type='admin',
             tid='admin_override_e2e',
             name='Admin User',
@@ -232,27 +240,26 @@ def test_override_saves_to_db(app, client, conflict_e2e_cleanup):
         )
         
         scan_id = scan.id
-    
-    # Login
-    client.post('/admin/login', data={
-        'tid': 'admin_override_e2e',
-        'password': 'adminpass123'
-    }, follow_redirects=True)
-    
-    # Call override API
-    response = client.post('/admin/powertrain/override',
-        json={
-            'scan_id': scan_id,
-            'powertrain': 'ICE',  # Choose VIN result
-            'reason': 'E2E test override'
-        },
-        content_type='application/json'
-    )
-    
-    assert response.status_code == 200
-    
-    # Verify in DB
-    with app.app_context():
+        
+        # Login
+        client.post('/admin/login', data={
+            'tid': 'admin_override_e2e',
+            'password': 'adminpass123'
+        }, follow_redirects=True)
+        
+        # Call override API
+        response = client.post('/admin/powertrain/override',
+            json={
+                'scan_id': scan_id,
+                'powertrain': 'ICE',  # Choose VIN result
+                'reason': 'E2E test override'
+            },
+            content_type='application/json'
+        )
+        
+        assert response.status_code == 200
+        
+        # Verify in DB (reuse app context from outer with block)
         scan_data = db.session.execute(text("""
             SELECT type, type_source, powertrain_conflict
             FROM scans
@@ -263,3 +270,9 @@ def test_override_saves_to_db(app, client, conflict_e2e_cleanup):
         assert scan_data[0] in ('ice', 'ICE'), f"type should be ice, got {scan_data[0]}"
         assert scan_data[1] == 'manual_override', f"type_source should be manual_override, got {scan_data[1]}"
         assert scan_data[2] is False, f"conflict should be resolved, got {scan_data[2]}"
+    finally:
+        # Restore CSRF setting
+        if original_csrf is None:
+            app.config.pop("WTF_CSRF_ENABLED", None)
+        else:
+            app.config["WTF_CSRF_ENABLED"] = original_csrf
