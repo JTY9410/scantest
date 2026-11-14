@@ -225,6 +225,205 @@ def register_cli(app: Flask) -> None:
             click.echo(f"\n{table_col}:")
             for key, count in counts.items():
                 click.echo(f"  {key}: {count}")
+    
+    @definitions.command("normalize-makers")
+    @click.option("--report-only", is_flag=True, help="Show before/after stats without applying changes")
+    @click.option("--yes", is_flag=True, help="Apply normalization without confirmation")
+    def normalize_makers(report_only: bool, yes: bool) -> None:
+        """Normalize maker names and mark test/generic entries as not_vehicle.
+        
+        Usage:
+            flask definitions normalize-makers --report-only  # Show before stats only
+            flask definitions normalize-makers --yes          # Apply normalization
+        """
+        from sqlalchemy import text
+        from app.core.makers import normalize_maker, is_not_vehicle_maker
+        
+        click.echo("=" * 80)
+        click.echo("MAKER NORMALIZATION")
+        click.echo("=" * 80)
+        click.echo()
+        
+        # BEFORE stats
+        click.echo("BEFORE Normalization:")
+        click.echo("-" * 80)
+        
+        distinct_makers_before = db.session.execute(text("""
+            SELECT COUNT(DISTINCT maker) FROM vehicle_definitions WHERE maker IS NOT NULL
+        """)).scalar()
+        click.echo(f"  Distinct makers: {distinct_makers_before}")
+        
+        powertrain_before = db.session.execute(text("""
+            SELECT powertrain, COUNT(*) as count
+            FROM vehicle_definitions
+            GROUP BY powertrain
+            ORDER BY count DESC
+        """)).fetchall()
+        
+        click.echo("\n  Powertrain distribution:")
+        for row in powertrain_before:
+            pt = row[0] or 'NULL'
+            click.echo(f"    {pt}: {row[1]}")
+        
+        # Show sample problematic makers
+        click.echo("\n  Sample makers that need normalization:")
+        problem_makers = db.session.execute(text("""
+            SELECT DISTINCT maker FROM vehicle_definitions
+            WHERE maker LIKE '%\\_%' 
+            OR maker LIKE '% %'
+            OR maker IN ('comma', '_테스트_예제', '_공통_센서', '공용규격', '공통규격')
+            OR maker LIKE 'AAA\\_%'
+            OR maker LIKE '_공통%'
+            ORDER BY maker
+            LIMIT 20
+        """)).fetchall()
+        
+        for row in problem_makers:
+            click.echo(f"    • {row[0]}")
+        
+        if report_only:
+            click.echo("\n(Use --yes to apply normalization)")
+            return
+        
+        if not yes:
+            click.echo("\nThis will:")
+            click.echo("  1. Normalize maker spelling variants")
+            click.echo("  2. Split 'Maker_ Model' patterns")
+            click.echo("  3. Mark test/generic entries as not_vehicle")
+            click.echo("  4. Extract maker from full model paths")
+            
+            if not click.confirm("\nProceed with normalization?"):
+                click.echo("Aborted.")
+                return
+        
+        click.echo("\nApplying normalization...")
+        click.echo("-" * 80)
+        
+        # Step 1: Mark not_vehicle entries FIRST
+        click.echo("  1. Marking test/generic entries as not_vehicle...")
+        
+        not_vehicle_makers = [
+            'comma', '_테스트_예제', '_공통_센서', '공용규격', '공통규격'
+        ]
+        
+        for maker in not_vehicle_makers:
+            result = db.session.execute(text("""
+                UPDATE vehicle_definitions
+                SET powertrain = 'not_vehicle'
+                WHERE maker = :maker AND powertrain != 'not_vehicle'
+            """), {'maker': maker})
+            if result.rowcount > 0:
+                click.echo(f"     → {maker}: {result.rowcount} rows")
+        
+        # AAA_ prefix
+        result = db.session.execute(text("""
+            UPDATE vehicle_definitions
+            SET powertrain = 'not_vehicle'
+            WHERE maker LIKE 'AAA\\_%' AND powertrain != 'not_vehicle'
+        """))
+        if result.rowcount > 0:
+            click.echo(f"     → AAA_* prefix: {result.rowcount} rows")
+        
+        # _공통 prefix
+        result = db.session.execute(text("""
+            UPDATE vehicle_definitions
+            SET powertrain = 'not_vehicle'
+            WHERE maker LIKE '_공통%' AND powertrain != 'not_vehicle'
+        """))
+        if result.rowcount > 0:
+            click.echo(f"     → _공통* prefix: {result.rowcount} rows")
+        
+        db.session.commit()
+        
+        # Step 2: Python-based normalization (handles complex patterns)
+        click.echo("  2. Normalizing makers with Python logic...")
+        
+        vehicles = db.session.execute(text("""
+            SELECT id, maker FROM vehicle_definitions
+            WHERE powertrain != 'not_vehicle' AND maker IS NOT NULL
+        """)).fetchall()
+        
+        normalized_count = 0
+        for vehicle_id, maker in vehicles:
+            normalized = normalize_maker(maker)
+            
+            # If normalize_maker returns None, mark as not_vehicle
+            if normalized is None:
+                db.session.execute(text("""
+                    UPDATE vehicle_definitions
+                    SET powertrain = 'not_vehicle', maker = :original_maker
+                    WHERE id = :id
+                """), {'id': vehicle_id, 'original_maker': maker})
+                normalized_count += 1
+            elif normalized != maker:
+                db.session.execute(text("""
+                    UPDATE vehicle_definitions
+                    SET maker = :normalized
+                    WHERE id = :id
+                """), {'id': vehicle_id, 'normalized': normalized})
+                normalized_count += 1
+        
+        db.session.commit()
+        click.echo(f"     → Normalized {normalized_count} rows")
+        
+        # Step 3: Rerun classification
+        click.echo("  3. Re-running powertrain classification...")
+        from app.modules.definitions.vehicle_classifier import classify_vehicle_powertrain
+        
+        vehicles_to_classify = db.session.execute(text("""
+            SELECT vd.id, vd.maker, vd.model, vd.submodel, ds.file_path
+            FROM vehicle_definitions vd
+            LEFT JOIN definition_sources ds ON vd.source_id = ds.id
+            WHERE vd.powertrain != 'not_vehicle'
+        """)).fetchall()
+        
+        classified = 0
+        for veh_id, maker, model, submodel, file_path in vehicles_to_classify:
+            powertrain, source, confidence, conflict = classify_vehicle_powertrain(
+                maker=maker,
+                model=model,
+                submodel=submodel,
+                file_path=file_path
+            )
+            
+            db.session.execute(text("""
+                UPDATE vehicle_definitions
+                SET powertrain = :powertrain
+                WHERE id = :id
+            """), {'id': veh_id, 'powertrain': powertrain})
+            classified += 1
+        
+        db.session.commit()
+        click.echo(f"     → Classified {classified} rows")
+        
+        # AFTER stats
+        click.echo()
+        click.echo("AFTER Normalization:")
+        click.echo("-" * 80)
+        
+        distinct_makers_after = db.session.execute(text("""
+            SELECT COUNT(DISTINCT maker) FROM vehicle_definitions WHERE maker IS NOT NULL
+        """)).scalar()
+        click.echo(f"  Distinct makers: {distinct_makers_after}")
+        
+        powertrain_after = db.session.execute(text("""
+            SELECT powertrain, COUNT(*) as count
+            FROM vehicle_definitions
+            GROUP BY powertrain
+            ORDER BY count DESC
+        """)).fetchall()
+        
+        click.echo("\n  Powertrain distribution:")
+        for row in powertrain_after:
+            pt = row[0] or 'NULL'
+            click.echo(f"    {pt}: {row[1]}")
+        
+        # Summary
+        click.echo()
+        click.echo("=" * 80)
+        maker_reduction = distinct_makers_before - distinct_makers_after
+        click.echo(f"SUMMARY: Reduced makers from {distinct_makers_before} to {distinct_makers_after} (-{maker_reduction})")
+        click.echo("=" * 80)
 
     app.cli.add_command(definitions)
     
