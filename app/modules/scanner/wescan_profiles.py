@@ -7,6 +7,7 @@ from collections import defaultdict
 
 from app import db
 from sqlalchemy import text
+from app.core.makers import resolve_maker
 
 
 def build_profiles() -> dict:
@@ -26,10 +27,14 @@ def build_profiles() -> dict:
                         }
                     }
                 }
+            },
+            '_common': {  # SAE standard PIDs, apply to all vehicles
+                ...
             }
         }
     """
     profiles = defaultdict(lambda: defaultdict(lambda: defaultdict(dict)))
+    common_commands = defaultdict(lambda: defaultdict(dict))
     
     # Get all diagnostic commands with vehicle scoping
     commands = db.session.execute(text("""
@@ -49,6 +54,27 @@ def build_profiles() -> dict:
         if not all([maker, ecu_address, service, pid, command_bytes, label]):
             continue
         
+        # Check if this is a common/standard PID (SAE J1979)
+        if maker in ('공통규격', '공용규격', '_공통_센서'):
+            # Store in common section
+            service_pid_key = f"{service}_{pid}"
+            if ecu_address not in common_commands:
+                common_commands[ecu_address] = {}
+            common_commands[ecu_address][service_pid_key] = {
+                'command_bytes': command_bytes,
+                'label': label,
+                'formula': formula,
+                'unit': unit,
+                'source_type': source_type
+            }
+            continue
+        
+        # Resolve maker to standard key
+        resolved_maker = resolve_maker(maker)
+        if not resolved_maker:
+            # Can't resolve, skip
+            continue
+        
         # Use 'generic' for commands without model scoping
         model_key = model or 'generic'
         
@@ -56,10 +82,10 @@ def build_profiles() -> dict:
         service_pid_key = f"{service}_{pid}"
         
         # Store command profile
-        if ecu_address not in profiles[maker][model_key]:
-            profiles[maker][model_key][ecu_address] = {}
+        if ecu_address not in profiles[resolved_maker][model_key]:
+            profiles[resolved_maker][model_key][ecu_address] = {}
         
-        profiles[maker][model_key][ecu_address][service_pid_key] = {
+        profiles[resolved_maker][model_key][ecu_address][service_pid_key] = {
             'command_bytes': command_bytes,
             'label': label,
             'formula': formula,
@@ -68,7 +94,7 @@ def build_profiles() -> dict:
         }
     
     # Convert defaultdicts to regular dicts for JSON serialization
-    return {
+    result = {
         maker: {
             model: {
                 ecu: dict(cmds)
@@ -78,6 +104,17 @@ def build_profiles() -> dict:
         }
         for maker, maker_profiles in profiles.items()
     }
+    
+    # Add common commands if any
+    if common_commands:
+        result['_common'] = {
+            'generic': {
+                ecu: dict(cmds)
+                for ecu, cmds in common_commands.items()
+            }
+        }
+    
+    return result
 
 
 def get_profile_coverage() -> dict:
@@ -89,71 +126,127 @@ def get_profile_coverage() -> dict:
             'makers_with_profiles': list[str],
             'total_models': int,
             'total_commands': int,
+            'common_commands': int,
             'commands_by_maker': {maker: count},
             'commands_by_ecu': {ecu: count},
-            'top_sources': [(source_type, count)]
+            'top_sources': [(source_type, count)],
+            'excluded_stats': {
+                'total_in_db': int,
+                'null_maker': int,
+                'unresolved_maker': int,
+                'missing_fields': int,
+                'by_source': {source_type: excluded_count}
+            }
         }
     """
-    # Makers with profiles
-    makers = db.session.execute(text("""
-        SELECT DISTINCT maker
+    # Total commands in DB
+    total_in_db = db.session.execute(text("""
+        SELECT COUNT(*) FROM diagnostic_commands
+    """)).scalar()
+    
+    # Commands with null maker
+    null_maker_count = db.session.execute(text("""
+        SELECT COUNT(*) FROM diagnostic_commands WHERE maker IS NULL
+    """)).scalar()
+    
+    # Commands with missing essential fields
+    missing_fields_count = db.session.execute(text("""
+        SELECT COUNT(*) FROM diagnostic_commands 
+        WHERE maker IS NOT NULL 
+        AND (ecu_address IS NULL OR service IS NULL OR pid IS NULL 
+             OR command_bytes IS NULL OR label IS NULL)
+    """)).scalar()
+    
+    # Common commands (SAE standard)
+    common_count = db.session.execute(text("""
+        SELECT COUNT(*) FROM diagnostic_commands
+        WHERE maker IN ('공통규격', '공용규격', '_공통_센서')
+    """)).fetchall()[0][0]
+    
+    # Get all makers and check which can be resolved
+    all_makers = db.session.execute(text("""
+        SELECT maker, COUNT(*) as count
         FROM diagnostic_commands
-        WHERE maker IS NOT NULL
-        ORDER BY maker
+        WHERE maker IS NOT NULL 
+        AND maker NOT IN ('공통규격', '공용규격', '_공통_센서')
+        GROUP BY maker
     """)).fetchall()
     
-    makers_list = [m[0] for m in makers]
+    resolved_makers = {}
+    unresolved_count = 0
     
-    # Models count
+    for maker, count in all_makers:
+        resolved = resolve_maker(maker)
+        if resolved:
+            resolved_makers[resolved] = resolved_makers.get(resolved, 0) + count
+        else:
+            unresolved_count += count
+    
+    # Models count (after resolution)
     models_count = db.session.execute(text("""
         SELECT COUNT(DISTINCT maker || '|' || COALESCE(model, 'generic'))
         FROM diagnostic_commands
         WHERE maker IS NOT NULL
+        AND maker NOT IN ('공통규격', '공용규격', '_공통_센서')
     """)).scalar()
     
-    # Total commands
-    total_commands = db.session.execute(text("""
-        SELECT COUNT(*)
-        FROM diagnostic_commands
-        WHERE maker IS NOT NULL
-    """)).scalar()
+    # Total commands included (resolvable makers with all fields)
+    total_included = sum(resolved_makers.values())
     
-    # Commands by maker
-    maker_counts = db.session.execute(text("""
-        SELECT maker, COUNT(*) as count
-        FROM diagnostic_commands
-        WHERE maker IS NOT NULL
-        GROUP BY maker
-        ORDER BY count DESC
-    """)).fetchall()
-    
-    # Commands by ECU
+    # Commands by ECU (only included commands)
     ecu_counts = db.session.execute(text("""
         SELECT ecu_address, COUNT(*) as count
         FROM diagnostic_commands
-        WHERE maker IS NOT NULL AND ecu_address IS NOT NULL
+        WHERE maker IS NOT NULL 
+        AND ecu_address IS NOT NULL
+        AND service IS NOT NULL AND pid IS NOT NULL
+        AND command_bytes IS NOT NULL AND label IS NOT NULL
+        AND maker NOT IN ('공통규격', '공용규격', '_공통_센서')
         GROUP BY ecu_address
         ORDER BY count DESC
         LIMIT 10
     """)).fetchall()
     
-    # Top sources
+    # Source breakdown (only included commands)
     source_counts = db.session.execute(text("""
         SELECT source_type, COUNT(*) as count
         FROM diagnostic_commands
         WHERE maker IS NOT NULL
+        AND ecu_address IS NOT NULL
+        AND service IS NOT NULL AND pid IS NOT NULL
+        AND command_bytes IS NOT NULL AND label IS NOT NULL
+        AND maker NOT IN ('공통규격', '공용규격', '_공통_센서')
+        GROUP BY source_type
+        ORDER BY count DESC
+    """)).fetchall()
+    
+    # Excluded by source
+    excluded_by_source = db.session.execute(text("""
+        SELECT source_type, COUNT(*) as count
+        FROM diagnostic_commands
+        WHERE maker IS NULL
+        OR ecu_address IS NULL OR service IS NULL OR pid IS NULL
+        OR command_bytes IS NULL OR label IS NULL
         GROUP BY source_type
         ORDER BY count DESC
     """)).fetchall()
     
     return {
-        'total_makers': len(makers_list),
-        'makers_with_profiles': makers_list,
+        'total_makers': len(resolved_makers),
+        'makers_with_profiles': sorted(resolved_makers.keys()),
         'total_models': models_count,
-        'total_commands': total_commands,
-        'commands_by_maker': {m: c for m, c in maker_counts},
+        'total_commands': total_included,
+        'common_commands': common_count,
+        'commands_by_maker': resolved_makers,
         'commands_by_ecu': {e: c for e, c in ecu_counts},
-        'top_sources': [(s, c) for s, c in source_counts]
+        'top_sources': [(s, c) for s, c in source_counts],
+        'excluded_stats': {
+            'total_in_db': total_in_db,
+            'null_maker': null_maker_count,
+            'unresolved_maker': unresolved_count,
+            'missing_fields': missing_fields_count,
+            'by_source': {s: c for s, c in excluded_by_source}
+        }
     }
 
 

@@ -910,6 +910,8 @@ def register_cli(app: Flask) -> None:
         click.echo(f"  Total makers with profiles: {coverage['total_makers']}")
         click.echo(f"  Total maker/model combinations: {coverage['total_models']}")
         click.echo(f"  Total commands: {coverage['total_commands']}")
+        if coverage.get('common_commands', 0) > 0:
+            click.echo(f"  Common commands (SAE standard): {coverage['common_commands']}")
         
         click.echo("\n  Top makers by command count:")
         for maker, count in sorted(coverage['commands_by_maker'].items(), 
@@ -923,6 +925,31 @@ def register_cli(app: Flask) -> None:
         click.echo("\n  Source breakdown:")
         for source, count in coverage['top_sources']:
             click.echo(f"    {source}: {count} commands")
+        
+        # Show exclusion statistics
+        excluded = coverage.get('excluded_stats', {})
+        if excluded:
+            click.echo()
+            click.echo("Exclusion Report:")
+            click.echo("-" * 80)
+            total_db = excluded.get('total_in_db', 0)
+            included = coverage['total_commands']
+            common = coverage.get('common_commands', 0)
+            total_excluded = total_db - included - common
+            
+            click.echo(f"  Total in DB: {total_db}")
+            click.echo(f"  Included in profiles: {included}")
+            click.echo(f"  Common (SAE standard): {common}")
+            click.echo(f"  Excluded: {total_excluded}")
+            click.echo(f"    - Null maker: {excluded.get('null_maker', 0)}")
+            click.echo(f"    - Unresolved maker: {excluded.get('unresolved_maker', 0)}")
+            click.echo(f"    - Missing required fields: {excluded.get('missing_fields', 0)}")
+            
+            by_source = excluded.get('by_source', {})
+            if by_source:
+                click.echo(f"\n  Excluded by source type:")
+                for source, count in sorted(by_source.items(), key=lambda x: x[1], reverse=True):
+                    click.echo(f"    {source}: {count}")
         
         if export:
             click.echo(f"\nExporting profiles to {export}...")
@@ -940,17 +967,18 @@ def register_cli(app: Flask) -> None:
         click.echo("=" * 80)
     
     @wescan.command("coverage")
-    @click.option("--maker", help="Filter by maker name")
+    @click.option("--maker", help="Filter by maker name (supports aliases like 현대/Hyundai)")
     @click.option("--detail", is_flag=True, help="Show per-model breakdown")
     def wescan_coverage(maker: str | None, detail: bool) -> None:
         """Show WESCAN command profile coverage by maker/model.
         
         Usage:
             flask wescan coverage                    # Overall summary
-            flask wescan coverage --maker 현대       # Filter by maker
+            flask wescan coverage --maker 현대       # Filter by maker (alias-aware)
             flask wescan coverage --detail           # Per-model breakdown
         """
         from app.modules.scanner.wescan_profiles import get_profile_coverage
+        from app.core.makers import resolve_maker
         
         click.echo("=" * 80)
         click.echo("WESCAN PROFILE COVERAGE REPORT")
@@ -965,6 +993,8 @@ def register_cli(app: Flask) -> None:
         click.echo(f"  Total makers: {coverage['total_makers']}")
         click.echo(f"  Total maker/model combinations: {coverage['total_models']}")
         click.echo(f"  Total commands: {coverage['total_commands']}")
+        if coverage.get('common_commands', 0) > 0:
+            click.echo(f"  Common commands (SAE standard): {coverage['common_commands']}")
         click.echo()
         
         # Commands by maker
@@ -975,7 +1005,13 @@ def register_cli(app: Flask) -> None:
                               key=lambda x: x[1], reverse=True)
         
         if maker:
-            makers_sorted = [(m, c) for m, c in makers_sorted if maker.lower() in m.lower()]
+            # Resolve maker filter to standard key
+            resolved_filter = resolve_maker(maker)
+            if resolved_filter:
+                makers_sorted = [(m, c) for m, c in makers_sorted if m == resolved_filter]
+            else:
+                # Fallback to substring match
+                makers_sorted = [(m, c) for m, c in makers_sorted if maker.lower() in m.lower()]
         
         for maker_name, count in makers_sorted:
             percentage = (count / coverage['total_commands'] * 100) if coverage['total_commands'] > 0 else 0

@@ -88,7 +88,8 @@ def test_wescan_build_profiles_with_export(app, wescan_test_commands, tmp_path):
         
         # Verify profiles structure
         profiles = data['profiles']
-        assert '현대' in profiles or '기아' in profiles
+        # Makers are now resolved to standard keys (hyundai, kia)
+        assert 'hyundai' in profiles or 'kia' in profiles
         
         # Verify coverage structure
         coverage = data['coverage']
@@ -112,11 +113,11 @@ def test_wescan_profile_coverage_report(app, wescan_test_commands):
         assert 'commands_by_ecu' in coverage
         
         # Our test data should be included
-        assert coverage['total_makers'] >= 2  # At least 현대 and 기아
+        assert coverage['total_makers'] >= 2  # At least hyundai and kia (resolved)
         assert coverage['total_commands'] >= 5
         
-        # Check maker breakdown
-        assert '현대' in coverage['commands_by_maker'] or '기아' in coverage['commands_by_maker']
+        # Check maker breakdown (makers are now resolved to standard keys)
+        assert 'hyundai' in coverage['commands_by_maker'] or 'kia' in coverage['commands_by_maker']
 
 
 def test_wescan_build_profiles_function(app, wescan_test_commands):
