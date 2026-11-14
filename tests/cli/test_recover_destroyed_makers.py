@@ -100,14 +100,16 @@ def test_recover_destroyed_makers_yes(app, destroyed_makers_data):
         
         # Verify changes were applied
         makers = db.session.execute(text("""
-            SELECT maker FROM vehicle_definitions 
-            WHERE source_id IN (:aston_id, :mv_id, :legend_id)
-            ORDER BY source_id
+            SELECT vd.maker, ds.file_path
+            FROM vehicle_definitions vd
+            JOIN definition_sources ds ON vd.source_id = ds.id
+            WHERE vd.source_id IN (:aston_id, :mv_id, :legend_id)
+            ORDER BY ds.file_path
         """), destroyed_makers_data).fetchall()
         
-        assert makers[0][0] == 'Aston Martin'
-        assert makers[1][0] == 'Legend Cars'
-        assert makers[2][0] == 'MV Agusta'
+        assert makers[0][0] == 'Aston Martin'  # Aston_Martin_DB11.dbc
+        assert makers[1][0] == 'Legend Cars'    # Legend_Cars_34.dbc
+        assert makers[2][0] == 'MV Agusta'      # MV_Agusta_F4.dbc
 
 
 def test_recover_destroyed_makers_no_data(app):
