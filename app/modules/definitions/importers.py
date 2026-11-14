@@ -461,14 +461,16 @@ def import_canze_csv(file_path: Path, vehicle_info: dict[str, Any] | None = None
         db.session.add(veh_def)
     
     # CSV 파싱 (UTF-8 BOM 처리)
-    # CanZE 포맷은 복잡하므로 기본 구조만 추출
+    # CanZE _Fields.csv 포맷: sid, ID, startBit, endBit, resolution, offset, decimals, unit, requestId, responseId, options, name, ...
+    # 인덱스: 0=sid, 1=ID (ECU), 2=startBit, 3=endBit, 4=resolution, 5=offset, 6=decimals, 7=unit, 
+    #        8=requestId, 9=responseId, 10=options, 11=name
     with open(file_path, 'r', encoding='utf-8-sig') as f:
         reader = csv.reader(f)
         for row in reader:
-            if len(row) >= 10 and row[1]:  # ECU address가 있는 행
+            if len(row) >= 12 and row[1]:  # ECU address가 있고 name까지 있는 행
                 ecu_address = row[1]
                 request_id = row[8] if len(row) > 8 else ''
-                field_name = row[10] if len(row) > 10 else ''
+                field_name = row[11] if len(row) > 11 else ''  # Corrected: name is at index 11
                 
                 if request_id and field_name:
                     # request_id에서 service와 pid 추출

@@ -1275,3 +1275,131 @@ def register_cli(app: Flask) -> None:
         click.echo(f"✓ Run {run_id} rolled back")
     
     app.cli.add_command(learning)
+    
+    @definitions.command("reimport-canze-names")
+    @click.option("--report-only", is_flag=True, help="Show what would change without modifying data")
+    @click.option("--yes", is_flag=True, help="Apply changes without confirmation")
+    def reimport_canze_names(report_only: bool, yes: bool) -> None:
+        """Re-import CanZE field names from source CSV files with correct column index.
+        
+        Fixes parsing error where hex values (ff, 4ff) were imported as names
+        instead of actual field names from column 11.
+        
+        Usage:
+            flask definitions reimport-canze-names --report-only  # Preview changes
+            flask definitions reimport-canze-names --yes          # Apply fixes
+        """
+        from pathlib import Path
+        from app.modules.definitions.models import DefinitionSource, DiagnosticCommand
+        import csv
+        
+        click.echo("=" * 80)
+        click.echo("CANZE FIELD NAME RE-IMPORT")
+        click.echo("=" * 80)
+        click.echo()
+        click.echo("Corrects column index: row[10] → row[11] for field name")
+        click.echo("CanZE format: sid, ID, startBit, endBit, resolution, offset, decimals, unit,")
+        click.echo("              requestId, responseId, options, name, ...")
+        click.echo()
+        
+        # Find all CanZE sources
+        canze_sources = db.session.query(DefinitionSource).filter_by(source_type='canze').all()
+        
+        if not canze_sources:
+            click.echo("No CanZE sources found in database.")
+            return
+        
+        click.echo(f"Found {len(canze_sources)} CanZE source(s)")
+        click.echo()
+        
+        changes = []
+        errors = []
+        
+        for source in canze_sources:
+            file_path = Path(source.file_path)
+            
+            if not file_path.exists():
+                errors.append(f"File not found: {file_path}")
+                continue
+            
+            click.echo(f"Processing: {file_path}")
+            
+            # Read CSV with correct column
+            try:
+                with open(file_path, 'r', encoding='utf-8-sig') as f:
+                    reader = csv.reader(f)
+                    for row in reader:
+                        if len(row) >= 12 and row[1] and row[8]:
+                            request_id = row[8]
+                            correct_name = row[11]
+                            
+                            # Find corresponding command
+                            cmd = db.session.query(DiagnosticCommand).filter_by(
+                                source_id=source.id,
+                                command_bytes=request_id
+                            ).first()
+                            
+                            if cmd and cmd.label != correct_name:
+                                changes.append({
+                                    'source': source.file_path,
+                                    'command': request_id,
+                                    'old_name': cmd.label,
+                                    'new_name': correct_name,
+                                    'cmd_id': cmd.id
+                                })
+            except Exception as e:
+                errors.append(f"Error reading {file_path}: {str(e)}")
+        
+        # Report
+        click.echo()
+        click.echo("=" * 80)
+        click.echo(f"SUMMARY: {len(changes)} changes found")
+        click.echo("=" * 80)
+        
+        if changes:
+            click.echo()
+            click.echo("Sample changes (first 20):")
+            click.echo("-" * 80)
+            for change in changes[:20]:
+                click.echo(f"  Command {change['command']}: '{change['old_name']}' → '{change['new_name']}'")
+        
+        if errors:
+            click.echo()
+            click.echo("Errors:")
+            for err in errors:
+                click.echo(f"  ✗ {err}", err=True)
+        
+        click.echo()
+        click.echo("=" * 80)
+        
+        if report_only:
+            click.echo("(Use --yes to apply these changes)")
+            return
+        
+        if not changes:
+            click.echo("No changes needed.")
+            return
+        
+        if not yes:
+            click.echo()
+            if not click.confirm(f"Apply {len(changes)} name corrections?"):
+                click.echo("Aborted.")
+                return
+        
+        # Apply changes
+        click.echo()
+        click.echo("Applying changes...")
+        updated = 0
+        
+        for change in changes:
+            db.session.execute(text("""
+                UPDATE diagnostic_commands
+                SET label = :new_name, updated_at = now()
+                WHERE id = :id
+            """), {'new_name': change['new_name'], 'id': change['cmd_id']})
+            updated += 1
+        
+        db.session.commit()
+        
+        click.echo(f"✓ Updated {updated} command names")
+        click.echo("=" * 80)
