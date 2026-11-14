@@ -73,6 +73,10 @@ def test_ucb_command_selection(app):
 def test_learning_cli_stats(app):
     """Test flask learning stats command."""
     with app.app_context():
+        # Cleanup first
+        db.session.execute(text("DELETE FROM command_stats WHERE maker = 'Genesis'"))
+        db.session.commit()
+        
         # Add test data with unique maker
         db.session.execute(text("""
             INSERT INTO command_stats (maker, model, ecu, command, attempts, successes, ucb_score)
@@ -85,6 +89,10 @@ def test_learning_cli_stats(app):
         
         assert result.exit_code == 0
         assert 'Genesis' in result.output or 'GV60' in result.output or '220101' in result.output
+        
+        # Cleanup after
+        db.session.execute(text("DELETE FROM command_stats WHERE maker = 'Genesis'"))
+        db.session.commit()
 
 
 def test_learning_promote_and_rollback(app):
