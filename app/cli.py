@@ -489,6 +489,112 @@ def register_cli(app: Flask) -> None:
         null_reduction = null_makers_before - null_makers_after
         click.echo(f"SUMMARY: Makers {distinct_makers_before} → {distinct_makers_after} (-{maker_reduction}), NULL {null_makers_before} → {null_makers_after} (-{null_reduction})")
         click.echo("=" * 80)
+    
+    @definitions.command("recover-destroyed-makers")
+    @click.option("--yes", is_flag=True, help="Apply recovery without confirmation")
+    def recover_destroyed_makers(yes: bool) -> None:
+        """Recover maker names that were incorrectly truncated during normalization.
+        
+        Recovers:
+        - 'Aston' → 'Aston Martin'
+        - 'MV' → 'MV Agusta'
+        - 'Legend' → 'Legend Cars'
+        - 'SCCA' → 'SCCA Enterprises'
+        - 'BT1' → 'General Motors'
+        Also fixes '공통규격' to not_vehicle.
+        """
+        from sqlalchemy import text
+        
+        click.echo("=" * 80)
+        click.echo("RECOVER DESTROYED MAKER NAMES")
+        click.echo("=" * 80)
+        click.echo()
+        
+        # Show current counts
+        click.echo("Current truncated maker counts:")
+        for maker in ['Aston', 'MV', 'Legend', 'SCCA', 'BT1', '공통규격']:
+            count = db.session.execute(text("""
+                SELECT COUNT(*) FROM vehicle_definitions WHERE maker = :maker
+            """), {'maker': maker}).scalar()
+            if count > 0:
+                click.echo(f"  {maker}: {count} rows")
+        
+        if not yes:
+            if not click.confirm("\nRecover these makers from file paths?"):
+                click.echo("Aborted.")
+                return
+        
+        click.echo("\nRecovering makers...")
+        
+        # 1. Aston -> Aston Martin
+        result = db.session.execute(text("""
+            UPDATE vehicle_definitions vd
+            SET maker = 'Aston Martin'
+            FROM definition_sources ds
+            WHERE vd.source_id = ds.id
+            AND vd.maker = 'Aston'
+            AND (ds.file_path ILIKE '%Aston%Martin%' OR ds.file_path ILIKE '%AstonMartin%')
+        """))
+        click.echo(f"  Aston → Aston Martin: {result.rowcount} rows")
+        
+        # 2. MV -> MV Agusta
+        result = db.session.execute(text("""
+            UPDATE vehicle_definitions vd
+            SET maker = 'MV Agusta'
+            FROM definition_sources ds
+            WHERE vd.source_id = ds.id
+            AND vd.maker = 'MV'
+            AND (ds.file_path ILIKE '%MV%Agusta%' OR ds.file_path ILIKE '%MVAgusta%')
+        """))
+        click.echo(f"  MV → MV Agusta: {result.rowcount} rows")
+        
+        # 3. Legend -> Legend Cars
+        result = db.session.execute(text("""
+            UPDATE vehicle_definitions vd
+            SET maker = 'Legend Cars'
+            FROM definition_sources ds
+            WHERE vd.source_id = ds.id
+            AND vd.maker = 'Legend'
+            AND (ds.file_path ILIKE '%Legend%Cars%' OR ds.file_path ILIKE '%LegendCars%')
+        """))
+        click.echo(f"  Legend → Legend Cars: {result.rowcount} rows")
+        
+        # 4. SCCA -> SCCA Enterprises
+        result = db.session.execute(text("""
+            UPDATE vehicle_definitions vd
+            SET maker = 'SCCA Enterprises'
+            FROM definition_sources ds
+            WHERE vd.source_id = ds.id
+            AND vd.maker = 'SCCA'
+            AND (ds.file_path ILIKE '%SCCA%Enterprises%' OR ds.file_path ILIKE '%SCCAEnterprises%')
+        """))
+        click.echo(f"  SCCA → SCCA Enterprises: {result.rowcount} rows")
+        
+        # 5. BT1 -> General Motors
+        result = db.session.execute(text("""
+            UPDATE vehicle_definitions vd
+            SET maker = 'General Motors'
+            FROM definition_sources ds
+            WHERE vd.source_id = ds.id
+            AND vd.maker = 'BT1'
+            AND ds.file_path ILIKE '%BT1%'
+        """))
+        click.echo(f"  BT1 → General Motors: {result.rowcount} rows")
+        
+        # 6. 공통규격 -> not_vehicle
+        result = db.session.execute(text("""
+            UPDATE vehicle_definitions
+            SET powertrain = 'not_vehicle'
+            WHERE maker = '공통규격' AND powertrain != 'not_vehicle'
+        """))
+        click.echo(f"  공통규격 → not_vehicle: {result.rowcount} rows")
+        
+        db.session.commit()
+        
+        click.echo()
+        click.echo("=" * 80)
+        click.echo("Recovery complete.")
+        click.echo("=" * 80)
 
     @definitions.command("backfill-ecu")
     @click.option("--report-only", is_flag=True, help="Show before/after stats without applying changes")
