@@ -1,31 +1,31 @@
 """Integration tests for WESCAN build-profiles E2E flow."""
 import pytest
 import json
+import uuid
 from pathlib import Path
 from sqlalchemy import text
 from app.extensions import db
-
-
-pytestmark = pytest.mark.skip(reason="WESCAN integration tests need fixture refinement")
 
 
 @pytest.fixture
 def wescan_test_commands(app):
     """Create test diagnostic commands for WESCAN profiling."""
     with app.app_context():
-        import uuid
-        sha_hash = str(uuid.uuid4()).replace('-', '') + str(uuid.uuid4()).replace('-', '')[:32]
+        # Generate unique identifiers for this test run
+        unique_id = str(uuid.uuid4())[:8]
+        sha_hash = uuid.uuid4().hex + uuid.uuid4().hex[:32]
+        file_path = f'/test/wescan_test_{unique_id}.dbc'
         
         # Create definition source
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
             VALUES ('dbc', :path, :sha, 100, NOW())
-        """), {'path': f'/test/wescan_test_{sha_hash[:8]}.dbc', 'sha': sha_hash})
+        """), {'path': file_path, 'sha': sha_hash})
         db.session.commit()
         
         source_id = db.session.execute(text("""
-            SELECT id FROM definition_sources WHERE file_path = '/test/wescan_test.dbc'
-        """)).scalar()
+            SELECT id FROM definition_sources WHERE file_path = :path
+        """), {'path': file_path}).scalar()
         
         # Create diagnostic commands for different makers/models
         db.session.execute(text("""
@@ -42,15 +42,15 @@ def wescan_test_commands(app):
         """), {'sid': source_id})
         db.session.commit()
         
-        yield source_id
+        yield {'source_id': source_id, 'file_path': file_path}
         
         # Cleanup
         db.session.execute(text("""
             DELETE FROM diagnostic_commands WHERE source_id = :sid
         """), {'sid': source_id})
         db.session.execute(text("""
-            DELETE FROM definition_sources WHERE id = :sid
-        """), {'sid': source_id})
+            DELETE FROM definition_sources WHERE file_path = :path
+        """), {'path': file_path})
         db.session.commit()
 
 
@@ -150,3 +150,84 @@ def test_wescan_build_profiles_function(app, wescan_test_commands):
                     assert cmd['command_bytes'] == '221050'
                     assert cmd['formula'] == 'A/2'
                     assert cmd['unit'] == '%'
+
+
+def test_wescan_coverage_cli(app, wescan_test_commands):
+    """Test flask wescan coverage command."""
+    with app.app_context():
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=['wescan', 'coverage'])
+        
+        assert result.exit_code == 0
+        assert 'WESCAN PROFILE COVERAGE REPORT' in result.output
+        assert 'Overall Coverage:' in result.output
+        assert 'Total makers:' in result.output
+        assert 'Commands by Maker:' in result.output
+
+
+def test_wescan_coverage_with_maker_filter(app, wescan_test_commands):
+    """Test flask wescan coverage --maker filter."""
+    with app.app_context():
+        runner = app.test_cli_runner()
+        
+        # Should work with Korean name
+        result = runner.invoke(args=['wescan', 'coverage', '--maker', '현대'])
+        assert result.exit_code == 0
+        
+        # Should work with English name (via maker_aliases)
+        result2 = runner.invoke(args=['wescan', 'coverage', '--maker', 'Hyundai'])
+        assert result2.exit_code == 0
+
+
+def test_wescan_coverage_detail(app, wescan_test_commands):
+    """Test flask wescan coverage --detail."""
+    with app.app_context():
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=['wescan', 'coverage', '--detail'])
+        
+        assert result.exit_code == 0
+        assert 'Per-Model Breakdown:' in result.output
+
+
+def test_battery_check_sources_cli(app):
+    """Test flask battery check-sources command."""
+    with app.app_context():
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=['battery', 'check-sources'])
+        
+        assert result.exit_code == 0
+        assert 'BATTERY SPECS SOURCE VERIFICATION' in result.output
+        assert 'Overall Coverage:' in result.output
+        assert 'Source Type Distribution:' in result.output
+        assert 'Data Completeness:' in result.output
+
+
+def test_battery_check_sources_detail(app):
+    """Test flask battery check-sources --detail."""
+    with app.app_context():
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=['battery', 'check-sources', '--detail'])
+        
+        assert result.exit_code == 0
+        assert 'Per-Maker Breakdown:' in result.output
+
+
+def test_wescan_build_profiles_export_integration(app, wescan_test_commands, tmp_path):
+    """Test complete flask wescan build-profiles --export flow."""
+    with app.app_context():
+        export_file = tmp_path / "test_profiles.json"
+        
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=['wescan', 'build-profiles', '--export', str(export_file)])
+        
+        assert result.exit_code == 0
+        assert export_file.exists()
+        
+        # Verify JSON is valid and has expected structure
+        with open(export_file, 'r') as f:
+            data = json.load(f)
+        
+        assert 'profiles' in data
+        assert 'coverage' in data
+        assert isinstance(data['profiles'], dict)
+        assert isinstance(data['coverage'], dict)
