@@ -76,7 +76,25 @@ def _now() -> datetime:
 def lookup_car(actor: User, car_no: str | None, refresh: bool = False) -> dict[str, Any]:
     """조회 결과를 화면에 보여 줄 형태로. 실패하면 CarInfoError(guide에 안내 문구)."""
     dto, cached = car_info.lookup(actor, car_no, refresh=refresh)
-    return {"car_no": car_info.normalize_car_no(car_no), "car": car_info.normalize_dto(dto), "cached": cached}
+    car = car_info.normalize_dto(dto)
+    
+    # Check for manual override from previous scan
+    normalized_car_no = car_info.normalize_car_no(car_no)
+    if normalized_car_no:
+        from sqlalchemy import select, desc
+        from app.modules.scans.models import Scan
+        latest_scan = db.session.scalar(
+            select(Scan)
+            .where(Scan.car_no == normalized_car_no, Scan.type_source == 'manual_override')
+            .order_by(desc(Scan.created_at))
+            .limit(1)
+        )
+        if latest_scan:
+            # Add override information to car dict for plan selection
+            car['override_type'] = latest_scan.type
+            car['override_source'] = 'manual_override'
+    
+    return {"car_no": normalized_car_no, "car": car, "cached": cached}
 
 
 def clean_steps(raw: Any) -> list[dict]:

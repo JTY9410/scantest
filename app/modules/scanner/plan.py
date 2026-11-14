@@ -115,12 +115,22 @@ def _is_hkmc(car: dict | None) -> bool:
 
 
 def _is_hkmc_electrified(car: dict | None) -> bool:
+    # Check manual override first
+    override_type = (car or {}).get("override_type")
+    if override_type:
+        return _is_hkmc(car) and override_type in ("ev", "phev", "hev", "fcev")
+    
     fuel = str((car or {}).get("diag_fuel") or "").upper()
     return _is_hkmc(car) and any(f.upper() in fuel for f in ELECTRIFIED)
 
 
 def _is_electrified(car: dict | None) -> bool:
     """전기·하이브리드·수소. 연료를 모르면(조회 실패 등) 전동차일 수 있다고 본다."""
+    # Check manual override first
+    override_type = (car or {}).get("override_type")
+    if override_type:
+        return override_type in ("ev", "phev", "hev", "fcev")
+    
     fuel = str((car or {}).get("diag_fuel") or "").upper()
     return not fuel or any(f.upper() in fuel for f in ELECTRIFIED)
 
