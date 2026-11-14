@@ -22,8 +22,8 @@ def canze_test_data(app, tmp_path):
         # Create definition source
         sha_hash = '0' * 64
         db.session.execute(text("""
-            INSERT INTO definition_sources (source_type, file_path, maker, parser_version, sha256, file_size, imported_at, created_at)
-            VALUES ('canze', :path, 'TestMaker', '1.0', :sha, 100, now(), now())
+            INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
+            VALUES ('canze', :path, :sha, 100, now())
         """), {'path': str(csv_file), 'sha': sha_hash})
         db.session.commit()
         
