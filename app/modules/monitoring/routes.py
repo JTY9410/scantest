@@ -80,48 +80,130 @@ def scan_show(scan_id: int):
                           clear_logs=clear_logs, powertrain_audit_logs=audit_logs)
 
 
-@bp.post("/scan/<int:scan_id>/override-powertrain")
+@bp.post("/scan/<int:scan_id>/override-fields")
 @admin_required
-def override_scan_powertrain(scan_id: int):
-    """Manually override scan powertrain classification."""
+def override_scan_fields(scan_id: int):
+    """Manually override scan classification fields (powertrain, fuel, maker, model, year, battery)."""
     from flask import jsonify, session
     from app.extensions import db
     from app.modules.definitions.audit_models import PowertrainOverrideAudit
     
     scan = service.get_scan(scan_id)
+    data = request.json
+    reason = data.get("reason", "").strip()
+    user_id = session.get("user_id")
     
-    new_powertrain = request.json.get("powertrain")
-    reason = request.json.get("reason", "").strip()
+    changes = []
     
-    # Validate powertrain value
-    valid_powertrains = ["BEV", "PHEV", "HEV", "FCEV", "ICE", "not_vehicle", "unknown"]
-    if new_powertrain not in valid_powertrains:
-        return jsonify({"error": "Invalid powertrain value"}), 400
+    # Powertrain
+    if "powertrain" in data and data["powertrain"]:
+        valid_powertrains = ["BEV", "PHEV", "HEV", "FCEV", "ICE", "not_vehicle", "unknown"]
+        if data["powertrain"] not in valid_powertrains:
+            return jsonify({"error": "Invalid powertrain value"}), 400
+        if scan.type != data["powertrain"]:
+            audit = PowertrainOverrideAudit(
+                scan_id=scan_id, user_id=user_id,
+                field_name="powertrain",
+                previous_value=scan.type, new_value=data["powertrain"],
+                previous_powertrain=scan.type, new_powertrain=data["powertrain"],
+                previous_source=scan.type_source, new_source="manual_override",
+                reason=reason or None
+            )
+            db.session.add(audit)
+            scan.type = data["powertrain"]
+            scan.type_source = "manual_override"
+            scan.powertrain_conflict = False
+            changes.append("powertrain")
     
-    # Record audit
-    audit = PowertrainOverrideAudit(
-        scan_id=scan_id,
-        user_id=session.get("user_id"),
-        previous_powertrain=scan.type,
-        new_powertrain=new_powertrain,
-        previous_source=scan.type_source,
-        new_source="manual_override",
-        reason=reason or None
-    )
-    db.session.add(audit)
+    # Fuel
+    if "fuel" in data and data["fuel"]:
+        if scan.car_fuel != data["fuel"]:
+            audit = PowertrainOverrideAudit(
+                scan_id=scan_id, user_id=user_id,
+                field_name="fuel",
+                previous_value=scan.car_fuel, new_value=data["fuel"],
+                new_source="manual_override",
+                reason=reason or None
+            )
+            db.session.add(audit)
+            scan.car_fuel = data["fuel"]
+            changes.append("fuel")
     
-    # Update scan
-    scan.type = new_powertrain
-    scan.type_source = "manual_override"
-    scan.powertrain_conflict = False  # Resolved by manual override
+    # Maker
+    if "maker" in data and data["maker"]:
+        if scan.car_maker != data["maker"]:
+            audit = PowertrainOverrideAudit(
+                scan_id=scan_id, user_id=user_id,
+                field_name="maker",
+                previous_value=scan.car_maker, new_value=data["maker"],
+                new_source="manual_override",
+                reason=reason or None
+            )
+            db.session.add(audit)
+            scan.car_maker = data["maker"]
+            changes.append("maker")
+    
+    # Model
+    if "model" in data and data["model"]:
+        if scan.car_model != data["model"]:
+            audit = PowertrainOverrideAudit(
+                scan_id=scan_id, user_id=user_id,
+                field_name="model",
+                previous_value=scan.car_model, new_value=data["model"],
+                new_source="manual_override",
+                reason=reason or None
+            )
+            db.session.add(audit)
+            scan.car_model = data["model"]
+            changes.append("model")
+    
+    # Year
+    if "year" in data and data["year"]:
+        try:
+            year = int(data["year"])
+            if scan.car_year != year:
+                audit = PowertrainOverrideAudit(
+                    scan_id=scan_id, user_id=user_id,
+                    field_name="year",
+                    previous_value=str(scan.car_year) if scan.car_year else None,
+                    new_value=str(year),
+                    new_source="manual_override",
+                    reason=reason or None
+                )
+                db.session.add(audit)
+                scan.car_year = year
+                changes.append("year")
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid year value"}), 400
+    
+    # Battery capacity
+    if "battery_capacity" in data and data["battery_capacity"]:
+        try:
+            capacity = float(data["battery_capacity"])
+            if scan.car_battery_capacity != capacity:
+                audit = PowertrainOverrideAudit(
+                    scan_id=scan_id, user_id=user_id,
+                    field_name="battery_capacity",
+                    previous_value=str(scan.car_battery_capacity) if scan.car_battery_capacity else None,
+                    new_value=str(capacity),
+                    new_source="manual_override",
+                    reason=reason or None
+                )
+                db.session.add(audit)
+                scan.car_battery_capacity = capacity
+                changes.append("battery_capacity")
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid battery capacity value"}), 400
+    
+    if not changes:
+        return jsonify({"error": "No changes requested"}), 400
     
     db.session.commit()
     
     return jsonify({
         "success": True,
         "scan_id": scan_id,
-        "new_powertrain": new_powertrain,
-        "audit_id": audit.id
+        "changes": changes
     })
 
 

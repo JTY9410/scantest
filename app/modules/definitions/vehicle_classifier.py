@@ -336,36 +336,30 @@ def classify_vehicle_powertrain(
     
     # Priority 1: Plate lookup (PRIMARY source - official vehicle registration)
     # CRITICAL: This must NEVER break classification
-    # Use diag_fuel if provided (from car_info.lookup), otherwise skip database query
+    # Use diag_fuel if provided (from car_info.lookup)
     if plate_number and diag_fuel:
-        plate_pt, plate_conf = map_fuel_to_powertrain(diag_fuel)
-        if plate_pt:
-            plate_result = (plate_pt, plate_conf)
+        try:
+            plate_pt, plate_conf = map_fuel_to_powertrain(diag_fuel)
+            if plate_pt:
+                plate_result = (plate_pt, plate_conf)
+        except Exception:
+            pass
     
     # Priority 2: VIN-based (CROSS-CHECK)
     # CRITICAL: This must NEVER break classification
     if vin and validate_vin(vin):
         try:
-            # Check if vin_decode_rules table exists (may not exist in tests)
-            table_check = db.session.execute(text("""
-                SELECT EXISTS (
-                    SELECT FROM information_schema.tables 
-                    WHERE table_name = 'vin_decode_rules'
-                )
-            """)).scalar()
+            vin_rules = db.session.execute(text("""
+                SELECT wmi_pattern, vds_position, vds_value_pattern, powertrain, confidence
+                FROM vin_decode_rules
+                ORDER BY confidence DESC
+            """)).fetchall()
             
-            if table_check:
-                vin_rules = db.session.execute(text("""
-                    SELECT wmi_pattern, vds_position, vds_value_pattern, powertrain, confidence
-                    FROM vin_decode_rules
-                    ORDER BY confidence DESC
-                """)).fetchall()
-                
-                rules_list = [dict(row._mapping) for row in vin_rules]
-                powertrain_vin, source_vin, conf_vin = decode_powertrain_from_vin(vin, rules_list)
-                
-                if powertrain_vin and powertrain_vin != 'unknown' and source_vin == 'vin_rule':
-                    vin_result = (powertrain_vin, conf_vin)
+            rules_list = [dict(row._mapping) for row in vin_rules]
+            powertrain_vin, source_vin, conf_vin = decode_powertrain_from_vin(vin, rules_list)
+            
+            if powertrain_vin and powertrain_vin != 'unknown' and source_vin == 'vin_rule':
+                vin_result = (powertrain_vin, conf_vin)
         except Exception:
             # VIN decoding failed - not fatal, continue without VIN source
             pass

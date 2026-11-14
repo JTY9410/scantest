@@ -171,36 +171,20 @@ def search_reports(*, q: str, user_id: int | None, start: date | None, end: date
 
 def get_powertrain_audit_logs(scan_id: int | None = None, vehicle_definition_id: int | None = None):
     """Get powertrain override audit logs for a scan or vehicle definition."""
-    try:
-        from app.modules.definitions.audit_models import PowertrainOverrideAudit
-        from sqlalchemy.orm import joinedload
-        from sqlalchemy import text
-        
-        # Check if table exists (may not exist in tests)
-        table_check = db.session.execute(text("""
-            SELECT EXISTS (
-                SELECT FROM information_schema.tables 
-                WHERE table_name = 'powertrain_override_audit'
-            )
-        """)).scalar()
-        
-        if not table_check:
-            return []
-        
-        stmt = select(PowertrainOverrideAudit).options(joinedload(PowertrainOverrideAudit.user))
-        
-        if scan_id:
-            stmt = stmt.where(PowertrainOverrideAudit.scan_id == scan_id)
-        elif vehicle_definition_id:
-            stmt = stmt.where(PowertrainOverrideAudit.vehicle_definition_id == vehicle_definition_id)
-        else:
-            return []
-        
-        stmt = stmt.order_by(PowertrainOverrideAudit.created_at.desc())
-        return list(db.session.scalars(stmt).all())
-    except Exception:
-        # Audit logs not available (test environment or migration not run)
+    from app.modules.definitions.audit_models import PowertrainOverrideAudit
+    from sqlalchemy.orm import joinedload
+    
+    stmt = select(PowertrainOverrideAudit).options(joinedload(PowertrainOverrideAudit.user))
+    
+    if scan_id:
+        stmt = stmt.where(PowertrainOverrideAudit.scan_id == scan_id)
+    elif vehicle_definition_id:
+        stmt = stmt.where(PowertrainOverrideAudit.vehicle_definition_id == vehicle_definition_id)
+    else:
         return []
+    
+    stmt = stmt.order_by(PowertrainOverrideAudit.created_at.desc())
+    return list(db.session.scalars(stmt).all())
 
 
 def member_name(user_id: int | None) -> User | None:

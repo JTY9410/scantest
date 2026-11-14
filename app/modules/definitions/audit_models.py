@@ -39,9 +39,15 @@ class PowertrainOverrideAudit(db.Model):
         index=True
     )
     previous_powertrain: Mapped[Optional[str]] = mapped_column(String(20))
-    new_powertrain: Mapped[str] = mapped_column(String(20), nullable=False)
+    new_powertrain: Mapped[Optional[str]] = mapped_column(String(20))
     previous_source: Mapped[Optional[str]] = mapped_column(String(100))
     new_source: Mapped[str] = mapped_column(String(100), nullable=False)
+    
+    # Additional fields for comprehensive manual override
+    field_name: Mapped[Optional[str]] = mapped_column(String(50))  # 'powertrain', 'fuel', 'maker', 'model', 'year', 'battery_spec'
+    previous_value: Mapped[Optional[str]] = mapped_column(Text)
+    new_value: Mapped[Optional[str]] = mapped_column(Text)
+    
     reason: Mapped[Optional[str]] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

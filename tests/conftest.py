@@ -22,7 +22,10 @@ def _app_base():
         db.session.execute(text("DROP SCHEMA public CASCADE"))
         db.session.execute(text("CREATE SCHEMA public"))
         db.session.commit()
-        db.create_all()
+        
+        # Run migrations to create full schema (including tables without ORM models like vin_decode_rules)
+        from flask_migrate import upgrade as flask_migrate_upgrade
+        flask_migrate_upgrade()
     yield app
     with app.app_context():
         db.session.execute(text("DROP SCHEMA public CASCADE"))

@@ -1,28 +1,60 @@
-{% macro manual_powertrain_form(scan_id, current_powertrain, current_source) %}
+{% macro manual_powertrain_form(scan_id, current_powertrain, current_source, current_fuel=None, current_maker=None, current_model=None, current_year=None, current_battery_capacity=None) %}
 <section class="card mt-6" aria-labelledby="manual-powertrain-title">
   <div class="card-body">
     <h2 id="manual-powertrain-title" class="text-lg font-bold">동력원 수동 분류</h2>
     <p class="text-sm text-muted mt-2">자동 분류가 틀린 경우 수동으로 수정할 수 있습니다.</p>
     
     <form id="powertrain-override-form" class="mt-4">
-      <div class="mb-4">
-        <label for="powertrain-select" class="block text-sm font-medium mb-2">동력원 선택</label>
-        <select id="powertrain-select" name="powertrain" class="form-select w-full" required>
-          <option value="">선택하세요</option>
-          <option value="BEV" {% if current_powertrain == 'BEV' %}selected{% endif %}>BEV (순수 전기)</option>
-          <option value="PHEV" {% if current_powertrain == 'PHEV' %}selected{% endif %}>PHEV (플러그인 하이브리드)</option>
-          <option value="HEV" {% if current_powertrain == 'HEV' %}selected{% endif %}>HEV (하이브리드)</option>
-          <option value="FCEV" {% if current_powertrain == 'FCEV' %}selected{% endif %}>FCEV (수소연료전지)</option>
-          <option value="ICE" {% if current_powertrain == 'ICE' %}selected{% endif %}>ICE (내연기관)</option>
-          <option value="not_vehicle" {% if current_powertrain == 'not_vehicle' %}selected{% endif %}>차량 아님</option>
-          <option value="unknown" {% if current_powertrain == 'unknown' %}selected{% endif %}>알 수 없음</option>
-        </select>
+      <div class="grid gap-4 md:grid-cols-2">
+        <div>
+          <label for="powertrain-select" class="block text-sm font-medium mb-2">동력원</label>
+          <select id="powertrain-select" name="powertrain" class="form-select w-full">
+            <option value="">변경 안 함</option>
+            <option value="BEV" {% if current_powertrain == 'BEV' %}selected{% endif %}>BEV (순수 전기)</option>
+            <option value="PHEV" {% if current_powertrain == 'PHEV' %}selected{% endif %}>PHEV (플러그인 하이브리드)</option>
+            <option value="HEV" {% if current_powertrain == 'HEV' %}selected{% endif %}>HEV (하이브리드)</option>
+            <option value="FCEV" {% if current_powertrain == 'FCEV' %}selected{% endif %}>FCEV (수소연료전지)</option>
+            <option value="ICE" {% if current_powertrain == 'ICE' %}selected{% endif %}>ICE (내연기관)</option>
+            <option value="not_vehicle" {% if current_powertrain == 'not_vehicle' %}selected{% endif %}>차량 아님</option>
+            <option value="unknown" {% if current_powertrain == 'unknown' %}selected{% endif %}>알 수 없음</option>
+          </select>
+        </div>
+        
+        <div>
+          <label for="fuel-input" class="block text-sm font-medium mb-2">연료</label>
+          <input type="text" id="fuel-input" name="fuel" class="form-input w-full" 
+                 value="{{ current_fuel or '' }}" placeholder="예: 전기, 가솔린, 디젤">
+        </div>
+        
+        <div>
+          <label for="maker-input" class="block text-sm font-medium mb-2">제조사</label>
+          <input type="text" id="maker-input" name="maker" class="form-input w-full" 
+                 value="{{ current_maker or '' }}" placeholder="예: 현대, 기아">
+        </div>
+        
+        <div>
+          <label for="model-input" class="block text-sm font-medium mb-2">모델</label>
+          <input type="text" id="model-input" name="model" class="form-input w-full" 
+                 value="{{ current_model or '' }}" placeholder="예: 아이오닉 5">
+        </div>
+        
+        <div>
+          <label for="year-input" class="block text-sm font-medium mb-2">연식</label>
+          <input type="number" id="year-input" name="year" class="form-input w-full" 
+                 value="{{ current_year or '' }}" placeholder="예: 2023" min="1900" max="2100">
+        </div>
+        
+        <div>
+          <label for="battery-capacity-input" class="block text-sm font-medium mb-2">배터리 용량 (kWh)</label>
+          <input type="number" id="battery-capacity-input" name="battery_capacity" class="form-input w-full" 
+                 value="{{ current_battery_capacity or '' }}" placeholder="예: 77.4" step="0.1">
+        </div>
       </div>
       
-      <div class="mb-4">
+      <div class="mt-4">
         <label for="reason-input" class="block text-sm font-medium mb-2">수정 사유 (선택)</label>
-        <textarea id="reason-input" name="reason" class="form-textarea w-full" rows="3" 
-                  placeholder="예: 실제 차량 확인 결과 PHEV 모델임"></textarea>
+        <textarea id="reason-input" name="reason" class="form-textarea w-full" rows="2" 
+                  placeholder="예: 실제 차량 확인 결과 정정"></textarea>
       </div>
       
       <div class="flex gap-2">
@@ -70,11 +102,21 @@
     e.preventDefault();
     
     const formData = new FormData(form);
-    const powertrain = formData.get('powertrain');
-    const reason = formData.get('reason');
+    const payload = {
+      powertrain: formData.get('powertrain') || undefined,
+      fuel: formData.get('fuel') || undefined,
+      maker: formData.get('maker') || undefined,
+      model: formData.get('model') || undefined,
+      year: formData.get('year') || undefined,
+      battery_capacity: formData.get('battery_capacity') || undefined,
+      reason: formData.get('reason') || undefined
+    };
     
-    if (!powertrain) {
-      errorMsg.textContent = '동력원을 선택해주세요.';
+    // Remove undefined values
+    Object.keys(payload).forEach(key => payload[key] === undefined && delete payload[key]);
+    
+    if (Object.keys(payload).length === 0 || (Object.keys(payload).length === 1 && payload.reason)) {
+      errorMsg.textContent = '최소 하나 이상의 필드를 수정해주세요.';
       errorDiv.style.display = 'block';
       resultDiv.style.display = 'none';
       return;
@@ -86,18 +128,18 @@
     resultDiv.style.display = 'none';
     
     try {
-      const response = await fetch('{{ url_for("monitoring.override_scan_powertrain", scan_id=scan_id) }}', {
+      const response = await fetch('{{ url_for("monitoring.override_scan_fields", scan_id=scan_id) }}', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ powertrain, reason })
+        body: JSON.stringify(payload)
       });
       
       const data = await response.json();
       
       if (response.ok && data.success) {
-        resultMsg.textContent = `동력원이 ${data.new_powertrain}(으)로 변경되었습니다.`;
+        resultMsg.textContent = `${data.changes.length}개 필드가 변경되었습니다: ${data.changes.join(', ')}`;
         resultDiv.style.display = 'block';
         
         // Reload after 1 second to show updated data
