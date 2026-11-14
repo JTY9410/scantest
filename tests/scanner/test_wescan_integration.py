@@ -545,3 +545,104 @@ def test_nissaninfiniti_with_maker_aliases_db(app):
         assert 'nissan' in profiles
         assert 'nissan' in coverage['commands_by_maker']
         assert 'NissanInfiniti' not in coverage['commands_by_maker']
+
+
+def test_aaa_generic_common_classification(app):
+    """Test that AAA_ Generic makers are classified as common."""
+    with app.app_context():
+        from app.modules.scanner.wescan_profiles import build_profiles, get_profile_coverage
+        
+        # Create unique identifiers
+        unique_id = str(uuid.uuid4())[:8]
+        sha_hash = uuid.uuid4().hex + uuid.uuid4().hex[:32]
+        file_path = f'/test/aaa_generic_{unique_id}.dbc'
+        
+        # Create definition source
+        db.session.execute(text("""
+            INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
+            VALUES ('obdb', :path, :sha, 100, NOW())
+        """), {'path': file_path, 'sha': sha_hash})
+        db.session.commit()
+        
+        source_id = db.session.execute(text("""
+            SELECT id FROM definition_sources WHERE file_path = :path
+        """), {'path': file_path}).scalar()
+        
+        # Create diagnostic command with AAA_ Generic maker
+        db.session.execute(text("""
+            INSERT INTO diagnostic_commands 
+                (source_id, source_type, maker, model, ecu_address, service, pid, 
+                 command_bytes, label, formula, unit, verification_status,
+                 verification_count, success_count, failure_count,
+                 created_at, updated_at)
+            VALUES 
+                (:sid, 'obdb', 'AAA_ Generic', NULL, '7E0', '01', '0D', '010D', 
+                 'Vehicle Speed', 'A', 'km/h', 'verified', 0, 0, 0, now(), now())
+        """), {'sid': source_id})
+        db.session.commit()
+        
+        # Build profiles should include this in _common section
+        profiles = build_profiles()
+        coverage = get_profile_coverage()
+        
+        # Should be in _common section, not in regular makers
+        assert '_common' in profiles
+        assert 'AAA_ Generic' not in coverage['commands_by_maker']
+        
+        # Should be counted as common commands
+        assert coverage['common_commands'] >= 1
+
+
+def test_opel_alias_normalization(app):
+    """Test that Opel resolves to lowercase opel after migration."""
+    with app.app_context():
+        from app.core.makers import resolve_maker
+        from app.modules.scanner.wescan_profiles import build_profiles, get_profile_coverage
+        from flask_migrate import upgrade
+        
+        # Run migration to add Opel
+        upgrade()
+        
+        # Clear cache to reload from DB
+        import app.core.makers as makers_module
+        makers_module._ALIASES_CACHE = None
+        makers_module._REVERSE_LOOKUP_CACHE = None
+        
+        # Verify Opel resolves to opel
+        assert resolve_maker('Opel') == 'opel'
+        
+        # Create test data
+        unique_id = str(uuid.uuid4())[:8]
+        sha_hash = uuid.uuid4().hex + uuid.uuid4().hex[:32]
+        file_path = f'/test/opel_{unique_id}.dbc'
+        
+        db.session.execute(text("""
+            INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
+            VALUES ('obdb', :path, :sha, 100, NOW())
+        """), {'path': file_path, 'sha': sha_hash})
+        db.session.commit()
+        
+        source_id = db.session.execute(text("""
+            SELECT id FROM definition_sources WHERE file_path = :path
+        """), {'path': file_path}).scalar()
+        
+        db.session.execute(text("""
+            INSERT INTO diagnostic_commands 
+                (source_id, source_type, maker, model, ecu_address, service, pid, 
+                 command_bytes, label, formula, unit, verification_status,
+                 verification_count, success_count, failure_count,
+                 created_at, updated_at)
+            VALUES 
+                (:sid, 'obdb', 'Opel', 'Ampera-e', '7E4', '22', '1100', '221100', 
+                 'Battery SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now())
+        """), {'sid': source_id})
+        db.session.commit()
+        
+        # Build profiles should include this under 'opel' (lowercase)
+        profiles = build_profiles()
+        coverage = get_profile_coverage()
+        
+        # Should resolve to lowercase opel
+        assert 'opel' in profiles
+        assert 'opel' in coverage['commands_by_maker']
+        assert 'Opel' not in coverage['commands_by_maker']

@@ -1556,7 +1556,48 @@ def register_cli(app: Flask) -> None:
                             if len(candidates_list) == 0:
                                 skipped_none.append(f"Row {row_idx}: {ecu_address} {request_id} bit {start_bit}-{end_bit}")
                             elif len(candidates_list) > 1:
-                                skipped_multiple.append(f"Row {row_idx}: {ecu_address} {request_id} bit {start_bit}-{end_bit} ({len(candidates_list)} matches)")
+                                # Multiple matches: try to distinguish by unit/formula or use combined name
+                                csv_unit = row[7] if len(row) > 7 else None
+                                csv_formula = f"resolution={row[4]}, offset={row[5]}" if len(row) > 5 else None
+                                
+                                # Try to find exact match by unit
+                                exact_match = None
+                                if csv_unit:
+                                    for cmd in candidates_list:
+                                        if cmd.unit and cmd.unit.strip() == csv_unit.strip():
+                                            exact_match = cmd
+                                            break
+                                
+                                if exact_match:
+                                    # Found unique match by unit
+                                    if exact_match.label != correct_name:
+                                        changes.append({
+                                            'cmd_id': exact_match.id,
+                                            'ecu': ecu_address,
+                                            'command': request_id,
+                                            'position': f"{start_bit}-{end_bit}",
+                                            'old_label': exact_match.label,
+                                            'new_label': correct_name,
+                                            'match_method': 'unit'
+                                        })
+                                else:
+                                    # Cannot distinguish: combine all existing names with CSV name
+                                    existing_names = [cmd.label for cmd in candidates_list if cmd.label and not cmd.label.startswith('0x')]
+                                    if correct_name not in existing_names:
+                                        combined_name = ' / '.join(sorted(set(existing_names + [correct_name])))
+                                        
+                                        # Update all matching commands with combined name
+                                        for cmd in candidates_list:
+                                            if cmd.label != combined_name:
+                                                changes.append({
+                                                    'cmd_id': cmd.id,
+                                                    'ecu': ecu_address,
+                                                    'command': request_id,
+                                                    'position': f"{start_bit}-{end_bit}",
+                                                    'old_label': cmd.label,
+                                                    'new_label': combined_name,
+                                                    'match_method': 'multi_combined'
+                                                })
                             else:
                                 cmd = candidates_list[0]
                                 if cmd.label != correct_name:
@@ -1566,7 +1607,8 @@ def register_cli(app: Flask) -> None:
                                         'command': request_id,
                                         'position': f"{start_bit}-{end_bit}",
                                         'old_label': cmd.label,
-                                        'new_label': correct_name
+                                        'new_label': correct_name,
+                                        'match_method': 'single'
                                     })
             except Exception as e:
                 errors.append(f"Error reading {file_path}: {str(e)}")

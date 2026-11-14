@@ -84,7 +84,10 @@ def build_profiles() -> dict:
                 unicodedata.normalize('NFC', '_공통_센서'),
                 '공통규격', '공용규격', '_공통_센서'  # Both NFC and NFD forms
             }
-            if maker_normalized in common_markers or maker in common_markers:
+            # Also check for AAA_ prefix (generic/common markers)
+            if (maker_normalized in common_markers or 
+                maker in common_markers or 
+                maker.startswith('AAA_')):
                 # Store in common section
                 service_pid_key = f"{service}_{pid}"
                 ecu_key = ecu_address or 'unknown'
@@ -219,7 +222,9 @@ def get_profile_coverage() -> dict:
             unicodedata.normalize('NFC', '_공통_센서'),
             '공통규격', '공용규격', '_공통_센서'
         }
-        return maker_normalized in common_markers or maker in common_markers
+        return (maker_normalized in common_markers or 
+                maker in common_markers or 
+                maker.startswith('AAA_'))
     
     # Separate common commands from regular makers
     common_count = 0
