@@ -499,6 +499,10 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
         remember_seen_commands(scan.car_maker, scan.car_model, result["steps"])
     from app.modules.knowledge.alerts import record_command_outcomes
     record_command_outcomes(scan.car_maker, result["steps"], scan.id)
+    
+    # Phase 8: Record command results for continuous learning
+    _record_learning_stats(scan.car_maker, scan.car_model, steps, result)
+    
     record_incidents(scan.id, logic, result["errors"])
     for code in {c.id: c for c in matched.values()}.values():
         db.session.add(ScanCode(type=code.type, scan_id=scan.id, code_id=code.id))
@@ -513,6 +517,105 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
                           "report": report.id, "dataset": dataset.id, "pdf": document.size if document else None})
     db.session.commit()
     return scan
+
+
+def _record_learning_stats(maker: str | None, model: str | None, steps: list[dict], result: dict) -> None:
+    """Record command execution results for continuous learning.
+    
+    Phase 8: Extract success/failure from steps and persist to command_stats.
+    Failures are logged but do not fail the scan.
+    """
+    if not maker or not model:
+        return
+    
+    try:
+        from app.modules.scanner.continuous_learning import LearningStats
+        
+        stats = LearningStats()
+        
+        # Extract command results from steps
+        for step in steps:
+            command = step.get("command", "").upper()
+            if not command or command.startswith("AT"):
+                continue  # Skip AT commands
+            
+            # Extract ECU address and command bytes
+            ecu = step.get("ecu", "UNKNOWN")
+            reply = step.get("reply")
+            error = step.get("error")
+            t_ms = step.get("t_ms")
+            
+            # Determine success/failure
+            success = False
+            error_type = None
+            
+            if error:
+                if "timeout" in error.lower():
+                    error_type = "timeout"
+                elif "nrc" in error.lower() or "7f" in str(reply or "").lower():
+                    error_type = "nrc"
+                else:
+                    error_type = "other"
+            elif reply and reply not in ("NO DATA", "?", "ERROR"):
+                success = True
+            
+            # Record result
+            stats.record_command_result(
+                maker=maker,
+                model=model,
+                ecu=ecu,
+                command=command,
+                success=success,
+                response_time_ms=t_ms if success else None,
+                error_type=error_type
+            )
+        
+        # Persist to database
+        stats.persist_to_database()
+        
+        # Update verification status for commands that meet criteria
+        _update_verification_status(maker, model)
+        
+    except Exception as exc:
+        # Log but do not fail the scan
+        current_app.logger.warning(f"Learning stats recording failed: {exc}", exc_info=True)
+
+
+def _update_verification_status(maker: str, model: str | None) -> None:
+    """Update diagnostic_commands verification status based on learning stats.
+    
+    Rule: >= 10 attempts with >= 80% success rate → verified
+    """
+    try:
+        from sqlalchemy import text
+        
+        # Find commands that meet verification criteria
+        result = db.session.execute(text("""
+            UPDATE diagnostic_commands dc
+            SET verification_status = 'verified',
+                verification_count = cs.attempts,
+                success_count = cs.successes,
+                updated_at = now()
+            FROM command_stats cs
+            WHERE dc.maker = :maker
+                AND (dc.model = :model OR :model IS NULL)
+                AND cs.maker = :maker
+                AND (cs.model = :model OR :model IS NULL)
+                AND dc.command_bytes = cs.command
+                AND cs.attempts >= 10
+                AND (cs.successes::float / cs.attempts) >= 0.8
+                AND dc.verification_status != 'verified'
+            RETURNING dc.id, dc.label, cs.attempts, cs.successes
+        """), {'maker': maker, 'model': model})
+        
+        updated = result.fetchall()
+        if updated:
+            current_app.logger.info(
+                f"Updated {len(updated)} commands to verified for {maker} {model or '(all models)'}"
+            )
+        
+    except Exception as exc:
+        current_app.logger.warning(f"Verification status update failed: {exc}", exc_info=True)
 
 
 def _save_document(scan: Scan) -> ScanDocument | None:
