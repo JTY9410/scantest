@@ -58,12 +58,15 @@ def test_upload_csv_creates_scan_record(_app_base, make_user):
     from werkzeug.datastructures import FileStorage
     from app.extensions import db
     
-    # 최소한의 유효한 CSV
-    csv_data = b"""Time,ID,Data
-0.001,7DF,0100
-0.050,7E8,4100BE1FB813
-0.100,7DF,0900
-0.150,7E8,490214575A5A5A31323334353637383930313233
+    # 최소한의 유효한 CSV (PID 01 00 요청 및 응답)
+    csv_data = b"""Time,Channel,CAN_ID,DLC,Data
+0.001,1,0x7DF,8,02 01 00 00 00 00 00 00
+0.050,1,0x7E8,8,06 41 00 BE 1F B8 13 00
+0.100,1,0x7DF,8,02 09 00 00 00 00 00 00
+0.110,1,0x7E8,8,10 14 49 00 14 57 5A 5A
+0.115,1,0x7DF,8,30 00 00 00 00 00 00 00
+0.120,1,0x7E8,8,21 5A 31 32 33 34 35 36
+0.125,1,0x7E8,8,22 37 38 39 30 31 32 33
 """
     
     with _app_base.app_context():
@@ -101,14 +104,19 @@ def test_upload_trc_creates_scan_record(_app_base, make_user):
     from werkzeug.datastructures import FileStorage
     from app.extensions import db
     
-    # 최소한의 유효한 TRC (PCAN 형식)
+    # 최소한의 유효한 TRC (PCAN 형식 - PID 01 00 요청 및 응답)
     trc_data = b""";$FILEVERSION=1.1
 ;$STARTTIME=47717.5416666667
 ;
 ;   Time (abs)  T  Bus  ID   Reserved  DLC  Data ... Checksum
 ;
-      0.003586  Rx   1  0x7E8   00 00 00 00   8  41 00 BE 1F B8 13 00 00   00
-      0.100000  Rx   1  0x7EC   00 00 00 00   8  62 01 01 EF FB E7 00 00   00
+      0.001000  Tx   1  0x7DF   00 00 00 00   8  02 01 00 00 00 00 00 00   00
+      0.050000  Rx   1  0x7E8   00 00 00 00   8  06 41 00 BE 1F B8 13 00   00
+      0.100000  Tx   1  0x7DF   00 00 00 00   8  02 09 00 00 00 00 00 00   00
+      0.110000  Rx   1  0x7E8   00 00 00 00   8  10 14 49 00 14 57 5A 5A   00
+      0.115000  Tx   1  0x7DF   00 00 00 00   8  30 00 00 00 00 00 00 00   00
+      0.120000  Rx   1  0x7E8   00 00 00 00   8  21 5A 31 32 33 34 35 36   00
+      0.125000  Rx   1  0x7E8   00 00 00 00   8  22 37 38 39 30 31 32 33   00
 """
     
     with _app_base.app_context():
