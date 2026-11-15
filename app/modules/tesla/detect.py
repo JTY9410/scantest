@@ -154,21 +154,22 @@ def extract_vin_from_frames(frames: list) -> str | None:
         
         ts, can_id, data = frame[0], frame[1], frame[2]
         
-        if can_id != 0x405 or len(data) < 8:
+        if can_id != 0x405:
             continue
         
-        # Multiplex 인덱스 (첫 바이트)
-        mux = data[0]
-        
-        # 0x10: VIN 첫 7자
-        # 0x11: VIN 중간 7자
-        # 0x12: VIN 마지막 3자
-        if mux == 0x10:
-            vin_parts[0] = data[1:8].decode('ascii', errors='ignore')
-        elif mux == 0x11:
-            vin_parts[1] = data[1:8].decode('ascii', errors='ignore')
-        elif mux == 0x12:
-            vin_parts[2] = data[1:4].decode('ascii', errors='ignore')
+        if isinstance(data, bytes) and len(data) >= 4:
+            # Multiplex 인덱스 (첫 바이트)
+            mux = data[0]
+            
+            # 0x10: VIN 첫 7자
+            # 0x11: VIN 중간 7자
+            # 0x12: VIN 마지막 3자
+            if mux == 0x10 and len(data) >= 8:
+                vin_parts[0] = data[1:8].decode('ascii', errors='ignore')
+            elif mux == 0x11 and len(data) >= 8:
+                vin_parts[1] = data[1:8].decode('ascii', errors='ignore')
+            elif mux == 0x12 and len(data) >= 4:
+                vin_parts[2] = data[1:4].decode('ascii', errors='ignore')
     
     if len(vin_parts) == 3:
         vin = vin_parts[0] + vin_parts[1] + vin_parts[2]
