@@ -103,6 +103,8 @@ EGMP_EXTRA: tuple[Field, ...] = (
 ECU_FIELDS: tuple[tuple[Field, dict[str, str]], ...] = (
     (Field("ldc_voltage", "LDC 출력 전압", 0xE011, 10, 2, 0.001, "V", LIKELY, request=0x7E5,
            note="OBDb IONIQ-5·Tucson-Hybrid 정의 + 같은 응답의 입력 전압=팩 전압(로그 5개)"), {"egmp": LIKELY}),
+    (Field("ldc_voltage", "LDC 출력 전압", 0xE101, 10, 2, 0.001, "V", LIKELY, request=0x7E5,
+           note="OBDb Kia-EV9 정의, 실측 3A52→14.93V"), {"egmp": LIKELY}),
     (Field("ldc_input_voltage", "LDC 입력 전압", 0xE011, 14, 2, 0.1, "V", LIKELY, request=0x7E5,
            note="BMS 팩 전압과 0.3% 안(로그 5개)"), {"egmp": LIKELY}),
     (Field("dc_inlet_temp_1", "급속(DC) 충전 인렛 온도 1", 0xE004, 8, 1, 1, "°C", LIKELY, offset=-50, request=0x744,
@@ -146,7 +148,7 @@ def platform(model_hint: str | None, cell_count: int | None, cell_incomplete: bo
         return "porter"
     if any(k in hint for k in ("HEV", "하이브리드", "HYBRID")):
         return "hev"
-    if any(k in hint for k in ("아이오닉5", "아이오닉6", "IONIQ5", "IONIQ6", "EV6", "GV60")):
+    if any(k in hint for k in ("아이오닉5", "아이오닉6", "아이오닉9", "IONIQ5", "IONIQ6", "IONIQ9", "EV6", "EV9", "GV60")):
         return "egmp"
     if any(k in hint for k in ("니로", "NIRO")):
         return "niro"

@@ -26,7 +26,7 @@
     {"signal": "module_temp_2", "request_id": "7E4", "did": "0101", "start": 17, "width": 1, "endian": "big", "signed": true, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
     {"signal": "module_temp_3", "request_id": "7E4", "did": "0101", "start": 18, "width": 1, "endian": "big", "signed": true, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
     {"signal": "module_temp_4", "request_id": "7E4", "did": "0101", "start": 19, "width": 1, "endian": "big", "signed": true, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
-    {"signal": "inlet_temp", "request_id": "7E4", "did": "0101", "start": 22, "width": 1, "endian": "big", "signed": true, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "inlet_temp", "request_id": "7E4", "did": "0101", "start": 22, "width": 1, "endian": "big", "signed": false, "scale": 1, "offset": -40, "sources": ["jejusoul_hkmc", "obdb_kia_ev9"]},
     {"signal": "max_cell_v", "request_id": "7E4", "did": "0101", "start": 23, "width": 1, "endian": "big", "signed": false, "scale": 0.02, "offset": 0, "sources": ["wecar_scan_app", "jejusoul_hkmc"]},
     {"signal": "max_cell_no", "request_id": "7E4", "did": "0101", "start": 24, "width": 1, "endian": "big", "signed": false, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
     {"signal": "min_cell_v", "request_id": "7E4", "did": "0101", "start": 25, "width": 1, "endian": "big", "signed": false, "scale": 0.02, "offset": 0, "sources": ["wecar_scan_app", "jejusoul_hkmc"]},
