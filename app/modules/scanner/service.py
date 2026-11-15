@@ -444,7 +444,7 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
         kind=DatasetKind.LIVE_CAPTURE, file_format="wecar_elm", source=source, vehicle=vehicle[:100],
         filename=f"scan-{started:%Y%m%d-%H%M%S}.txt", sha256=hashlib.sha256(content).hexdigest(),
         size=len(content), content=content, summary=_trace_summary(trace) if trace else {},
-        note=f"스캔하기 · {TRANSPORTS[transport]}", uploaded_by=actor.id if hasattr(actor, 'id') else actor,
+        note=f"스캔하기 · {TRANSPORTS[transport]}", uploaded_by=_actor_id(actor),
     )
     db.session.add(dataset)
     db.session.flush()
@@ -458,7 +458,7 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     report = DiagnosticReport(
         dataset_id=dataset.id, vehicle=dataset.vehicle, values=result["battery"], diagnosis=diagnosis,
         rules_used=[{"rule_id": rid, "revision": rev} for rid, rev in used],
-        created_by=actor.id, created_at=_now(),
+        created_by=_actor_id(actor), created_at=_now(),
     )
     db.session.add(report)
     db.session.flush()
@@ -487,7 +487,7 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     
     scan = Scan(
         type=kind["type"], type_source=kind["source"], device_type=transport, device_uid=device,
-        tester_id=actor.id, company_id=actor.company_id, scan_vin=result["vin"], car_no=car_no,
+        tester_id=_actor_id(actor), company_id=actor.company_id if hasattr(actor, 'company_id') else None, scan_vin=result["vin"], car_no=car_no,
         car_vin=str(car.get("diag_car_id") or result["vin"] or "미확인"), car_maker=car.get("diag_company"),
         car_model=str(car.get("diag_model") or "미확인"), car_submodel=car.get("diag_submodel"),
         car_cc=_int(car.get("diag_displacement")), car_year=_int(car.get("diag_year")),
@@ -533,7 +533,7 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
         _add_error(result, "pdf", "결과 PDF", "pdf_error", "결과 PDF를 만들지 못했습니다. 결과 화면에서 다시 내려받으세요.")
         scan.bms_data.update(status=result["status"], errors=result["errors"], counts=result["counts"])
         flag_modified(scan, "bms_data")
-    audit.record("스캔하기", "Scan", scan.id, user_id=actor.id,
+    audit.record("스캔하기", "Scan", scan.id, user_id=_actor_id(actor),
                  changes={"status": result["status"], "transport": transport, "steps": len(steps),
                           "errors": result["counts"]["errors"], "dtcs": len(result["dtcs"]),
                           "report": report.id, "dataset": dataset.id, "pdf": document.size if document else None})
@@ -742,14 +742,14 @@ def change_type(actor, scan: Scan, new_type: str, reason: str | None = None) -> 
     if old == new_type:
         return scan
     history = list(scan.type_history or [])
-    history.append({"from": old, "to": new_type, "source": "manual", "by": actor.id, "at": _now().isoformat(),
+    history.append({"from": old, "to": new_type, "source": "manual", "by": _actor_id(actor), "at": _now().isoformat(),
                     "reason": (reason or "").strip()[:200] or None})
     scan.type, scan.type_source, scan.type_history = new_type, "manual", history
     data["powertrain"] = classify(data.get("car") or {}, data, manual=new_type)
     data.pop("wescan", None)
     scan.bms_data = data
     flag_modified(scan, "bms_data")
-    audit.record("스캔 유형 변경", "Scan", scan.id, user_id=actor.id,
+    audit.record("스캔 유형 변경", "Scan", scan.id, user_id=_actor_id(actor),
                  changes={"type": [LABELS.get(old, old), LABELS[new_type]]})
     db.session.commit()
     scan_result(scan)
