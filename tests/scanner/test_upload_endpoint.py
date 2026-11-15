@@ -4,8 +4,6 @@ import pytest
 from io import BytesIO
 from unittest.mock import patch
 
-pytestmark = pytest.mark.skip(reason="Upload tests need more realistic UDS transaction data")
-
 
 @pytest.fixture
 def upload_admin(client, make_user):
