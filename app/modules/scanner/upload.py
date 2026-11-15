@@ -268,24 +268,35 @@ def process_upload(
     except Exception as exc:
         raise UploadError(f"파일 처리 중 오류가 발생했습니다: {exc}")
     
-    # 4. Tesla 감지 (broadcast-only 데이터)
+    # 4. Tesla 감지 (transactions 여부와 무관)
     from app.modules.canlab.engine.decode import load_trace
     from app.modules.tesla import detect as tesla_detect
     
     trace = load_trace(trace_text)
     
-    # UDS transactions가 없고 Tesla 시그니처가 있으면 Tesla 경로
+    # Tesla 시그니처 체크 (VIN WMI, CAN IDs, 제조사)
     is_tesla = False
     extracted_vin = None
-    if not trace.transactions and trace.frames:
+    
+    if trace.frames:
         # frames를 (timestamp, can_id, data) 튜플로 변환
         frame_tuples = [(f.t_ms / 1000.0, f.can_id, f.data) for f in trace.frames]
-        is_tesla = tesla_detect.is_tesla(frame_tuples, vin=None)
         
-        if is_tesla:
-            extracted_vin = tesla_detect.extract_vin_from_frames(frame_tuples)
-            if extracted_vin:
-                current_app.logger.info(f"Tesla vehicle detected, VIN: {extracted_vin}")
+        # VIN 추출 시도
+        extracted_vin = tesla_detect.extract_vin_from_frames(frame_tuples)
+        
+        # Tesla 감지: VIN WMI (5YJ/7SA/LRW) 또는 CAN ID 패턴 (0x352+0x292+0x401)
+        is_tesla = tesla_detect.is_tesla(frame_tuples, vin=extracted_vin)
+        
+        # 제조사가 '테스라'인 경우도 Tesla 경로
+        if not is_tesla and car and isinstance(car, dict):
+            manufacturer = car.get('diag_company') or car.get('manufacturer') or ''
+            if '테스라' in manufacturer or 'tesla' in manufacturer.lower():
+                is_tesla = True
+                current_app.logger.info(f"Tesla detected by manufacturer: {manufacturer}")
+        
+        if is_tesla and extracted_vin:
+            current_app.logger.info(f"Tesla vehicle detected, VIN: {extracted_vin}")
     
     # 5. Tesla 경로: 디코딩 후 결과 저장
     if is_tesla:

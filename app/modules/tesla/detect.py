@@ -49,7 +49,8 @@ def is_tesla(frames: list, vin: str | None = None) -> bool:
     can_ids = {frame[1] for frame in frames if len(frame) >= 2}
     
     # Tesla 고유 ID 존재 확인
-    tesla_signature_ids = {0x405, 0x7FF, 0x401, 0x352, 0x332}
+    # 0x352: energy, 0x292: SOC, 0x401: brick voltages, 0x405: VIN
+    tesla_signature_ids = {0x405, 0x7FF, 0x401, 0x352, 0x332, 0x292}
     if len(tesla_signature_ids & can_ids) >= 3:
         return True
     
