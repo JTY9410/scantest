@@ -375,6 +375,10 @@ def upload_scan_data():
     
     file = request.files["file"]
     
+    # 파일이 선택되지 않았거나 비어있는 경우
+    if not file or not file.filename:
+        return {"success": False, "message": "파일을 선택해주세요."}, 400
+    
     # 선택 입력
     car_no = request.form.get("car_no")
     car_json = request.form.get("car")

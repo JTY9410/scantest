@@ -63,8 +63,9 @@ def parse_uploaded_trace(content: bytes, filename: str) -> str:
     try:
         trace = load_trace(text)
     except Exception as exc:
-        # 간단한 형식 체크
-        if "7E" not in text.upper() and "ID" not in text:
+        # 간단한 형식 체크: CAN ID나 일반적인 로그 패턴이 있는지
+        if ("7E" not in text.upper() and "0x" not in text.lower() and 
+            "ID" not in text and "CAN" not in text.upper()):
             raise UploadError(f"올바른 CAN 로그 형식이 아닙니다: {exc}")
         # 형식은 맞는 것 같지만 파싱 실패
         raise UploadError(f"CAN 로그를 파싱하지 못했습니다: {exc}")
