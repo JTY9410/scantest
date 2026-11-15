@@ -764,3 +764,153 @@ def inspection(scan, result: dict) -> dict:
         "additional_info": additional_info,
         "issues": issues,
     }
+
+
+def tesla_inspection(scan) -> dict:
+    """Tesla 업로드 스캔의 진단 보고서 view.
+    
+    scan.bms_data에서 Tesla 디코딩 데이터를 읽어 WESCAN EV 진단서 형식으로 변환.
+    """
+    when = _local(getattr(scan, "created_at", None))
+    tesla_data = scan.bms_data or {}
+    decoded = tesla_data.get('decoded', {})
+    soh_result = tesla_data.get('soh', {})
+    
+    # 차량 정보
+    manufacturer = tesla_data.get('manufacturer', 'Tesla')
+    model = tesla_data.get('model', 'Model 3')
+    year = tesla_data.get('year')
+    vin = tesla_data.get('vin', scan.scan_vin or scan.car_vin)
+    
+    # 에너지 (0x352)
+    energy_data = decoded.get('energy', {})
+    current_full = energy_data.get('nominal_full_pack_energy')  # kWh
+    remaining = energy_data.get('nominal_energy_remaining')  # kWh
+    
+    # SOC (0x292)
+    soc_data = decoded.get('soc', {})
+    soc = soc_data.get('soc_ave')  # %
+    
+    # 브릭 전압 (0x401)
+    bricks_data = decoded.get('bricks', {})
+    brick_min_v = bricks_data.get('min_voltage')  # V
+    brick_max_v = bricks_data.get('max_voltage')  # V
+    brick_min_no = bricks_data.get('min_brick_num')
+    brick_max_no = bricks_data.get('max_brick_num')
+    brick_spread = round(brick_max_v - brick_min_v, 3) if brick_max_v and brick_min_v else None
+    
+    # 온도 (0x332)
+    temps_data = decoded.get('temps', {})
+    temp_max = temps_data.get('max_temp')  # °C
+    temp_min = temps_data.get('min_temp')  # °C
+    
+    # 팩 전압/전류 (0x132)
+    pack_data = decoded.get('pack', {})
+    pack_voltage = pack_data.get('pack_voltage')  # V
+    pack_current = pack_data.get('pack_current')  # A
+    
+    # SOH (community reference)
+    soh_pct = soh_result.get('soh_pct')
+    soh_note = soh_result.get('calculation_note', '')
+    reference_kwh = soh_result.get('reference_kwh')
+    reference_source = soh_result.get('reference_source', '')
+    soh_available = soh_result.get('soh_available', False)
+    
+    # 판정
+    judgment = tesla_data.get('judgment', '판정보류')
+    judgment_reason = tesla_data.get('judgment_reason', '커뮤니티 기준 / 측정불가')
+    
+    # 측정불가 항목
+    unmeasurable_items = []
+    if not current_full:
+        unmeasurable_items.append({"item": "만충 에너지", "reason": "0x352 데이터 미수신"})
+    if not soc:
+        unmeasurable_items.append({"item": "SOC", "reason": "0x292 데이터 미수신"})
+    if not brick_min_v or not brick_max_v:
+        unmeasurable_items.append({"item": "브릭 전압", "reason": "0x401 데이터 미수신"})
+    if not temp_max or not temp_min:
+        unmeasurable_items.append({"item": "배터리 온도", "reason": "0x332 데이터 미수신"})
+    if not pack_voltage:
+        unmeasurable_items.append({"item": "팩 전압", "reason": "0x132 데이터 미수신"})
+    
+    # 추가 수집 정보 및 문제점
+    additional_issues = []
+    additional_issues.append("Tesla 차량은 OBD-II 진단 프로토콜 대신 CAN 브로드캐스트 방식으로 데이터를 수집합니다.")
+    additional_issues.append("제공되는 SOH 값은 커뮤니티 기준을 바탕으로 한 참고치이며, Tesla 공식 측정값이 아닙니다.")
+    if not soh_available:
+        additional_issues.append(f"SOH 계산 불가: {soh_note}")
+    additional_issues.append("일부 항목(셀별 전압, 급속/완속 충전 횟수 등)은 Tesla CAN 메시지에서 제공되지 않습니다.")
+    
+    code = f"WeSCAN-{(when or datetime.now(ZoneInfo('Asia/Seoul'))):%Y%m%d}-{int(getattr(scan, 'id', 0) or 0):08d}"
+    
+    return {
+        "kind": "ev",
+        "kind_label": "전기차 (Tesla)",
+        "powertrain": {"type": "ev", "source": "tesla_upload", "plugin": False, "hydrogen": False},
+        "plugin": False,
+        "hydrogen": False,
+        "heading_en": "ELECTRIC VEHICLE DIAGNOSTIC REPORT",
+        "heading": "전기차 진단 보고서",
+        "subheading": "TESLA BATTERY DIAGNOSTIC",
+        "pages": 5,
+        "code": code,
+        "issued_on": when.strftime("%Y.%m.%d") if when else "-",
+        "diagnosed_at": when.strftime("%Y. %m. %d.") if when else "-",
+        "vehicle": {
+            "manufacturer": manufacturer,
+            "model": model,
+            "year": year or "-",
+            "fuel": "electric",
+            "number": _mask_plate(scan.car_no),
+            "vin": vin or "-",
+            "mileage": None,
+            "mileage_text": "-",
+        },
+        "title": f"{manufacturer} {model}",
+        "soh": soh_pct,
+        "soh_note": f"SOH 참고치(미검증): {soh_note}" if soh_note else "SOH를 읽지 못했습니다.",
+        "mileage_note": "주행거리 정보가 제공되지 않습니다.",
+        "overall": judgment,
+        "judgment_note": judgment_reason,
+        "unread": len(unmeasurable_items),
+        "dtc_clear": True,
+        "dtc_count": 0,
+        "significant_dtc_count": 0,
+        "dtc_read": False,
+        "dtc_rows": [],
+        "groups": [],
+        "judgments": [],
+        "reconcile": None,
+        "reference": {
+            "bol_energy_kwh": reference_kwh,
+            "source": reference_source,
+        } if reference_kwh else {},
+        "bms": [
+            _measure("만충 에너지", current_full, "kWh", 1),
+            _measure("잔여 에너지", remaining, "kWh", 1),
+            _measure("SOC", soc, "%", 1),
+            _measure("SOH 참고치", soh_pct, "%", 1) if soh_pct else _measure("SOH 참고치", None, ""),
+            _measure("팩 전압", pack_voltage, "V", 1),
+            _measure("팩 전류", pack_current, "A", 1),
+            _measure("최고 온도", temp_max, "℃", 1),
+            _measure("최저 온도", temp_min, "℃", 1),
+            _measure("브릭 최고 전압", brick_max_v, "V", 3),
+            _measure("브릭 최저 전압", brick_min_v, "V", 3),
+            _measure("브릭 전압 편차", brick_spread, "V", 3),
+            _measure("최고 전압 브릭 번호", brick_max_no, "", 0),
+            _measure("최저 전압 브릭 번호", brick_min_no, "", 0),
+        ],
+        "power": [],
+        "cells": [],  # Tesla는 96개 브릭 전체 데이터를 제공하지 않음
+        "cell_min": brick_min_v,
+        "cell_max": brick_max_v,
+        "cell_spread": brick_spread,
+        "cell_no_mismatch": None,
+        "modules": [],
+        "module_min": temp_min,
+        "module_max": temp_max,
+        "module_spread": round(temp_max - temp_min, 1) if temp_max and temp_min else None,
+        "additional_info": unmeasurable_items,
+        "issues": additional_issues,
+        "tesla_specific": True,  # Flag for PDF rendering
+    }

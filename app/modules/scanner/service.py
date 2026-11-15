@@ -717,7 +717,7 @@ def scan_document(scan: Scan) -> ScanDocument:
 def scan_result(scan: Scan) -> dict:
     """결과 화면용. 스캔하기로 만든 스캔만 위스캔 형식 결과가 있다."""
     data = dict(scan.bms_data) if isinstance(scan.bms_data, dict) else {}
-    if data.get("source") not in ("scanner", "reconcile"):
+    if data.get("source") not in ("scanner", "reconcile", "tesla_upload"):
         raise ServiceError("스캔하기로 만든 결과가 아닙니다.", 404)
     wescan = data.get("wescan") if isinstance(data.get("wescan"), dict) else None
     if wescan is None or "judgments" not in wescan:

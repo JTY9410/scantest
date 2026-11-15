@@ -124,10 +124,18 @@ def _cover(view: dict) -> list:
     story += [
         _p(f"OVERALL  {view['overall']}", _H2),
         _p(view["judgment_note"] + (" · 고장코드 미검출" if view["dtc_clear"] else f" · 고장코드 {view['dtc_count']}건")),
-        _p(f"고장 코드 진단 · {len(view['groups'])}개 계통", _H2),
-        _table([[group["label"] for group in view["groups"]],
-                [str(group["count"]) for group in view["groups"]]],
-               [170 / len(view["groups"])] * len(view["groups"])),
+    ]
+    
+    # 고장 코드 계통 표 (groups가 있을 때만)
+    if view["groups"]:
+        story += [
+            _p(f"고장 코드 진단 · {len(view['groups'])}개 계통", _H2),
+            _table([[group["label"] for group in view["groups"]],
+                    [str(group["count"]) for group in view["groups"]]],
+                   [170 / len(view["groups"])] * len(view["groups"])),
+        ]
+    
+    story += [
         _p("검출된 고장 코드가 없습니다." if view["dtc_clear"] else f"검출된 고장 코드 {view['dtc_count']}건"),
         _p(f"{view['code']} · 발행일 {view['issued_on']}", _SMALL),
         _p("본 진단보고서는 위카모빌리티(주)와 (주)배터와이가 공동개발한 WESCAN 진단솔루션을 기반으로, "
@@ -189,8 +197,16 @@ def _battery_pages(view: dict) -> list:
         _p("고전압 시스템 계통", _H2),
         _p("BMS 센서 데이터", _H2),
         _pairs([(item["label"], _with_unit(item)) for item in view["bms"]]),
-        _p("전력 · 충전 · 구동 계통" if view["kind"] == "ev" or view["plugin"] else "전력 · 구동 계통", _H2),
-        _pairs([(item["label"], _with_unit(item)) for item in view["power"]]),
+    ]
+    
+    # power 계통 (있을 때만)
+    if view["power"]:
+        story += [
+            _p("전력 · 충전 · 구동 계통" if view["kind"] == "ev" or view["plugin"] else "전력 · 구동 계통", _H2),
+            _pairs([(item["label"], _with_unit(item)) for item in view["power"]]),
+        ]
+    
+    story += [
         PageBreak(),
         _p(f"셀 별 전압 분포 · 총 {len(view['cells'])}개 셀", _H2),
         _pairs([
@@ -234,6 +250,15 @@ def _additional_info_section(view: dict) -> list:
     story = [PageBreak(), _p("추가 수집 정보", _H2),
              _p("WESCAN 기본 진단서 외 추가로 수집된 정보입니다.", _SMALL)]
     
+    # Tesla 측정불가 항목 (list 형식)
+    if isinstance(additional_info, list):
+        if additional_info:
+            story.append(_p("측정불가 항목:", _SMALL))
+            for item in additional_info:
+                story.append(_p(f"• {item['item']}: {item['reason']}", _SMALL))
+        return story
+    
+    # 기존 dict 형식
     # Freeze frames
     if additional_info.get("freeze_frames"):
         story.append(_p(f"Freeze Frame 데이터: {additional_info['freeze_frames']['count']}건", _SMALL))
@@ -282,6 +307,13 @@ def _issues_section(view: dict) -> list:
     story = [_p("문제점", _H2),
              _p("수집 실패 명령, 오류, 동력원 충돌, 값 출처 없음 등", _SMALL)]
     
+    # Tesla 추가 정보 (list 형식)
+    if isinstance(issues, list):
+        for issue in issues:
+            story.append(_p(f"• {issue}", _SMALL))
+        return story
+    
+    # 기존 dict 형식
     # Errors
     if issues.get("errors"):
         error_list = issues["errors"].get("list", [])
@@ -381,9 +413,14 @@ def render_ice(scan: Scan, view: dict) -> bytes:
 
 def render(scan: Scan, result: dict) -> bytes:
     """스캔 유형(전기차·하이브리드·내연기관)에 맞는 기본 진단 보고서 PDF."""
-    from app.modules.scanner.report import inspection
+    from app.modules.scanner.report import inspection, tesla_inspection
 
-    view = inspection(scan, result)
+    # Tesla upload는 tesla_inspection 사용
+    if result.get("source") == "tesla_upload":
+        view = tesla_inspection(scan)
+    else:
+        view = inspection(scan, result)
+    
     return {"ev": render_ev, "hev": render_hev, "ice": render_ice}[view["kind"]](scan, view)
 
 

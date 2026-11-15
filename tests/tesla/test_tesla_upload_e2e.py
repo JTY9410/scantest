@@ -151,12 +151,54 @@ def test_tesla_soh_community_reference(_app_base):
         assert "참고" in result["calculation_note"] or "미검증" in result["calculation_note"]
 
 
-def test_tesla_pdf_generation():
-    """Tesla scan이 생성되면 PDF도 생성 가능해야 함."""
-    # PDF 생성은 기존 인프라를 재사용
-    # 이 테스트는 end-to-end 테스트에서 Scan이 생성되는지만 확인
-    # 실제 PDF 렌더링은 별도 통합 테스트로 검증
-    assert True  # Placeholder for future PDF integration
+def test_tesla_pdf_generation(_app_base, make_user):
+    """Tesla scan PDF 생성 및 필수 텍스트 검증."""
+    from app.modules.scanner.upload import process_upload
+    from app.modules.scans.models import Scan
+    from app.modules.scanner.service import scan_document
+    from app.extensions import db
+    from werkzeug.datastructures import FileStorage
+    import pypdf
+    from io import BytesIO
+    
+    with _app_base.app_context():
+        admin_id = make_user(tid="tesla_pdf_admin", type="admin")
+        
+        file = FileStorage(
+            stream=BytesIO(TESLA_MODEL3_CSV.encode()),
+            filename="tesla_pdf_test.csv",
+            content_type="text/csv"
+        )
+        
+        scan_id = process_upload(
+            actor=admin_id,
+            file=file,
+            car_no=FAKE_PLATE,
+            device="Tesla PDF Test"
+        )
+        
+        scan = db.session.get(Scan, scan_id)
+        assert scan is not None
+        
+        # PDF 생성
+        document = scan_document(scan)
+        assert document is not None
+        assert document.content.startswith(b"%PDF")
+        
+        # PDF 텍스트 추출
+        reader = pypdf.PdfReader(BytesIO(document.content))
+        full_text = ""
+        for page in reader.pages:
+            full_text += page.extract_text()
+        
+        # 필수 텍스트 검증
+        assert "SOH 참고치" in full_text or "미검증" in full_text, "SOH 참고치 텍스트 누락"
+        assert "판정보류" in full_text, "판정보류 텍스트 누락"
+        assert "추가 수집 정보" in full_text or "문제점" in full_text, "추가 정보 섹션 누락"
+        assert FAKE_VIN in full_text, f"VIN {FAKE_VIN} 누락"
+        assert "Tesla" in full_text or "테스라" in full_text, "Tesla 제조사 누락"
+        
+        db.session.rollback()
 
 
 def test_tesla_realistic_broadcast_log_with_uds_like_traffic(_app_base, make_user):
@@ -265,5 +307,24 @@ def test_tesla_realistic_broadcast_log_with_uds_like_traffic(_app_base, make_use
         # 검증 4: 배터리 데이터 존재
         assert scan.bms_data is not None
         assert scan.bms_data.get('source') == 'tesla_upload'
+        
+        # 검증 5: PDF 생성 및 필수 텍스트
+        from app.modules.scanner.service import scan_document
+        import pypdf
+        
+        document = scan_document(scan)
+        assert document is not None
+        assert document.content.startswith(b"%PDF")
+        
+        reader = pypdf.PdfReader(BytesIO(document.content))
+        full_text = ""
+        for page in reader.pages:
+            full_text += page.extract_text()
+        
+        # Tesla PDF 필수 항목 검증
+        assert FAKE_VIN in full_text, "VIN 누락"
+        assert "Tesla" in full_text or "테스라" in full_text, "Tesla 제조사 누락"
+        assert "SOH" in full_text, "SOH 항목 누락"
+        assert "판정보류" in full_text, "판정보류 텍스트 누락"
         
         db.session.rollback()
