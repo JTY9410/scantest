@@ -40,51 +40,52 @@ def test_ev9_upload_end_to_end(client, make_user, ev9_csv):
     8. PDF 쪽수
     """
     # 1. 사용자 생성
-    user_id = make_user("tester1", type="admin")
-    actor = db.session.get(User, user_id)
-    
-    # 2. 업로드 실행
-    with open(ev9_csv, "rb") as f:
-        from werkzeug.datastructures import FileStorage
-        file = FileStorage(f, filename="ev9_test.csv", content_type="text/csv")
+    with client.application.app_context():
+        user_id = make_user("tester1", type="admin")
+        actor = db.session.get(User, user_id)
         
-        scan_id = process_upload(
-            actor=actor,
-            file=file,
-            car_no="12가3456",
-            car={"diag_company": "기아", "diag_model": "EV9", "diag_year": 2023},
-            device="테스트 업로드"
-        )
-    
-    assert scan_id is not None, "업로드 성공해야 함"
-    
-    # 스캔 조회
-    scan = db.session.get(Scan, scan_id)
-    assert scan is not None
-    
-    result = scan_result(scan)
-    assert result is not None
-    
-    wescan = result.get("wescan")
-    assert wescan is not None
-    
-    # 3. 판정보류 (주행거리 없음)
-    from app.modules.scanner.report import inspection
-    view = inspection(scan, result)
-    
-    assert view["overall"] == "판정보류", "주행거리 없으면 판정보류"
-    assert view["vehicle"]["mileage"] is None, "주행거리 미수신"
-    
-    # 4. 3E 80 정상 처리 (오류 목록에 없어야 함)
-    errors = result.get("errors", [])
-    tester_present_errors = [e for e in errors if "3E 80" in str(e.get("command", "")).upper()]
-    assert len(tester_present_errors) == 0, "3E 80 무응답은 오류가 아님"
-    
-    # 5. 598/59E/788 ECU 등록
+        # 2. 업로드 실행
+        with open(ev9_csv, "rb") as f:
+            from werkzeug.datastructures import FileStorage
+            file = FileStorage(f, filename="ev9_test.csv", content_type="text/csv")
+            
+            scan_id = process_upload(
+                actor=actor,
+                file=file,
+                car_no="12가3456",
+                car={"diag_company": "기아", "diag_model": "EV9", "diag_year": 2023},
+                device="테스트 업로드"
+            )
+        
+        assert scan_id is not None, "업로드 성공해야 함"
+        
+        # 스캔 조회
+        scan = db.session.get(Scan, scan_id)
+        assert scan is not None
+        
+        result = scan_result(scan)
+        assert result is not None
+        
+        wescan = result.get("wescan")
+        assert wescan is not None
+        
+        # 3. 판정보류 (주행거리 없음)
+        from app.modules.scanner.report import inspection
+        view = inspection(scan, result)
+        
+        assert view["overall"] == "판정보류", "주행거리 없으면 판정보류"
+        assert view["vehicle"]["mileage"] is None, "주행거리 미수신"
+        
+        # 4. 3E 80 정상 처리 (오류 목록에 없어야 함)
+        errors = result.get("errors", [])
+        tester_present_errors = [e for e in errors if "3E 80" in str(e.get("command", "")).upper()]
+        assert len(tester_present_errors) == 0, "3E 80 무응답은 오류가 아님"
+        
+        # 5. 598/59E/788 ECU 등록
     # 7DF 기능주소 요청에 598이 응답하면, pair_transactions에서
     # request_id를 응답 ID - 8 (590)으로 조정
-    steps = result.get("steps", [])
-    ecus_found = set()
+        steps = result.get("steps", [])
+        ecus_found = set()
     for step in steps:
         if step.get("header"):
             ecus_found.add(step["header"])
@@ -98,8 +99,8 @@ def test_ev9_upload_end_to_end(client, make_user, ev9_csv):
     
     # 6. B17/B18 모듈 온도
     # 픽스처에 0111 DID가 있고 B17/B18 데이터가 있으면 검증
-    battery = result.get("battery", {})
-    modules = view.get("modules", [])
+        battery = result.get("battery", {})
+        modules = view.get("modules", [])
     
     # 모듈 온도가 있는지 확인 (B17/B18 또는 숫자 모듈)
     if modules:
@@ -112,7 +113,7 @@ def test_ev9_upload_end_to_end(client, make_user, ev9_csv):
     # 7. 범위 밖 값 정의불일치
     # E004에 FFFF 응답이 있으면 범위 밖 처리되어야 함
     # decode_signals에서 _out_of_range_signals로 기록
-    out_of_range = battery.get("_out_of_range_signals")
+        out_of_range = battery.get("_out_of_range_signals")
     if out_of_range:
         assert len(out_of_range) > 0, "범위 밖 값이 기록되어야 함"
         for item in out_of_range:
@@ -123,13 +124,13 @@ def test_ev9_upload_end_to_end(client, make_user, ev9_csv):
     # 없어도 오류는 아님 (픽스처에 셀 데이터가 없을 수 있음)
     
     # 9. PDF 쪽수 및 내용
-    document = scan_document(scan)
+        document = scan_document(scan)
     assert document is not None, "PDF 생성 성공"
     # PDF 크기 확인 (최소 크기: 1KB, 픽스처 데이터가 적으면 작을 수 있음)
     assert document.size > 500, f"PDF 생성됨: {document.size} bytes"
     
     # PDF 형식 확인
-    pdf_content = document.content
+        pdf_content = document.content
     assert pdf_content[:4] == b"%PDF", "유효한 PDF 파일"
     
     # 전체 검증: 스캔 상태
@@ -138,19 +139,19 @@ def test_ev9_upload_end_to_end(client, make_user, ev9_csv):
 
 
 def test_ev9_upload_steps_count(client, ev9_csv):
-    """업로드 변환 시 단계 수가 MAX_STEPS 이하인지 확인."""
-    from app.modules.scanner.upload import convert_to_scan_steps
+        """업로드 변환 시 단계 수가 MAX_STEPS 이하인지 확인."""
+        from app.modules.scanner.upload import convert_to_scan_steps
     
-    with open(ev9_csv, "r") as f:
+        with open(ev9_csv, "r") as f:
         trace_text = f.read()
     
-    steps = convert_to_scan_steps(trace_text)
+        steps = convert_to_scan_steps(trace_text)
     
     # MAX_STEPS = 600
     assert len(steps) <= 600, f"단계 수가 600 이하여야 함: {len(steps)}"
     
     # 중복 제거 확인: 같은 (header, command)는 한 번만
-    unique_keys = set()
+        unique_keys = set()
     for step in steps:
         key = (step.get("header"), step.get("command"))
         assert key not in unique_keys, f"중복 단계: {key}"
@@ -158,11 +159,11 @@ def test_ev9_upload_steps_count(client, ev9_csv):
 
 
 def test_ev9_upload_suppress_response(client, make_user, ev9_csv):
-    """3E 80 무응답이 정상으로 처리되는지 확인."""
-    user_id = make_user("tester2", type="admin")
-    actor = db.session.get(User, user_id)
+        """3E 80 무응답이 정상으로 처리되는지 확인."""
+        user_id = make_user("tester2", type="admin")
+        actor = db.session.get(User, user_id)
     
-    with open(ev9_csv, "rb") as f:
+        with open(ev9_csv, "rb") as f:
         from werkzeug.datastructures import FileStorage
         file = FileStorage(f, filename="ev9_test.csv", content_type="text/csv")
         
@@ -173,12 +174,12 @@ def test_ev9_upload_suppress_response(client, make_user, ev9_csv):
             device="테스트"
         )
     
-    scan = db.session.get(Scan, scan_id)
-    result = scan_result(scan)
+        scan = db.session.get(Scan, scan_id)
+        result = scan_result(scan)
     
     # 3E 80 명령 찾기
-    steps = result.get("steps", [])
-    tester_present_step = None
+        steps = result.get("steps", [])
+        tester_present_step = None
     for step in steps:
         command = step.get("command", "").replace(" ", "").upper()
         if command == "3E80":
@@ -191,7 +192,7 @@ def test_ev9_upload_suppress_response(client, make_user, ev9_csv):
         assert status in ("ok", "skipped"), f"3E 80은 ok 또는 skipped: {status}"
     
     # 오류 목록에 3E 80이 없어야 함
-    errors = result.get("errors", [])
-    error_commands = [e.get("command") for e in errors]
+        errors = result.get("errors", [])
+        error_commands = [e.get("command") for e in errors]
     assert "3E80" not in [c.replace(" ", "").upper() if c else "" for c in error_commands], \
         "3E 80은 오류로 집계되지 않아야 함"

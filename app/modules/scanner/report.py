@@ -262,17 +262,20 @@ def count_significant_dtcs(dtcs: list[dict]) -> int:
     return count
 
 
-def overall(rows: list[dict], dtc_count: int, *, dtc_read: bool = True, mileage: float | int | None = None) -> str:
+def overall(rows: list[dict], dtc_count: int, *, dtc_read: bool = True, mileage: float | int | None = ...):  # ... = sentinel
     """종합판정. 측정한 항목이 기준을 벗어나거나 확정·현재실패 고장코드가 있으면 '점검요',
     그 밖에 고장코드를 읽지 못했거나 측정불가 항목이 하나라도 있으면 '판정보류', 모두 충족하면 '양호'.
     
     규칙: 측정불가(UNREAD)가 하나라도 있거나 주행거리를 읽지 못했으면 판정보류 (2026-11-15 운영 테스트 결과 반영).
+    mileage가 명시적으로 전달되지 않으면(...) 주행거리 체크를 건너뜀(이전 동작 호환).
     """
     if dtc_count or any(row["result"] == "주의" for row in rows):
         return "점검요"
     
     # 고장코드를 읽지 못했거나 측정불가 항목이 하나라도 있거나 주행거리 미수신이면 판정보류
-    if not dtc_read or any(row["result"] == UNREAD for row in rows) or mileage is None:
+    # mileage가 명시적으로 전달되지 않으면(sentinel) 주행거리 체크 건너뜀
+    mileage_check_failed = (mileage is not ... and mileage is None)
+    if not dtc_read or any(row["result"] == UNREAD for row in rows) or mileage_check_failed:
         return "판정보류"
     
     return "양호"
