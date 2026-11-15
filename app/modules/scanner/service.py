@@ -38,6 +38,12 @@ from app.modules.scanner.plan import DOIP_NOTE
 from app.modules.scans import car_info
 from app.modules.scans.models import Code, Scan, ScanCode, ScanDocument
 
+
+def _actor_id(actor):
+    """Get actor ID from User object or int."""
+    return actor.id if hasattr(actor, 'id') else actor
+
+
 TRANSPORTS = {
     "ble": "블루투스(BLE)", 
     "serial": "블루투스 클래식·USB(시리얼)", 
