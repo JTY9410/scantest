@@ -104,12 +104,32 @@ def diagnose(trace: Trace) -> dict:
     ecus: dict[str, dict] = {}
     for tx in trace.transactions:
         responder = tx.response_id or tx.request_id + 8
-        entry = ecus.setdefault(f"{tx.request_id:03X}", {
-            "request_id": f"{tx.request_id:03X}", "response_id": f"{responder:03X}",
-            "label": uds.ecu_label(tx.request_id), "dids": [], "negative": [],
-        })
+        
+        # 기능주소(7DF) 응답 시 ECU 물리주소로 별도 등록
+        if tx.ecu_physical_id is not None:
+            ecu_key = f"{tx.ecu_physical_id:03X}"
+            entry = ecus.setdefault(ecu_key, {
+                "request_id": ecu_key, "response_id": f"{tx.response_id:03X}" if tx.response_id else ecu_key,
+                "label": uds.ecu_label(tx.ecu_physical_id), "dids": [], "negative": [],
+            })
+        else:
+            entry = ecus.setdefault(f"{tx.request_id:03X}", {
+                "request_id": f"{tx.request_id:03X}", "response_id": f"{responder:03X}",
+                "label": uds.ecu_label(tx.request_id), "dids": [], "negative": [],
+            })
+        
+        # 브로드캐스트의 추가 응답자(extra_responders)도 ECU로 등록
+        for extra_id in tx.extra_responders:
+            if 0x500 <= extra_id <= 0x7FF:
+                extra_key = f"{extra_id:03X}"
+                ecus.setdefault(extra_key, {
+                    "request_id": extra_key, "response_id": extra_key,
+                    "label": uds.ecu_label(extra_id), "dids": [], "negative": [],
+                })
+        
         if tx.service == 0x19 and tx.positive:
-            dtcs.setdefault(f"{tx.request_id:03X}", []).extend(uds.parse_dtcs(tx))
+            dtc_key = f"{tx.ecu_physical_id:03X}" if tx.ecu_physical_id else f"{tx.request_id:03X}"
+            dtcs.setdefault(dtc_key, []).extend(uds.parse_dtcs(tx))
         if tx.service == 0x22 and tx.did is not None:
             did = f"{tx.did:04X}"
             if tx.positive and did not in entry["dids"]:

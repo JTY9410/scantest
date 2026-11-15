@@ -142,8 +142,9 @@ def pair_transactions(messages: list[Message]) -> list[Transaction]:
                 tx.response = payload
                 tx.negative_code = payload[2] if payload[0] == 0x7F else None
                 # 기능주소 요청(7DF)에 대한 응답이면 ECU 물리주소 기록
+                # 응답 CAN ID가 곧 물리주소 (예: 598, 59E, 788)
                 if broadcast and later.can_id >= 0x500 and later.can_id <= 0x7FF:
-                    tx.ecu_physical_id = later.can_id - 8
+                    tx.ecu_physical_id = later.can_id
                 if not broadcast:
                     break
             else:

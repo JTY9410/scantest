@@ -113,25 +113,60 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
         return steps
     
     # (header, command) → step 매핑. 마지막 긍정 응답만 유지
+    # 단, 브로드캐스트(7DF)의 경우 여러 ECU 응답을 개별 step으로 보존
     step_map: dict[tuple[str | None, str], dict] = {}
+    broadcast_steps = []  # 브로드캐스트 응답 개별 step
     
     for i, tx in enumerate(trace.transactions):
         # 요청 데이터 (8바이트 초과도 허용)
         request_data = tx.request.hex().upper() if tx.request else ""
         
-        # 헤더 설정: pair_transactions가 이미 request_id를 조정했으므로
-        # (기능주소 응답은 응답 ID - 8로 설정됨)
-        # 모든 request_id를 header로 사용
-        header = f"{tx.request_id:03X}"
+        # 브로드캐스트(7DF) 요청인 경우 ecu_physical_id로 별도 step 생성
+        if tx.ecu_physical_id is not None:
+            header = f"{tx.ecu_physical_id:03X}"
+            command = " ".join(request_data[i:i+2] for i in range(0, len(request_data), 2)) if request_data else ""
+            reply = None
+            if tx.response and tx.response_id:
+                hex_str = tx.response.hex().upper()
+                resp_addr = f"{tx.response_id:03X}"
+                data = " ".join(hex_str[i:i+2] for i in range(0, len(hex_str), 2))
+                reply = f"{resp_addr} {data}"
+            
+            broadcast_steps.append({
+                "id": len(step_map) + len(broadcast_steps) + 1,
+                "command": command,
+                "header": header,
+                "reply": reply,
+                "optional": False,
+                "probe": False,
+                "bus": "can",
+                "tMs": getattr(tx, "response_t_ms", None) or i * 100,
+            })
+            
+            # extra_responders도 개별 step으로
+            for extra_id in tx.extra_responders:
+                if 0x500 <= extra_id <= 0x7FF:
+                    extra_header = f"{extra_id:03X}"
+                    broadcast_steps.append({
+                        "id": len(step_map) + len(broadcast_steps) + 1,
+                        "command": command,
+                        "header": extra_header,
+                        "reply": reply,  # 같은 응답 형식 사용
+                        "optional": False,
+                        "probe": False,
+                        "bus": "can",
+                        "tMs": getattr(tx, "response_t_ms", None) or i * 100,
+                    })
+            continue
         
-        # 명령 (ELM 형식: 2자리마다 공백)
+        # 일반 요청 처리
+        header = f"{tx.request_id:03X}"
         command = " ".join(request_data[i:i+2] for i in range(0, len(request_data), 2)) if request_data else ""
         
         # 응답 처리 (ELM 형식: 응답 주소 + 데이터, 2자리마다 공백)
         reply = None
         if tx.response and tx.response_id:
             hex_str = tx.response.hex().upper()
-            # ELM 형식: 응답 주소를 앞에 붙임
             resp_addr = f"{tx.response_id:03X}"
             data = " ".join(hex_str[i:i+2] for i in range(0, len(hex_str), 2))
             reply = f"{resp_addr} {data}"
@@ -149,13 +184,13 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
         if key not in step_map:
             # 처음 나온 명령
             step_map[key] = {
-                "id": len(step_map) + 1,
+                "id": len(step_map) + len(broadcast_steps) + 1,
                 "command": command,
                 "header": header,
                 "reply": reply,
                 "optional": False,
                 "probe": False,
-                "bus": "can",  # load_trace는 CAN 버스 데이터를 파싱
+                "bus": "can",
                 "tMs": getattr(tx, "response_t_ms", None) or i * 100,
             }
         elif tx.positive:
@@ -163,8 +198,8 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
             step_map[key]["reply"] = reply
             step_map[key]["tMs"] = getattr(tx, "response_t_ms", None) or i * 100
     
-    # 순서를 유지하기 위해 id 순으로 정렬
-    steps = sorted(step_map.values(), key=lambda x: x["id"])
+    # 브로드캐스트 응답과 일반 step을 합쳐서 id 순 정렬
+    steps = sorted(list(step_map.values()) + broadcast_steps, key=lambda x: x["id"])
     
     return steps
 
