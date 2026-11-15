@@ -72,7 +72,10 @@ def parse_uploaded_trace(content: bytes, filename: str) -> str:
     # Tesla broadcast는 UDS transactions 없이 frames만 있음
     # load_trace가 성공하면 유효한 데이터로 간주
     if not trace.transactions:
-        current_app.logger.warning("No UDS transactions found; may be broadcast-only (e.g. Tesla)")
+        try:
+            current_app.logger.warning("No UDS transactions found; may be broadcast-only (e.g. Tesla)")
+        except RuntimeError:
+            pass  # No app context in tests
     
     # WeCar ELM 형식으로 변환
     # (이미 text가 load_trace로 파싱되었으므로, 원본을 그대로 사용)
@@ -88,6 +91,21 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
     from app.modules.canlab.engine.decode import load_trace
     
     trace = load_trace(trace_text)
+    
+    # Tesla broadcast 등 transactions가 없으면 frames를 간단한 observation으로 변환
+    if not trace.transactions and trace.frames:
+        steps = []
+        for i, frame in enumerate(trace.frames[:100]):  # 최대 100개
+            steps.append({
+                "index": i,
+                "time_ms": frame.time_ms if hasattr(frame, 'time_ms') else i * 100,
+                "direction": "rx",
+                "data": f"{frame.can_id:03X} {frame.data.hex().upper()}",
+                "header": f"{frame.can_id:03X}",
+                "command": "",
+                "reply": frame.data.hex().upper()
+            })
+        return steps
     
     # (header, command) → step 매핑. 마지막 긍정 응답만 유지
     step_map: dict[tuple[str | None, str], dict] = {}

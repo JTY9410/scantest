@@ -9,9 +9,12 @@ from unittest.mock import patch
 def upload_admin(client, make_user):
     """관리자로 로그인된 클라이언트."""
     from tests.conftest import csrf_token
+    from app.modules.accounts.models import User
+    from app.extensions import db
     
     # 관리자 생성
-    admin = make_user(tid="upload_admin", type="admin")
+    admin_id = make_user(tid="upload_admin", type="admin")
+    admin = db.session.get(User, admin_id)
     
     token = csrf_token(client, "/admin/login")
     response = client.post("/admin/login", data={
