@@ -411,9 +411,9 @@ story_hev = story_ev  # HEV: 같은 틀, 판정 항목·계통·구동 칸만 �
 
 
 def story_ice(view: dict) -> list:
-    """OBD-II DTC 진단 보고서: 표지(6개 계통)·고장 코드 상세·추가정보·문제점."""
+    """OBD-II DTC 진단 보고서: 표지(6개 계통)·고장 코드 상세·추가정보와문제점."""
     return [*_cover(view), *_dtc_detail(view),
-            *_additional_info_section(view), *_issues_section(view),
+            *_additional_info_and_issues_section(view),
             *[_p(text, _SMALL) for text in _CLOSING]]
 
 
