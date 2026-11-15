@@ -393,17 +393,24 @@ def upload_scan_data():
     스캔 데이터 파일 업로드.
     
     CSV(PCAN), TRC 파일을 업로드하면 run_scan과 동일하게 처리합니다.
+    다중 파일 지원: 여러 파일을 타임스탬프 순으로 병합하여 하나의 스캔으로 처리합니다.
     """
-    from app.modules.scanner.upload import process_upload, UploadError
+    from app.modules.scanner.upload import process_upload, process_multi_upload, UploadError
     
-    # 파일 확인
-    if "file" not in request.files:
-        return {"success": False, "message": "파일을 선택해주세요."}, 400
+    # 다중 파일 확인 (files[] 또는 file)
+    files = request.files.getlist("files")
+    if not files or all(not f or not f.filename for f in files):
+        # 단일 파일 폴백
+        if "file" not in request.files:
+            return {"success": False, "message": "파일을 선택해주세요."}, 400
+        file = request.files["file"]
+        if not file or not file.filename:
+            return {"success": False, "message": "파일을 선택해주세요."}, 400
+        files = [file]
     
-    file = request.files["file"]
-    
-    # 파일이 선택되지 않았거나 비어있는 경우
-    if not file or not file.filename:
+    # 빈 파일 제거
+    files = [f for f in files if f and f.filename]
+    if not files:
         return {"success": False, "message": "파일을 선택해주세요."}, 400
     
     # 선택 입력
@@ -412,8 +419,16 @@ def upload_scan_data():
     car = json.loads(car_json) if car_json else None
     
     try:
-        scan_id = process_upload(current_user, file, car_no=car_no, car=car)
-        current_app.logger.info(f"User {current_user.id} uploaded scan data: {file.filename}")
+        if len(files) == 1:
+            # 단일 파일
+            scan_id = process_upload(current_user, files[0], car_no=car_no, car=car)
+            current_app.logger.info(f"User {current_user.id} uploaded scan data: {files[0].filename}")
+        else:
+            # 다중 파일 병합
+            scan_id = process_multi_upload(current_user, files, car_no=car_no, car=car)
+            filenames = ", ".join(f.filename for f in files)
+            current_app.logger.info(f"User {current_user.id} uploaded {len(files)} files: {filenames}")
+        
         return {
             "success": True,
             "scan_id": scan_id,

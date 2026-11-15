@@ -50,6 +50,51 @@ def validate_upload(file: FileStorage) -> None:
         raise UploadError(f"파일 크기가 너무 큽니다. 최대 {MAX_UPLOAD_SIZE // 1024 // 1024}MB까지 업로드 가능합니다.")
 
 
+def merge_trace_files(files: list[tuple[str, bytes]]) -> str:
+    """다중 파일을 타임스탬프 순으로 병합.
+    
+    Args:
+        files: [(filename, content), ...] 리스트
+    
+    Returns:
+        병합된 trace 텍스트
+    """
+    if not files:
+        raise UploadError("파일이 없습니다.")
+    
+    if len(files) == 1:
+        # 단일 파일은 그대로 반환
+        return parse_uploaded_trace(files[0][1], files[0][0])
+    
+    # 다중 파일: 각 파일을 텍스트로 디코딩하고 연결
+    merged_lines = []
+    seen_header = False
+    
+    for filename, content in files:
+        try:
+            text = content.decode("utf-8", errors="replace")
+            lines = text.strip().split("\n")
+            
+            for line in lines:
+                # 헤더 라인 스킵 (첫 파일 이후)
+                if "Timestamp" in line and "CAN_ID" in line:
+                    if not seen_header:
+                        merged_lines.append(line)
+                        seen_header = True
+                    continue
+                
+                # 데이터 라인 추가
+                if line.strip():
+                    merged_lines.append(line)
+        except Exception as exc:
+            raise UploadError(f"{filename}: {exc}")
+    
+    if not merged_lines:
+        raise UploadError("병합된 파일에 데이터가 없습니다.")
+    
+    return "\n".join(merged_lines)
+
+
 def parse_uploaded_trace(content: bytes, filename: str) -> str:
     """업로드된 파일을 WeCar ELM 형식으로 변환."""
     try:
@@ -574,5 +619,72 @@ def _process_tesla_upload(
     db.session.commit()
     
     current_app.logger.info(f"Tesla upload scan created: {scan.id} from {filename}")
+    
+    return scan.id
+
+
+def process_multi_upload(actor: User, files: list, car_no: str = None, car: dict = None, device: str = "파일 업로드") -> int:
+    """다중 파일 업로드 및 병합 처리.
+    
+    Args:
+        actor: 업로드한 사용자
+        files: FileStorage 객체 리스트
+        car_no: 차량 번호
+        car: 차량 정보
+        device: 장치명
+    
+    Returns:
+        생성된 스캔 ID
+    """
+    if not files:
+        raise UploadError("파일이 없습니다.")
+    
+    # 파일 검증 및 읽기
+    file_data = []
+    total_size = 0
+    for file in files:
+        validate_upload(file)
+        content = file.read()
+        total_size += len(content)
+        file_data.append((file.filename, content))
+    
+    # 전체 크기 확인
+    if total_size > MAX_UPLOAD_SIZE:
+        raise UploadError(f"전체 파일 크기가 너무 큽니다. 최대 {MAX_UPLOAD_SIZE // 1024 // 1024}MB까지 업로드 가능합니다.")
+    
+    # 파일 병합
+    try:
+        merged_text = merge_trace_files(file_data)
+    except Exception as exc:
+        raise UploadError(f"파일 병합 실패: {exc}")
+    
+    # 병합된 데이터로 스캔 처리
+    steps, metadata = convert_to_scan_steps(merged_text)
+    
+    # 차량 정보 정규화
+    if car:
+        car = normalize_dto(car)
+    if car_no:
+        car_no = normalize_car_no(car_no)
+    
+    # 스캔 실행
+    scan = run_scan(actor, car_no=car_no, car=car, steps=steps, transport=device)
+    
+    # 메타데이터 저장
+    if metadata.get("excluded_steps_count", 0) > 0:
+        try:
+            from sqlalchemy.orm.attributes import flag_modified
+            scan.bms_data = scan.bms_data or {}
+            scan.bms_data["upload_metadata"] = metadata
+            flag_modified(scan, "bms_data")
+            db.session.commit()
+            
+            current_app.logger.info(
+                f"Multi-upload scan {scan.id}: merged {len(file_data)} files, "
+                f"excluded {metadata['excluded_steps_count']} steps"
+            )
+        except Exception as exc:
+            current_app.logger.warning(f"Failed to save multi-upload metadata: {exc}")
+            db.session.rollback()
     
     return scan.id

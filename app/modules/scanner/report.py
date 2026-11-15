@@ -738,13 +738,33 @@ def inspection(scan, result: dict) -> dict:
     tesla_data = {}
     if is_tesla and kind == "ev":
         battery = result.get("battery") or {}
-        tesla_data = {
-            "full_kwh": _battery_value(result, "full_kwh"),
-            "remaining_kwh": _battery_value(result, "remaining_kwh"),
-            "rated_kwh": 74.0,  # Tesla 기준 용량 (Model 3 Standard Range+)
-            "soh_reference_note": "SOH 참고치(미검증): 추정 용량 / 기준 용량 74.0 kWh",
-            "source_note": "기준 용량 출처: Tesla Model 3 제원 (2018-2021 SR+)",
-        }
+        # Tesla 모델별 기준 용량 (opendbc DBC 참조)
+        # 참조: opendbc/tesla_model3_party.dbc PACK_74_KWH
+        # 다른 모델/연식은 참조 테이블에 없으므로 미확인
+        model_lower = (model or "").lower()
+        rated_kwh = None
+        source_note = "기준 용량 미확인 (참조 테이블에 해당 모델 없음)"
+        
+        if "model 3" in model_lower or "model3" in model_lower:
+            rated_kwh = 74.0
+            source_note = "커뮤니티 DBC (opendbc tesla_model3_party.dbc, PACK_74_KWH), 공식 미확인"
+        
+        if rated_kwh:
+            tesla_data = {
+                "full_kwh": _battery_value(result, "full_kwh"),
+                "remaining_kwh": _battery_value(result, "remaining_kwh"),
+                "rated_kwh": rated_kwh,
+                "soh_reference_note": f"SOH 참고치(미검증): 추정 용량 / 기준 용량 {rated_kwh:.1f} kWh",
+                "source_note": source_note,
+            }
+        else:
+            # 참조 테이블에 없으면 SOH 미확인
+            tesla_data = {
+                "full_kwh": _battery_value(result, "full_kwh"),
+                "remaining_kwh": _battery_value(result, "remaining_kwh"),
+                "soh_reference_note": "SOH 미확인 (기준 용량 없음)",
+                "source_note": source_note,
+            }
     
     return {
         "kind": kind,

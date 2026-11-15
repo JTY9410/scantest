@@ -208,15 +208,21 @@ def _battery_pages(view: dict) -> list:
         story += [
             PageBreak(),
             _p("Tesla 배터리 참고 정보", _H2),
-            _pairs([
-                ("만충 용량", f"{tesla['full_kwh']:.1f} kWh" if tesla.get("full_kwh") else "미확인"),
-                ("잔여 용량", f"{tesla['remaining_kwh']:.1f} kWh" if tesla.get("remaining_kwh") else "미확인"),
-                ("SOH 참고치", tesla.get("soh_reference_note", "-")),
-                ("기준 용량", f"{tesla.get('rated_kwh', 0):.1f} kWh"),
-                ("출처", tesla.get("source_note", "-")),
-            ]),
-            _p("※ 위 수치는 참고용이며, 공식 Tesla 진단이 아닙니다. 정확한 SOH는 Tesla 서비스센터에서 확인하세요.", _SMALL),
         ]
+        
+        pairs = [
+            ("만충 용량", f"{tesla['full_kwh']:.1f} kWh" if tesla.get("full_kwh") else "미확인"),
+            ("잔여 용량", f"{tesla['remaining_kwh']:.1f} kWh" if tesla.get("remaining_kwh") else "미확인"),
+            ("SOH 참고치", tesla.get("soh_reference_note", "-")),
+        ]
+        
+        if tesla.get("rated_kwh"):
+            pairs.append(("기준 용량", f"{tesla['rated_kwh']:.1f} kWh"))
+        
+        pairs.append(("출처", tesla.get("source_note", "-")))
+        
+        story.append(_pairs(pairs))
+        story.append(_p("※ 위 수치는 참고용이며, 공식 Tesla 진단이 아닙니다. 정확한 SOH는 Tesla 서비스센터에서 확인하세요.", _SMALL))
     
     # power 계통 (있을 때만)
     if view["power"]:
