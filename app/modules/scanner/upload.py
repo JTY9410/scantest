@@ -87,15 +87,33 @@ def parse_uploaded_trace(content: bytes, filename: str) -> str:
     return text
 
 
-def convert_to_scan_steps(trace_text: str) -> list[dict]:
+def convert_to_scan_steps(trace_text: str) -> tuple[list[dict], dict]:
     """Trace를 스캔 스텝으로 변환.
     
     run_scan이 기대하는 steps 형식으로 변환합니다.
     같은 (header, command)는 마지막 긍정 응답만 유지하여 단계 수를 줄입니다.
+    
+    Returns:
+        (steps, metadata): steps 리스트와 메타데이터 (excluded_steps 정보 포함)
     """
     from app.modules.canlab.engine.decode import load_trace
     
     trace = load_trace(trace_text)
+    
+    # 제외된 단계 추적
+    excluded_steps = []
+    
+    # 제외할 서비스 코드 (SecurityAccess, 루틴, 쓰기/제어 명령)
+    EXCLUDED_SERVICES = {
+        0x27,  # SecurityAccess (시드/키가 8바이트 초과)
+        0x31,  # RoutineControl
+        0x2E,  # WriteDataByIdentifier
+        0x2F,  # InputOutputControlByIdentifier
+        0x34,  # RequestDownload
+        0x35,  # RequestUpload
+        0x36,  # TransferData
+        0x37,  # RequestTransferExit
+    }
     
     # Tesla broadcast 등 transactions가 없으면 frames를 간단한 observation으로 변환
     if not trace.transactions and trace.frames:
@@ -110,7 +128,15 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
                 "command": "",
                 "reply": frame.data.hex().upper()
             })
-        return steps
+        
+        # metadata 반환 (제외 없음)
+        metadata = {
+            "excluded_steps_count": 0,
+            "excluded_steps": [],
+            "total_transactions": 0,
+            "included_steps_count": len(steps)
+        }
+        return steps, metadata
     
     # (header, command) → step 매핑. 마지막 긍정 응답만 유지
     # 브로드캐스트도 (ecu_physical_id, command)로 중복 제거
@@ -118,16 +144,49 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
     broadcast_map: dict[tuple[str, str], dict] = {}  # 브로드캐스트 중복 제거용
     
     for i, tx in enumerate(trace.transactions):
-        # 요청 데이터 (8바이트 초과도 허용)
+        # 요청 데이터
         request_data = tx.request.hex().upper() if tx.request else ""
         command = " ".join(request_data[i:i+2] for i in range(0, len(request_data), 2)) if request_data else ""
         
-        # 세션 제어(10 xx) / Tester Present(3E xx)는 ECU당 1건만
-        # 첫 2자리가 10 또는 3E인지 확인
-        is_session_or_tester = False
+        # 서비스 코드 확인
+        service_code = None
         if len(request_data) >= 2:
-            service = request_data[:2]
-            is_session_or_tester = service in ('10', '3E')
+            try:
+                service_code = int(request_data[:2], 16)
+            except ValueError:
+                pass
+        
+        # 제외 조건 체크
+        should_exclude = False
+        exclude_reason = None
+        
+        # 1. 제외할 서비스 (SecurityAccess, 루틴, 쓰기/제어)
+        if service_code in EXCLUDED_SERVICES:
+            should_exclude = True
+            service_names = {
+                0x27: "SecurityAccess", 0x31: "RoutineControl",
+                0x2E: "WriteDataByIdentifier", 0x2F: "InputOutputControlByIdentifier",
+                0x34: "RequestDownload", 0x35: "RequestUpload",
+                0x36: "TransferData", 0x37: "RequestTransferExit"
+            }
+            exclude_reason = f"제외된 서비스 (0x{service_code:02X} {service_names.get(service_code, 'Unknown')})"
+        
+        # 2. 8바이트 초과 명령 (clean_steps 검증 실패 방지)
+        if not should_exclude and len(request_data) > 16:  # 8바이트 = 16 hex chars
+            should_exclude = True
+            exclude_reason = f"명령 길이 초과 ({len(request_data) // 2}바이트 > 8바이트)"
+        
+        if should_exclude:
+            header = f"{tx.ecu_physical_id or tx.request_id:03X}"
+            excluded_steps.append({
+                "header": header,
+                "command": command[:50],  # 처음 50자만
+                "reason": exclude_reason
+            })
+            continue
+        
+        # 세션 제어(10 xx) / Tester Present(3E xx)는 ECU당 1건만
+        is_session_or_tester = service_code in (0x10, 0x3E)
         
         # 브로드캐스트(7DF) 요청인 경우 ecu_physical_id로 별도 step 생성
         if tx.ecu_physical_id is not None:
@@ -226,7 +285,15 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
     for i, step in enumerate(all_steps, start=1):
         step["id"] = i
     
-    return all_steps
+    # 메타데이터 생성
+    metadata = {
+        "excluded_steps_count": len(excluded_steps),
+        "excluded_steps": excluded_steps[:10],  # 최대 10개만 기록
+        "total_transactions": len(trace.transactions),
+        "included_steps_count": len(all_steps)
+    }
+    
+    return all_steps, metadata
 
 
 def process_upload(
@@ -311,7 +378,7 @@ def process_upload(
     
     # 6. 일반 UDS 경로: 스캔 스텝으로 변환
     try:
-        steps = convert_to_scan_steps(trace_text)
+        steps, metadata = convert_to_scan_steps(trace_text)
     except Exception as exc:
         raise UploadError(f"스캔 데이터 변환 실패: {exc}")
     
@@ -348,7 +415,21 @@ def process_upload(
         current_app.logger.exception("업로드 파일 스캔 생성 실패")
         raise UploadError(f"스캔 생성 중 오류가 발생했습니다: {exc}")
     
-    # 8. 원본 파일은 저장하지 않음 (run_scan이 이미 처리된 텍스트를 저장함)
+    # 8. 제외된 단계 정보를 Scan.raw에 저장
+    if metadata.get("excluded_steps_count", 0) > 0:
+        from sqlalchemy.orm.attributes import flag_modified
+        
+        scan.raw = scan.raw or {}
+        scan.raw["upload_metadata"] = metadata
+        flag_modified(scan, "raw")
+        db.session.commit()
+        
+        current_app.logger.info(
+            f"Upload scan {scan.id}: excluded {metadata['excluded_steps_count']} steps "
+            f"(included {metadata['included_steps_count']} from {metadata['total_transactions']} transactions)"
+        )
+    
+    # 9. 원본 파일은 저장하지 않음 (run_scan이 이미 처리된 텍스트를 저장함)
     current_app.logger.info(f"Upload scan created: {scan.id} from {filename}")
     
     return scan.id

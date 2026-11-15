@@ -697,6 +697,25 @@ def inspection(scan, result: dict) -> dict:
     additional_info = _collect_additional_info(result, is_ev_kind)
     issues = _collect_issues(result, car, pt)
     
+    # 업로드 파일에서 제외된 단계 정보 추가
+    if hasattr(scan, 'raw') and scan.raw and scan.raw.get('upload_metadata'):
+        metadata = scan.raw['upload_metadata']
+        if metadata.get('excluded_steps_count', 0) > 0:
+            excluded_count = metadata['excluded_steps_count']
+            excluded_list = metadata.get('excluded_steps', [])
+            
+            # issues에 제외된 단계 정보 추가
+            if isinstance(issues, dict):
+                issues['excluded_steps'] = {
+                    'count': excluded_count,
+                    'message': f"파일 업로드 시 {excluded_count}개 단계 제외 (SecurityAccess, 루틴, 쓰기/제어 명령 등)",
+                    'examples': excluded_list[:3]  # 처음 3개 예시만
+                }
+            elif isinstance(issues, list):
+                issues.append(f"파일 업로드 시 {excluded_count}개 단계 제외 (SecurityAccess, 루틴, 쓰기/제어 명령 등)")
+                for ex in excluded_list[:3]:
+                    issues.append(f"  예: {ex['header']} {ex['command'][:30]}... ({ex['reason']})")
+    
     return {
         "kind": kind,
         "kind_label": LABELS[kind] + (" (플러그인)" if pt.get("plugin") else "") + (" (수소)" if pt.get("hydrogen") else ""),
