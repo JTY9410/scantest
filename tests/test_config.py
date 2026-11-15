@@ -75,8 +75,9 @@ def test_trust_proxy_alias_enables_one_hop(monkeypatch):
 
 
 def test_upload_limit_defaults_to_docker_size(app):
-    """업로드 한도 기본값은 도커 기준 64MB(큰 CAN 기록 허용)."""
-    assert app.config["CANLAB_MAX_UPLOAD_BYTES"] == 64 * 1024 * 1024
+    """업로드 한도 기본값은 도커 기준 600MB(Tesla 다중 파일 대응)."""
+    assert app.config["CANLAB_MAX_UPLOAD_BYTES"] == 600 * 1024 * 1024
+    assert app.config["MAX_CONTENT_LENGTH"] == 600 * 1024 * 1024
 
 
 def test_vehicle_network_is_open_by_default_and_blocked_by_setting(monkeypatch):

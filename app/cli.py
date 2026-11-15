@@ -1888,7 +1888,7 @@ def register_cli(app: Flask) -> None:
     @app.cli.command("seed-tesla-reference")
     def seed_tesla_reference():
         """Tesla 기준 용량 참조 테이블 시드 (기존 행 유지)."""
-        from app.modules.tesla.reference import seed_tesla_reference_data
+        from app.modules.tesla.reference_data import seed_tesla_reference_data
         from app.extensions import db
         from sqlalchemy import text
         
