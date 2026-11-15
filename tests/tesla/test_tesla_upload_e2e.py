@@ -157,3 +157,113 @@ def test_tesla_pdf_generation():
     # 이 테스트는 end-to-end 테스트에서 Scan이 생성되는지만 확인
     # 실제 PDF 렌더링은 별도 통합 테스트로 검증
     assert True  # Placeholder for future PDF integration
+
+
+def test_tesla_realistic_broadcast_log_with_uds_like_traffic(_app_base, make_user):
+    """
+    실제와 유사한 Tesla 로그 (수천 프레임, 0x7DF broadcast, UDS-like 응답 포함).
+    
+    - 163,317 프레임 규모 시뮬레이션 (축약: 3000+ 프레임)
+    - 0x7DF broadcast requests
+    - 0x598/0x59E/0x788 ECU responses (UDS-like)
+    - Tesla CAN IDs: 0x352 (111회), 0x292 (738회), 0x401 (2655회), 0x405 (VIN)
+    - 업로드 200 → Scan type=ev, VIN 일치
+    """
+    from app.modules.scanner.upload import process_upload
+    from app.modules.scans.models import Scan
+    from app.extensions import db
+    from werkzeug.datastructures import FileStorage
+    
+    with _app_base.app_context():
+        admin_id = make_user(tid="tesla_realistic_admin", type="admin")
+        
+        # CSV 헤더
+        csv_lines = ["Time,Type,ID,Name,DLC,Data"]
+        t = 0.0
+        
+        # 1. 브로드캐스트 UDS-like 트래픽 (0x7DF → 0x598/0x59E/0x788)
+        # 300회 반복 (세션 제어, tester present, DTC read 등)
+        for i in range(300):
+            # 10 01 (Default Session)
+            csv_lines.append(f"{t:.6f},Tx,0x7DF,Broadcast,8,02 10 01 00 00 00 00 00")
+            csv_lines.append(f"{t+0.01:.6f},Rx,0x598,ECU1,8,06 50 01 00 32 01 F4 00")
+            csv_lines.append(f"{t+0.015:.6f},Rx,0x59E,ECU2,8,06 50 01 00 32 01 F4 00")
+            csv_lines.append(f"{t+0.020:.6f},Rx,0x788,ECU3,8,06 50 01 00 32 01 F4 00")
+            t += 0.05
+            
+            # 3E 80 (Tester Present)
+            csv_lines.append(f"{t:.6f},Tx,0x7DF,Broadcast,8,02 3E 80 00 00 00 00 00")
+            csv_lines.append(f"{t+0.01:.6f},Rx,0x598,ECU1,8,02 7E 80 00 00 00 00 00")
+            t += 0.05
+        
+        # 2. Tesla CAN broadcast frames
+        # 0x352 (energy) - 111회
+        for i in range(111):
+            # NominalFullPackEnergy = 74kWh * 50 = 3700 (0x0E74)
+            csv_lines.append(f"{t:.6f},Rx,0x352,GTW_packEnergy,8,00 00 74 0E 64 00 00 00")
+            t += 0.1
+        
+        # 0x292 (SOC) - 738회
+        for i in range(738):
+            # SOC = 85% = 0x55 = 85 hex
+            csv_lines.append(f"{t:.6f},Rx,0x292,BMS_socBMS,8,55 00 00 00 00 00 00 00")
+            t += 0.05
+        
+        # 0x401 (brick voltages) - 2655회
+        for i in range(2655):
+            # Brick voltages: min=3.7V*1000=0x0E74, max=3.75V*1000=0x0EA6
+            csv_lines.append(f"{t:.6f},Rx,0x401,BMS_brickMinMax,8,00 2A 74 0E A6 0E 74 0E")
+            t += 0.02
+        
+        # 0x405 (VIN) - 296회 (각 mux 파트가 반복됨)
+        for i in range(98):
+            csv_lines.append(f"{t:.6f},Rx,0x405,VIN_part1,8,10 5A 5A 5A 31 32 33 34")
+            csv_lines.append(f"{t+0.01:.6f},Rx,0x405,VIN_part2,8,11 35 36 37 38 39 30 31")
+            csv_lines.append(f"{t+0.02:.6f},Rx,0x405,VIN_part3,8,12 32 33 34 00 00 00 00")
+            t += 0.1
+        
+        # 0x332 (temps) - 추가
+        for i in range(100):
+            csv_lines.append(f"{t:.6f},Rx,0x332,BMS_temps,8,00 00 50 4E 4F 00 00 00")
+            t += 0.05
+        
+        # 0x132 (pack voltage/current)
+        for i in range(100):
+            csv_lines.append(f"{t:.6f},Rx,0x132,BMS_packVI,8,64 00 00 00 00 00 00 00")
+            t += 0.05
+        
+        csv_content = "\n".join(csv_lines)
+        
+        file = FileStorage(
+            stream=BytesIO(csv_content.encode()),
+            filename="tesla_realistic_broadcast.csv",
+            content_type="text/csv"
+        )
+        
+        # Upload and process
+        scan_id = process_upload(
+            actor=admin_id,
+            file=file,
+            car_no=FAKE_PLATE,
+            device="Tesla Realistic Test"
+        )
+        
+        assert scan_id is not None
+        scan = db.session.get(Scan, scan_id)
+        assert scan is not None
+        
+        # 검증 1: Scan type=ev
+        assert scan.type == "ev", f"Expected type='ev', got '{scan.type}'"
+        
+        # 검증 2: VIN 일치
+        assert scan.scan_vin == FAKE_VIN, f"Expected VIN '{FAKE_VIN}', got '{scan.scan_vin}'"
+        assert scan.car_vin == FAKE_VIN
+        
+        # 검증 3: Tesla 제조사
+        assert scan.car_maker == "Tesla"
+        
+        # 검증 4: 배터리 데이터 존재
+        assert scan.bms_data is not None
+        assert scan.bms_data.get('source') == 'tesla_upload'
+        
+        db.session.rollback()
