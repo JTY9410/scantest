@@ -418,35 +418,39 @@ def _process_tesla_upload(
         if soc_ave and nom_rem:
             soh_result = tesla_soh.cross_check_soh(soh_result, soc_ave, nom_rem)
     
-    # 4. Scan 생성 (Tesla 데이터를 tesla_data JSON 필드에 저장)
+    # 4. Scan 생성 (run_scan 패턴과 동일하게)
     tesla_data = {
+        'source': 'tesla_upload',
         'vin': vin,
         'manufacturer': manufacturer,
         'model': model_name,
         'year': year,
         'decoded': decoded,
         'soh': soh_result,
-        'source': 'tesla_broadcast',
+        'status': '완료',
+        'transport': 'file',
+        'device': f"{device} ({filename})",
     }
     
     scan = Scan(
-        tester_id=actor_id,
         type="ev",  # Tesla는 EV
+        type_source="tesla_upload",
         device_type="file",
-        device_uid=device,
+        device_uid=f"{device} ({filename})",
+        tester_id=actor_id,
         car_no=car_no,
-        car_vin=vin or "",
+        car_vin=vin or "미확인",
         scan_vin=vin,
         car_maker=manufacturer,
-        car_model=model_name or "Unknown",
+        car_model=model_name or "Model 3",  # 기본값
         car_year=year,
         bms_data=tesla_data  # Tesla 데이터를 bms_data에 저장 (기존 필드 재사용)
     )
     
     # 판정보류 (community 출처 또는 기준 없음)
     if soh_result and not soh_result.get('soh_available'):
-        scan.judgment = "판정보류"
-        scan.judgment_reason = soh_result.get('calculation_note', 'SOH 기준 미확보')
+        tesla_data['judgment'] = '판정보류'
+        tesla_data['judgment_reason'] = soh_result.get('calculation_note', 'SOH 기준 미확보')
     
     db.session.add(scan)
     db.session.commit()

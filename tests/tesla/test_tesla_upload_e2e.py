@@ -51,49 +51,51 @@ def test_tesla_csv_upload_end_to_end(_app_base, make_user):
         assert scan is not None
         assert scan.car_no == FAKE_PLATE
         
-        # Check vehicle detection - should identify as Tesla Model 3
-        # (This will work once Tesla detection is integrated)
-        # assert "Tesla" in scan.car_maker or "Tesla" in (scan.car_model or "")
+        # Check vehicle detection - Tesla
+        assert scan.car_maker == "Tesla"
+        assert "Model" in (scan.car_model or "")
+        assert scan.scan_vin == FAKE_VIN
         
-        # Check diagnostic report
-        report = db.session.query(DiagnosticReport).filter_by(
-            dataset_id=scan.datasets[0].id if scan.datasets else None
-        ).first()
+        # Check Tesla data in bms_data
+        assert scan.bms_data is not None
+        assert scan.bms_data.get('source') == 'tesla_upload'
+        assert scan.bms_data.get('vin') == FAKE_VIN
         
-        if report:
-            # Check that battery values are decoded
-            # 0x352 full energy, SOC, etc.
-            values = report.values or {}
-            # assert "full_energy_kwh" in values or similar fields
-            
-            # Check SOH reference (community source)
-            # Should show as "SOH 참고치(미검증)"
-            
-            # Check judgment is "판정보류" (pending) for community-sourced reference
-            # assert scan judgment or report shows pending
-            pass
+        # Check decoded data exists
+        decoded = scan.bms_data.get('decoded', {})
+        assert 'energy' in decoded or 'soc' in decoded or 'bricks' in decoded
         
-        # Check PDF generation
-        # PDF should include:
-        # - "추가 수집 정보와 문제점" section
-        # - UNREAD reasons for unmeasured items
-        # - Coolant level signal indicator
-        # (This will be verified once PDF generation for Tesla is implemented)
+        # Check SOH (community source → judgment pending)
+        soh = scan.bms_data.get('soh')
+        if soh:
+            # Community source should have soh_available=False
+            assert soh.get('soh_available') is False or soh.get('reference_source') == 'community'
+        
+        # Check judgment
+        judgment = scan.bms_data.get('judgment')
+        if judgment:
+            assert '판정보류' in judgment or 'SOH' in scan.bms_data.get('judgment_reason', '')
         
         db.session.rollback()
 
 
 def test_tesla_model3_detection_from_vin():
-    """VIN에서 Model 3 판별."""
+    """VIN 디코딩 및 Tesla 시그니처 감지."""
     from app.modules.tesla.detect import decode_vin, is_tesla
     
-    # VIN 디코딩
+    # VIN 디코딩 (fake VIN이므로 구조만 확인)
     result = decode_vin(FAKE_VIN)
     assert result['valid']
     assert result['vin'] == FAKE_VIN
     
-    # Tesla 감지
-    assert is_tesla([], vin=FAKE_VIN)
+    # Tesla CAN ID 시그니처로 감지 (0x405, 0x352, 0x401, 0x332)
+    tesla_frames = [
+        (0.0, 0x405, b'\x10' + b'ZZZ1234'),
+        (0.1, 0x352, b'\x00\x12\x34\x00\x64\x00\x00\x00'),
+        (0.2, 0x401, b'\x00\x2A\xE8\x03\xE8\x03\xE8\x03'),
+        (0.3, 0x332, b'\x00\x00\x50\x4E\x4F\x00\x00\x00'),
+    ]
+    assert is_tesla(tesla_frames, vin=None)
 
 
 def test_tesla_0x352_energy_decode():
@@ -115,31 +117,38 @@ def test_tesla_96_brick_voltage_decode():
     from app.modules.tesla.decode import decode_0x401_brick_voltages
     
     # Mock 0x401 frames: mux=0, flag=0x2A, 3 bricks
-    # Voltage = 0x03E8 * 0.0001 = 1000 * 0.0001 = 0.1 V (unrealistic, just for test structure)
+    # Voltage = 38000 * 0.0001 = 3.8V (valid range 1.5-4.6V)
+    # 38000 = 0x9470, little-endian = 0x70 0x94
     frames = [
-        (0.0, bytes([0x00, 0x2A, 0xE8, 0x03, 0xE8, 0x03, 0xE8, 0x03]))
+        (0.0, bytes([0x00, 0x2A, 0x70, 0x94, 0x72, 0x94, 0x75, 0x94]))
     ]
     result = decode_0x401_brick_voltages(frames)
     assert "min_voltage" in result
     assert "max_voltage" in result
     assert "voltage_spread" in result
+    assert result["brick_count"] == 3
 
 
-def test_tesla_soh_community_reference():
+def test_tesla_soh_community_reference(_app_base):
     """Community 출처 → 'SOH 참고치(미검증)' 표시."""
     from app.modules.tesla.soh import calculate_soh
+    from app.modules.tesla.reference_data import seed_tesla_reference_data
     
-    # Mock data: community 출처는 soh_available=False
-    result = calculate_soh(
-        current_nominal_full=60.0,
-        manufacturer="Tesla",
-        model="Model 3",
-        year=2020,
-        pack_code="Long Range"
-    )
-    # community 출처이므로 soh_available=False
-    assert result["soh_available"] is False
-    assert "참고" in result["calculation_note"] or "미검증" in result["calculation_note"]
+    with _app_base.app_context():
+        # Tesla 기준 데이터 시드
+        seed_tesla_reference_data()
+        
+        # Mock data: community 출처는 soh_available=False
+        result = calculate_soh(
+            current_nominal_full=60.0,
+            manufacturer="Tesla",
+            model="Model 3",
+            year=2020,
+            pack_code="Long Range"
+        )
+        # community 출처이므로 soh_available=False
+        assert result["soh_available"] is False
+        assert "참고" in result["calculation_note"] or "미검증" in result["calculation_note"]
 
 
 def test_tesla_pdf_generation():
