@@ -111,7 +111,7 @@ def test_basic_report_shape(app):
     )
     assert report["diagnosis_info"]["diagnosis_type"] == "BASIC"
     assert report["diagnosis_info"]["app_type"] == "web"
-    assert report["vehicle"]["vehicle_number"] == "12가3456"
+    assert report["vehicle"]["vehicle_number"] == "12가****"  # 마스킹됨
     assert report["vehicle"]["vin"] == "KMHTEST0000000001"
     assert report["sensor"]["ice"] is None
     assert report["sensor"]["ev"]["bms_soc"] == 80

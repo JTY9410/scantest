@@ -13,6 +13,30 @@ from zoneinfo import ZoneInfo
 from app.modules.scanner.powertrain import LABELS, classify
 
 
+def _mask_plate(car_no: str) -> str:
+    """번호판 마스킹: 앞 숫자+한글 뒤 ****
+    
+    예: 88가8888 → 88가****
+        123가1234 → 123가****
+    """
+    if not car_no:
+        return car_no
+    
+    # 한글 찾기
+    hangul_pos = -1
+    for i, char in enumerate(car_no):
+        if '가' <= char <= '힣':
+            hangul_pos = i
+            break
+    
+    if hangul_pos == -1:
+        # 한글이 없으면 전체 마스킹
+        return car_no[:3] + "****" if len(car_no) > 3 else car_no
+    
+    # 한글 뒤 번호를 ****로
+    return car_no[:hangul_pos+1] + "****"
+
+
 _ECU = {
     "7E0": "엔진", "7E8": "엔진", "7E1": "변속기", "7E9": "변속기",
     "7E2": "ABS", "7EA": "ABS", "7D1": "ABS",
@@ -306,12 +330,14 @@ def basic_report(*, scan_id: int, diagnosed_at: datetime, car_no: str, car: dict
                  report_id: int | None, pdf_url: str | None, app_version: str | None = None,
                  app_type: str | None = None) -> dict:
     """해석 결과와 차량정보로 기본 보고서를 만든다."""
+    from app.modules.scanner.pdf import mask_plate
+    
     kind = result.get("powertrain") if isinstance(result.get("powertrain"), dict) else classify(car, result)
     is_ev = kind["type"] in ("ev", "hev") and bool(result.get("battery") or kind["type"] == "ev")
     mileage = next((_num(v.get("value")) for v in result.get("values") or [] if v.get("key") == "odometer"), None)
     year = _num(car.get("diag_year"))
     vehicle = _present({
-        "vehicle_number": car_no,
+        "vehicle_number": mask_plate(car_no),
         "vin": result.get("vin") or car.get("diag_car_id") or None,
         "mileage": mileage,
         "mileage_edited": False if mileage is not None else None,
@@ -687,7 +713,7 @@ def inspection(scan, result: dict) -> dict:
             "model": model or "-",
             "year": getattr(scan, "car_year", None) or car.get("diag_year") or "-",
             "fuel": getattr(scan, "car_fuel", None) or car.get("diag_fuel") or "-",
-            "number": getattr(scan, "car_no", None) or "-",
+            "number": _mask_plate(getattr(scan, "car_no", None) or "-"),
             "vin": result.get("vin") or getattr(scan, "car_vin", None) or "-",
             "mileage": mileage,
             "mileage_text": f"{mileage:,.0f} km" if mileage is not None else "-",

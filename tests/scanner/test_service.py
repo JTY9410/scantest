@@ -282,7 +282,7 @@ def test_scan_saves_result_pdf(app, admin):
                             transport="ble")
     document = db.session.scalar(select(ScanDocument).where(ScanDocument.scan_id == scan.id))
     assert document.content.startswith(b"%PDF") and document.size == len(document.content)
-    assert document.filename.startswith("위스캔-12가3456-") and document.filename.endswith(".pdf")
+    assert document.filename.startswith("위스캔-12가****-") and document.filename.endswith(".pdf")  # 마스킹됨
     assert service.scan_document(scan).id == document.id
 
 

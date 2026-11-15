@@ -28,6 +28,30 @@ def _fonts() -> None:
 
 _BODY = ParagraphStyle("body", fontName=FONT, fontSize=8.5, leading=12, textColor=INK, wordWrap="CJK")
 _SMALL = ParagraphStyle("small", parent=_BODY, fontSize=7.5, leading=10, textColor=MUTED)
+
+
+def mask_plate(car_no: str) -> str:
+    """번호판 마스킹: 앞 숫자+한글 뒤 ****
+    
+    예: 88가8888 → 88가****
+        123가1234 → 123가****
+    """
+    if not car_no:
+        return car_no
+    
+    # 한글 찾기
+    hangul_pos = -1
+    for i, char in enumerate(car_no):
+        if '가' <= char <= '힣':
+            hangul_pos = i
+            break
+    
+    if hangul_pos == -1:
+        # 한글이 없으면 전체 마스킹
+        return car_no[:3] + "****" if len(car_no) > 3 else car_no
+    
+    # 한글 뒤 번호를 ****로
+    return car_no[:hangul_pos+1] + "****"
 _H1 = ParagraphStyle("h1", parent=_BODY, fontName=FONT_BOLD, fontSize=16, leading=22)
 _H2 = ParagraphStyle("h2", parent=_BODY, fontName=FONT_BOLD, fontSize=11, leading=16, spaceBefore=10, spaceAfter=4,
                      keepWithNext=1)
@@ -325,9 +349,10 @@ def _build(scan: Scan, view: dict) -> bytes:
     doc_count.build(_inspection_story(view), onFirstPage=count_pages, onLaterPages=count_pages)
     
     # Second pass: render with correct page count
+    masked_plate = mask_plate(scan.car_no)
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=16 * mm, rightMargin=16 * mm, topMargin=14 * mm,
-                            bottomMargin=16 * mm, title=f"WeSCAN {view['heading']} {scan.car_no}", author="WecarScan")
+                            bottomMargin=16 * mm, title=f"WeSCAN {view['heading']} {masked_plate}", author="WecarScan")
     label = f"WECARMOBILITY · BETTERWHY  |  {view['heading_en']}"
 
     def footer(canvas, document):
@@ -364,4 +389,5 @@ def render(scan: Scan, result: dict) -> bytes:
 
 def filename(scan: Scan) -> str:
     stamp = local_display(scan.created_at).replace("-", "").replace(":", "").replace(" ", "-")
-    return f"위스캔-{scan.car_no}-{stamp}.pdf"
+    masked_plate = mask_plate(scan.car_no)
+    return f"위스캔-{masked_plate}-{stamp}.pdf"
