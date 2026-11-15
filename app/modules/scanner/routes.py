@@ -357,3 +357,42 @@ def scan_errors(scan_id: int):
         "summary": summary
     }, 200
 
+
+@bp.post("/upload")
+@admin_required
+@limiter.limit("10 per minute")
+def upload_scan_data():
+    """
+    스캔 데이터 파일 업로드.
+    
+    CSV(PCAN), TRC 파일을 업로드하면 run_scan과 동일하게 처리합니다.
+    """
+    from app.modules.scanner.upload import process_upload, UploadError
+    
+    # 파일 확인
+    if "file" not in request.files:
+        return {"success": False, "message": "파일을 선택해주세요."}, 400
+    
+    file = request.files["file"]
+    
+    # 선택 입력
+    car_no = request.form.get("car_no")
+    car_json = request.form.get("car")
+    car = json.loads(car_json) if car_json else None
+    
+    try:
+        scan_id = process_upload(current_user, file, car_no=car_no, car=car)
+        current_app.logger.info(f"User {current_user.id} uploaded scan data: {file.filename}")
+        return {
+            "success": True,
+            "scan_id": scan_id,
+            "redirect": url_for("scanner.inspection", scan_id=scan_id)
+        }, 200
+    except UploadError as exc:
+        return {"success": False, "message": str(exc)}, 400
+    except ServiceError as exc:
+        return {"success": False, "message": str(exc.message)}, 400
+    except Exception as exc:
+        current_app.logger.exception("Upload failed")
+        return {"success": False, "message": "파일 처리 중 오류가 발생했습니다."}, 500
+
