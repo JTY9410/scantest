@@ -43,10 +43,15 @@ def test_ev9_file_upload_and_ecu_detection(_app_base, make_user, ev9_csv):
         scan = db.session.get(Scan, scan_id)
         assert scan is not None
         
-        # 1. Scan type=ev
+        # 1. VIN: 17자
+        assert scan.scan_vin is not None, "VIN not extracted"
+        assert len(scan.scan_vin) == 17, f"VIN should be 17 chars, got {len(scan.scan_vin)}: {scan.scan_vin}"
+        assert scan.scan_vin == "ZZZ12345678901234", f"Expected ZZZ12345678901234, got {scan.scan_vin}"
+        
+        # 2. Scan type=ev
         assert scan.type == "ev", f"Expected type=ev, got {scan.type}"
         
-        # 2. ECU 598/59E/788 등록
+        # 3. ECU 598/59E/788 등록
         from app.modules.canlab.models import DiagnosticReport
         report_id = scan.bms_data.get("report_id")
         assert report_id is not None, "report_id not in bms_data"
@@ -59,14 +64,15 @@ def test_ev9_file_upload_and_ecu_detection(_app_base, make_user, ev9_csv):
         assert "59E" in ecu_request_ids, f"ECU 59E not found. ECUs: {ecu_request_ids}"
         assert "788" in ecu_request_ids, f"ECU 788 not found. ECUs: {ecu_request_ids}"
         
-        # 3. Steps exist (success check relaxed due to fixture ISO-TP format issue)
-        all_steps = []
-        for ecu in ecus:
-            all_steps.extend(ecu.get("steps", []))
+        # 4. 성공 단계 > 0, no_data = 0
+        steps = scan.bms_data.get("steps", [])
+        assert len(steps) > 0, "No steps found in bms_data"
         
-        # Fixture has raw ISO-TP frames that get reassembled, causing format issues
-        # Real production EV9 logs work correctly with ISO-TP format_uds_elm_reply
-        assert len(all_steps) >= 0, "Should have some steps"
+        success_steps = [s for s in steps if s.get("status") == "ok"]
+        no_data_steps = [s for s in steps if s.get("status") == "no_data"]
+        
+        assert len(success_steps) > 0, f"Expected success steps > 0, got {len(success_steps)}"
+        assert len(no_data_steps) == 0, f"Expected no_data = 0, got {len(no_data_steps)}: {no_data_steps}"
         
         # 4. PDF: 마스킹 번호판
         pdf_doc = db.session.scalar(select(ScanDocument).where(ScanDocument.scan_id == scan_id))
