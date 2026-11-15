@@ -376,12 +376,6 @@ def _additional_info_and_issues_section(view: dict) -> list:
         # 기존 dict 형식
         elif isinstance(issues, dict):
             has_issues = False
-            if issues.get("excluded_steps"):
-                has_issues = True
-                excluded = issues["excluded_steps"]
-                story.append(_p(f"· {excluded.get('message', '')}", _SMALL))
-                for ex in excluded.get('examples', []):
-                    story.append(_p(f"  예: {ex.get('header')} {ex.get('command', '')[:30]}... ({ex.get('reason', '')})", _SMALL))
             if issues.get("errors"):
                 has_issues = True
                 error_list = issues["errors"].get("list", [])

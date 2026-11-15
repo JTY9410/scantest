@@ -776,8 +776,7 @@ def inspection(scan, result: dict) -> dict:
         "bms": [] if kind == "ice" else [
             _measure("SOC (표시)", _battery_value(result, "soc_display")
                      if _battery_value(result, "soc_display") is not None else _battery_value(result, "soc"), "%", 1),
-            _measure("BMS SOC", _battery_value(result, "soc_bms") if _battery_value(result, "soc_bms") is not None 
-                     else _battery_value(result, "bms_soc"), "%", 1),
+            _measure("BMS SOC", _battery_value(result, "bms_soc"), "%", 1),
             _measure("SOH", soh, "%", 1),
             _measure("팩 전압", _battery_value(result, "pack_voltage"), "V", 1),
             _measure("팩 전류", _battery_value(result, "pack_current"), "A", 1),

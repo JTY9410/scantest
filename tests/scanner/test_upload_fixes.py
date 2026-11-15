@@ -269,8 +269,27 @@ def test_bms_soc_in_pdf_table(_app_base, make_user, ev9_csv):
         
         # BMS SOC 항목 확인
         bms_soc_measure = next((m for m in bms_measures if "BMS SOC" in m["label"]), None)
-        # EV9 픽스처에 BMS SOC 데이터가 없을 수 있으므로 항목 존재만 확인
-        # (값이 None이어도 항목은 있어야 함)
-        assert any("BMS SOC" in m["label"] for m in bms_measures), "BMS SOC 항목이 배터리 표에 없음"
+        assert bms_soc_measure is not None, "BMS SOC 항목이 배터리 표에 없음"
+        
+        # PDF 텍스트에서 BMS SOC 값 확인
+        from app.modules.scanner import service
+        from pypdf import PdfReader
+        
+        document = service.scan_document(scan)
+        pdf_reader = PdfReader(BytesIO(document.content))
+        pdf_text = "\n".join(page.extract_text() for page in pdf_reader.pages)
+        
+        # PDF에 "BMS SOC" 텍스트와 숫자 값이 있어야 함
+        assert "BMS SOC" in pdf_text, "PDF에 'BMS SOC' 텍스트가 없음"
+        
+        # bms_data에 실제 값이 있으면 PDF에도 표시되어야 함
+        bms_soc_value = scan.bms_data.get("battery", {}).get("bms_soc")
+        if bms_soc_value is not None:
+            # BMS SOC 값이 PDF에 표시되는지 확인 (숫자 형식)
+            import re
+            # "BMS SOC" 다음에 숫자가 나오는 패턴 찾기
+            pattern = r'BMS SOC[^\d]*(\d+\.?\d*)'
+            match = re.search(pattern, pdf_text)
+            assert match is not None, f"PDF에서 BMS SOC 값을 찾을 수 없음. bms_data: {bms_soc_value}"
         
         db.session.rollback()
