@@ -69,8 +69,9 @@ def parse_uploaded_trace(content: bytes, filename: str) -> str:
         # 형식은 맞는 것 같지만 파싱 실패
         raise UploadError(f"CAN 로그를 파싱하지 못했습니다: {exc}")
     
-    if not trace.transactions:
-        raise UploadError("유효한 UDS 트랜잭션이 없습니다.")
+    # Tesla broadcast는 UDS transactions 없이 frames만 있음
+    if not trace.transactions and not trace.frames:
+        raise UploadError("유효한 CAN 데이터가 없습니다.")
     
     # WeCar ELM 형식으로 변환
     # (이미 text가 load_trace로 파싱되었으므로, 원본을 그대로 사용)
