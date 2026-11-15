@@ -71,38 +71,40 @@ def test_parse_uploaded_trace_invalid_format():
         parse_uploaded_trace(content, "invalid.txt")
 
 
-def test_upload_endpoint_no_file(admin_client):
+def test_upload_endpoint_no_file(admin_client, app):
     """파일 없이 요청하면 오류."""
-    response = admin_client.post("/admin/scan/upload")
-    
-    assert response.status_code == 400
-    data = response.get_json()
-    assert not data["success"]
-    assert "파일" in data["message"]
+    with app.app_context():
+        response = admin_client.post("/admin/scan/upload")
+        
+        assert response.status_code == 400
+        data = response.get_json()
+        assert not data["success"]
+        assert "파일" in data["message"]
 
 
-def test_upload_endpoint_with_fake_csv(admin_client, monkeypatch):
+def test_upload_endpoint_with_fake_csv(admin_client, app, monkeypatch):
     """가짜 CSV 파일 업로드 (E2E 스텁)."""
-    # Mock process_upload to avoid full processing
-    from app.modules.scanner import upload
-    
-    def mock_process_upload(actor, file, car_no=None, car=None, device=""):
-        return 999  # Fake scan_id
-    
-    monkeypatch.setattr(upload, "process_upload", mock_process_upload)
-    
-    data = b"Time,ID,Data\n0.001,7E0,0222F190\n"
-    
-    response = admin_client.post(
-        "/admin/scan/upload",
-        data={
-            "file": (BytesIO(data), "test.csv"),
-            "car_no": "88가8888"
-        },
-        content_type="multipart/form-data"
-    )
-    
-    assert response.status_code == 200
-    result = response.get_json()
-    assert result["success"]
-    assert result["scan_id"] == 999
+    with app.app_context():
+        # Mock process_upload to avoid full processing
+        from app.modules.scanner import upload
+        
+        def mock_process_upload(actor, file, car_no=None, car=None, device=""):
+            return 999  # Fake scan_id
+        
+        monkeypatch.setattr(upload, "process_upload", mock_process_upload)
+        
+        data = b"Time,ID,Data\n0.001,7E0,0222F190\n"
+        
+        response = admin_client.post(
+            "/admin/scan/upload",
+            data={
+                "file": (BytesIO(data), "test.csv"),
+                "car_no": "88가8888"
+            },
+            content_type="multipart/form-data"
+        )
+        
+        assert response.status_code == 200
+        result = response.get_json()
+        assert result["success"]
+        assert result["scan_id"] == 999
