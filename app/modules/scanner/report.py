@@ -13,12 +13,6 @@ from zoneinfo import ZoneInfo
 from app.modules.scanner.powertrain import LABELS, classify
 
 
-def mask_vin(vin: str | None) -> str:
-    """VIN 마스킹: 앞 3자리 + * + 끝 4자리 (예: KMH************1234)"""
-    if not vin or len(vin) < 8:
-        return vin or "-"
-    return f"{vin[:3]}{'*' * (len(vin) - 7)}{vin[-4:]}"
-
 _ECU = {
     "7E0": "엔진", "7E8": "엔진", "7E1": "변속기", "7E9": "변속기",
     "7E2": "ABS", "7EA": "ABS", "7D1": "ABS",
@@ -668,7 +662,7 @@ def inspection(scan, result: dict) -> dict:
             "year": getattr(scan, "car_year", None) or car.get("diag_year") or "-",
             "fuel": getattr(scan, "car_fuel", None) or car.get("diag_fuel") or "-",
             "number": getattr(scan, "car_no", None) or "-",
-            "vin": mask_vin(result.get("vin") or getattr(scan, "car_vin", None)),
+            "vin": result.get("vin") or getattr(scan, "car_vin", None) or "-",
             "mileage": mileage,
             "mileage_text": f"{mileage:,.0f} km" if mileage is not None else "-",
         },
@@ -686,7 +680,7 @@ def inspection(scan, result: dict) -> dict:
         "dtc_rows": dtc_rows(result, group_kind),
         "groups": groups,
         "judgments": judged,
-        "reconcile": (lambda rc: {**rc, "vin": mask_vin(rc.get("vin"))} if rc else None)(
+        "reconcile": (lambda rc: rc if rc else None)(
             result.get("reconcile") if result.get("source") == "reconcile" else None
         ),
         "reference": result.get("reference") or {},
