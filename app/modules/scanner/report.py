@@ -335,6 +335,12 @@ def basic_report(*, scan_id: int, diagnosed_at: datetime, car_no: str, car: dict
         sensor = {"ev": _sensor_ev(result, mileage, car), "ice": None}
     else:
         sensor = {"ev": None, "ice": {"vehicle_mileage": mileage} if mileage is not None else None}
+    # Collect additional info (beyond WESCAN standard)
+    additional_info = _collect_additional_info(result, is_ev)
+    
+    # Collect issues (errors, conflicts, missing values)
+    issues = _collect_issues(result, car, kind)
+    
     return {
         "diagnosis_info": _present({
             "diagnosis_id": scan_id,
@@ -352,7 +358,115 @@ def basic_report(*, scan_id: int, diagnosed_at: datetime, car_no: str, car: dict
         "dtc": {"enhanced": {"ecus": _ecus(result)}},
         "sensor": sensor,
         "judgments": judgments(result),
+        "additional_info": additional_info,
+        "issues": issues,
     }
+
+
+def _collect_additional_info(result: dict, is_ev: bool) -> dict:
+    """Collect additional information beyond WESCAN standard report."""
+    info = {}
+    
+    # Freeze frame data (고장 당시 값)
+    freeze_values = result.get("freeze")
+    if freeze_values:
+        info["freeze_frame"] = {
+            "count": len(freeze_values),
+            "available": True
+        }
+    
+    # UDS snapshot data (제어기 고장 당시 데이터)
+    snapshot_count = sum(1 for ecu in result.get("diagnosis", {}).get("ecus", []) 
+                        if ecu.get("snapshots"))
+    if snapshot_count > 0:
+        info["uds_snapshots"] = {
+            "count": snapshot_count,
+            "available": True
+        }
+    
+    # Module temperatures (모듈 온도)
+    if is_ev:
+        modules = module_temperatures(result)
+        if modules:
+            info["module_temperatures"] = {
+                "count": len(modules),
+                "available": True
+            }
+        
+        # Cell voltages (셀 전압)
+        cells = cell_voltages(result)
+        if cells:
+            info["cell_voltages"] = {
+                "count": len(cells),
+                "available": True
+            }
+    
+    # Real-time values (실시간 데이터)
+    values = result.get("values", [])
+    if values:
+        info["realtime_values"] = {
+            "count": len(values),
+            "available": True
+        }
+    
+    # Monitor results (배출 부품 점검)
+    monitors = result.get("monitors", [])
+    if monitors:
+        info["emission_monitors"] = {
+            "count": len(monitors),
+            "available": True
+        }
+    
+    return info
+
+
+def _collect_issues(result: dict, car: dict, kind: dict) -> dict:
+    """Collect issues: errors, conflicts, missing values."""
+    issues = {}
+    
+    # Errors (오류 기록)
+    errors = result.get("errors", [])
+    if errors:
+        issues["errors"] = {
+            "count": len(errors),
+            "summary": [e.get("label", "Unknown error") for e in errors[:5]]
+        }
+    
+    # Powertrain conflict (동력원 충돌)
+    # Note: This info is in scan object, not in result dict
+    # We'll check it from car dict if available
+    if car.get("powertrain_conflict"):
+        issues["powertrain_conflict"] = {
+            "detected": True,
+            "plate_type": car.get("plate_powertrain"),
+            "vin_type": car.get("vin_powertrain")
+        }
+    
+    # Missing critical values (주요 값 출처 없음)
+    sensor = result.get("battery", {})
+    missing_critical = []
+    
+    if kind.get("type") in ("ev", "hev"):
+        if not sensor.get("soc") and not sensor.get("display_soc"):
+            missing_critical.append("SOC (충전 상태)")
+        if not sensor.get("soh"):
+            missing_critical.append("SOH (배터리 건강)")
+    
+    if missing_critical:
+        issues["missing_critical_values"] = {
+            "count": len(missing_critical),
+            "list": missing_critical  # Changed from 'items' to avoid Jinja2 conflict with dict.items()
+        }
+    
+    # Status summary
+    status = result.get("status")
+    if status in ("fail", "partial"):
+        issues["scan_status"] = {
+            "status": status,
+            "message": "스캔 실패" if status == "fail" else "일부 항목 오류"
+        }
+    
+    return issues
 
 
 _GROUP_ECU = {
@@ -538,6 +652,11 @@ def inspection(scan, result: dict) -> dict:
     else:
         power = []
     heading = HEADINGS[kind]
+    # Collect additional info and issues for WESCAN report structure
+    is_ev_kind = kind in ("ev", "hev")
+    additional_info = _collect_additional_info(result, is_ev_kind)
+    issues = _collect_issues(result, car, pt)
+    
     return {
         "kind": kind,
         "kind_label": LABELS[kind] + (" (플러그인)" if pt.get("plugin") else "") + (" (수소)" if pt.get("hydrogen") else ""),
@@ -599,4 +718,6 @@ def inspection(scan, result: dict) -> dict:
         "module_min": temp_min if modules else None,
         "module_max": temp_max if modules else None,
         "module_spread": round(max(module_values) - min(module_values), 1) if len(module_values) >= 2 else None,
+        "additional_info": additional_info,
+        "issues": issues,
     }
