@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 
 @pytest.fixture
-def upload_admin(client, make_user):
+def upload_admin(client, make_user, app):
     """관리자로 로그인된 클라이언트."""
     from tests.conftest import csrf_token
     from app.modules.accounts.models import User
@@ -14,12 +14,15 @@ def upload_admin(client, make_user):
     
     # 관리자 생성
     admin_id = make_user(tid="upload_admin", type="admin")
-    admin = db.session.get(User, admin_id)
+    
+    with app.app_context():
+        admin = db.session.get(User, admin_id)
+        admin_tid = admin.tid
     
     token = csrf_token(client, "/admin/login")
     response = client.post("/admin/login", data={
         "csrf_token": token,
-        "tid": admin.tid,
+        "tid": admin_tid,
         "password": "password123"  # conftest.py의 PASSWORD
     })
     assert response.status_code in (200, 302)
