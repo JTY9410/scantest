@@ -25,26 +25,24 @@ def _app_base():
     """Session-scoped app for creating schema once"""
     app = create_app("testing")
     with app.app_context():
-        db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-        # Use CASCADE to handle foreign key dependencies added by migrations
-        # SQLite doesn't support SCHEMA, so only for PostgreSQL
-        if "postgresql" in db_uri:
-            db.session.execute(text("DROP SCHEMA public CASCADE"))
+        # Handle both SQLite and Postgres
+        engine_name = db.engine.name
+        if engine_name == 'postgresql':
+            db.session.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
             db.session.execute(text("CREATE SCHEMA public"))
             db.session.commit()
-            # Run migrations for PostgreSQL
+            # Run migrations for Postgres
             from flask_migrate import upgrade as flask_migrate_upgrade
             flask_migrate_upgrade()
         else:
-            # SQLite: drop all tables and create from models
+            # SQLite: use create_all (migrations don't work well with SQLite constraints)
             db.drop_all()
             db.create_all()
-            
     yield app
     with app.app_context():
-        db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
-        if "postgresql" in db_uri:
-            db.session.execute(text("DROP SCHEMA public CASCADE"))
+        engine_name = db.engine.name
+        if engine_name == 'postgresql':
+            db.session.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
             db.session.execute(text("CREATE SCHEMA public"))
             db.session.commit()
         else:

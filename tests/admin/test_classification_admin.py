@@ -8,6 +8,7 @@ from app.extensions import db
 @pytest.fixture
 def classification_test_data(app):
     """분류 테스트용 데이터 생성."""
+    from datetime import datetime
     with app.app_context():
         unique_id = str(uuid.uuid4())[:8]
         sha_hash = uuid.uuid4().hex + uuid.uuid4().hex[:32]
@@ -15,8 +16,8 @@ def classification_test_data(app):
         
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('canze', :path, :sha, 100, NOW())
-        """), {'path': file_path, 'sha': sha_hash})
+            VALUES ('canze', :path, :sha, 100, :now)
+        """), {'path': file_path, 'sha': sha_hash, 'now': datetime.utcnow()})
         db.session.commit()
         
         source_id = db.session.execute(text("""
