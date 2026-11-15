@@ -1884,3 +1884,18 @@ def register_cli(app: Flask) -> None:
         click.echo("=" * 80)
     
     app.cli.add_command(battery)
+    
+    @app.cli.command("seed-tesla-reference")
+    def seed_tesla_reference():
+        """Tesla 기준 용량 참조 테이블 시드 (기존 행 유지)."""
+        from app.modules.tesla.reference import seed_tesla_reference_data
+        from app.extensions import db
+        from sqlalchemy import text
+        
+        before = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
+        
+        seed_tesla_reference_data()
+        
+        after = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
+        
+        click.echo(f"Tesla reference data seeded: {before} -> {after} rows")

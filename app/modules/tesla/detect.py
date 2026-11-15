@@ -10,6 +10,16 @@ import re
 from typing import Dict, Any, Optional
 
 
+# VIN 유효 문자셋 (I, O, Q 제외)
+_VIN_CHARS = frozenset("ABCDEFGHJKLMNPRSTUVWXYZ0123456789")
+_VIN_RE = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
+
+
+def _vin_payload(data: bytes) -> bytes:
+    """VIN 문자셋에 있는 바이트만 남김."""
+    return bytes(b for b in data if chr(b) in _VIN_CHARS)
+
+
 # Tesla VIN WMI (World Manufacturer Identifier) prefixes
 TESLA_WMI = {
     '5YJ': 'TESLA, INC. (USA - Fremont)',
@@ -158,23 +168,20 @@ def extract_vin_from_frames(frames: list) -> str | None:
         if can_id != 0x405:
             continue
         
-        if isinstance(data, bytes) and len(data) >= 4:
+        if isinstance(data, bytes) and len(data) >= 2:
             # Multiplex 인덱스 (첫 바이트)
             mux = data[0]
             
-            # 0x10: VIN 첫 7자
-            # 0x11: VIN 중간 7자
-            # 0x12: VIN 마지막 3자
-            if mux == 0x10 and len(data) >= 8:
-                vin_parts[0] = data[1:8].decode('ascii', errors='ignore')
-            elif mux == 0x11 and len(data) >= 8:
-                vin_parts[1] = data[1:8].decode('ascii', errors='ignore')
-            elif mux == 0x12 and len(data) >= 4:
-                vin_parts[2] = data[1:4].decode('ascii', errors='ignore')
+            # mux 0x10/0x11/0x12에서 data[1:]의 VIN 문자셋만 추출
+            if mux in (0x10, 0x11, 0x12) and mux not in vin_parts:
+                payload = _vin_payload(bytes(data[1:]))
+                if payload:
+                    vin_parts[mux] = payload.decode('ascii')
     
-    if len(vin_parts) == 3:
-        vin = vin_parts[0] + vin_parts[1] + vin_parts[2]
-        if len(vin) == 17:
+    # 세 mux가 모두 있고 합쳐서 17자 유효 VIN인지 확인
+    if 0x10 in vin_parts and 0x11 in vin_parts and 0x12 in vin_parts:
+        vin = vin_parts[0x10] + vin_parts[0x11] + vin_parts[0x12]
+        if _VIN_RE.fullmatch(vin) and len(vin) == 17:
             return vin
     
     return None

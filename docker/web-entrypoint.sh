@@ -13,6 +13,11 @@ case "${AUTO_DB_UPGRADE:-}" in
       echo "ERROR: DTC workbook import failed. Container startup is aborted." >&2
       exit 1
     fi
+    echo "Seeding Tesla reference data."
+    if ! flask seed-tesla-reference; then
+      echo "ERROR: Tesla reference data seed failed. Container startup is aborted." >&2
+      exit 1
+    fi
     ;;
 esac
 

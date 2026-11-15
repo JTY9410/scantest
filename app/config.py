@@ -140,8 +140,9 @@ class Config:
     AI_TEST_TIMEOUT_SECONDS = 10
     # 결과지 이미지 판독은 오래 걸린다. gunicorn 요청 제한 시간보다 짧게 둔다.
     AI_REQUEST_TIMEOUT_SECONDS = _int("AI_REQUEST_TIMEOUT_SECONDS", 50)
-    # 도커(gunicorn) 기준 업로드 한도. 방송 CAN이 많은 28.7MB 기록도 받도록 64MB.
-    CANLAB_MAX_UPLOAD_BYTES = _int("CANLAB_MAX_UPLOAD_BYTES", 64 * 1024 * 1024)
+    # 도커(gunicorn) 기준 업로드 한도. Tesla 다중 파일 합본 약 305MB 대응으로 600MB.
+    MAX_CONTENT_LENGTH = 600 * 1024 * 1024
+    CANLAB_MAX_UPLOAD_BYTES = _int("CANLAB_MAX_UPLOAD_BYTES", 600 * 1024 * 1024)
     # 완료 데이터 대조 허용오차·필수 명령 덮어쓰기(JSON). 예: {"soh": {"abs": 0.2}} / {"ice": [["7E0", "1902"]]}
     # 기본값과 산출 근거: canlab/engine/reconcile.py DEFAULT_TOLERANCES·DEFAULT_REQUIRED, docs/flows/reconcile_tolerances.md
     RECONCILE_TOLERANCES = _json("RECONCILE_TOLERANCES")

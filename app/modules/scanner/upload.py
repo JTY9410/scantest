@@ -4,6 +4,7 @@ CSV(PCAN), TRC 파일을 업로드하면 run_scan과 동일한 효과(해석, �
 """
 
 import hashlib
+import re
 from datetime import datetime
 from typing import BinaryIO
 
@@ -19,13 +20,33 @@ from app.modules.scans.car_info import normalize_car_no, normalize_dto
 
 
 # 업로드 제한
-MAX_UPLOAD_SIZE = 300 * 1024 * 1024  # 300 MB (Tesla 실제 로그 134~256MB 대응)
+MAX_UPLOAD_SIZE = 600 * 1024 * 1024  # 600 MB (Tesla 다중 파일 합본 약 305MB 대응)
 ALLOWED_EXTENSIONS = {".csv", ".trc", ".txt", ".log"}
 
 
 class UploadError(Exception):
     """업로드 처리 오류."""
     pass
+
+
+# VIN 유효 문자셋
+_VIN_CHARS = frozenset("ABCDEFGHJKLMNPRSTUVWXYZ0123456789")
+_VIN_RE_PATTERN = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
+
+
+def _sanitize_vin(vin: str | None) -> str | None:
+    """VIN 문자셋 밖 제거 후 17자 매치일 때만 반환."""
+    if not vin:
+        return None
+    
+    # 문자셋 밖 제거
+    sanitized = "".join(c for c in vin if c.upper() in _VIN_CHARS)
+    
+    # 17자 유효 VIN인지 확인
+    if _VIN_RE_PATTERN.fullmatch(sanitized) and len(sanitized) == 17:
+        return sanitized
+    
+    return None
 
 
 def validate_upload(file: FileStorage) -> None:
@@ -392,7 +413,8 @@ def process_upload(
         frame_tuples = [(f.t_ms / 1000.0, f.can_id, f.data) for f in trace.frames]
         
         # VIN 추출 시도
-        extracted_vin = tesla_detect.extract_vin_from_frames(frame_tuples)
+        raw_vin = tesla_detect.extract_vin_from_frames(frame_tuples)
+        extracted_vin = _sanitize_vin(raw_vin)
         
         # Tesla 감지: VIN WMI (5YJ/7SA/LRW) 또는 CAN ID 패턴 (0x352+0x292+0x401)
         is_tesla = tesla_detect.is_tesla(frame_tuples, vin=extracted_vin)
@@ -404,8 +426,8 @@ def process_upload(
                 is_tesla = True
                 current_app.logger.info(f"Tesla detected by manufacturer: {manufacturer}")
         
-        if is_tesla and extracted_vin:
-            current_app.logger.info(f"Tesla vehicle detected, VIN: {extracted_vin}")
+        if is_tesla:
+            current_app.logger.info(f"Tesla vehicle detected, vin_len={len(extracted_vin) if extracted_vin else 0} valid={extracted_vin is not None}")
     
     # 5. Tesla 경로: 디코딩 후 결과 저장
     if is_tesla:
@@ -507,6 +529,9 @@ def _process_tesla_upload(
     from app.modules.tesla import detect as tesla_detect
     from app.modules.tesla import decode as tesla_decode
     from app.modules.tesla import soh as tesla_soh
+    
+    # VIN 정제 (무효면 미확인)
+    vin = _sanitize_vin(vin)
     
     # actor가 int면 그대로, 객체면 id 추출
     actor_id = actor if isinstance(actor, int) else actor.id
