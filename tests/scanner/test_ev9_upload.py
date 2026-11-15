@@ -2,11 +2,6 @@
 
 import pytest
 from pathlib import Path
-from app.models import User, Scan
-from app.modules.scanner.interpret import interpret_scan, scan_result
-from app.modules.scanner.report import inspection
-from app.modules.scanner.document import scan_document
-from app import db
 
 
 @pytest.fixture
@@ -29,14 +24,19 @@ def test_ev9_upload_end_to_end(client, make_user, ev9_csv):
     8. PDF 쪽수
     """
     with client.application.app_context():
+        from app import db
+        from app.models import User, Scan
+        from app.modules.scanner.interpret import scan_result
+        from app.modules.scanner.report import inspection
+        from app.modules.scanner.document import scan_document
+        from app.modules.scanner.upload import process_upload
+        from werkzeug.datastructures import FileStorage
+        
         # 1. 사용자 생성
         user_id = make_user("tester1", type="admin")
         actor = db.session.get(User, user_id)
         
         # 2. 업로드 실행
-        from app.modules.scanner.upload import process_upload
-        from werkzeug.datastructures import FileStorage
-        
         with open(ev9_csv, "rb") as f:
             file = FileStorage(f, filename="ev9_test.csv", content_type="text/csv")
             
@@ -131,6 +131,9 @@ def test_ev9_upload_end_to_end(client, make_user, ev9_csv):
 def test_ev9_upload_suppress_response(client, make_user, ev9_csv):
     """3E 80 (TesterPresent suppressPosRsp) 무응답이 오류로 처리되지 않는지 확인."""
     with client.application.app_context():
+        from app import db
+        from app.models import User, Scan
+        from app.modules.scanner.interpret import scan_result
         from app.modules.scanner.upload import process_upload
         from werkzeug.datastructures import FileStorage
         
