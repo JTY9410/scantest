@@ -65,7 +65,7 @@ def proxy_fix_hops() -> int:
 
 class Config:
     APP_ENV = "development"
-    APP_VERSION = os.environ.get("APP_VERSION", "2.2.2")
+    APP_VERSION = os.environ.get("APP_VERSION", "2.2.3")
 
     SECRET_KEY = os.environ.get("SECRET_KEY")
     SQLALCHEMY_DATABASE_URI = database_url()
