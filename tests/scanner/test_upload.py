@@ -71,40 +71,54 @@ def test_parse_uploaded_trace_invalid_format():
         parse_uploaded_trace(content, "invalid.txt")
 
 
-def test_upload_endpoint_no_file(admin_client, app):
+def test_upload_endpoint_no_file(app, make_user):
     """파일 없이 요청하면 오류."""
+    from tests.conftest import admin_login
+    
     with app.app_context():
-        response = admin_client.post("/admin/scan/upload")
-        
-        assert response.status_code == 400
-        data = response.get_json()
-        assert not data["success"]
-        assert "파일" in data["message"]
+        make_user("admin_upload", type="admin", password="test123", name="Admin")
+    
+    client = app.test_client()
+    admin_login(client, "admin_upload", "test123")
+    
+    response = client.post("/admin/scan/upload")
+    
+    assert response.status_code == 400
+    data = response.get_json()
+    assert not data["success"]
+    assert "파일" in data["message"]
 
 
-def test_upload_endpoint_with_fake_csv(admin_client, app, monkeypatch):
+def test_upload_endpoint_with_fake_csv(app, make_user, monkeypatch):
     """가짜 CSV 파일 업로드 (E2E 스텁)."""
+    from tests.conftest import admin_login
+    
     with app.app_context():
-        # Mock process_upload to avoid full processing
-        from app.modules.scanner import upload
-        
-        def mock_process_upload(actor, file, car_no=None, car=None, device=""):
-            return 999  # Fake scan_id
-        
-        monkeypatch.setattr(upload, "process_upload", mock_process_upload)
-        
-        data = b"Time,ID,Data\n0.001,7E0,0222F190\n"
-        
-        response = admin_client.post(
-            "/admin/scan/upload",
-            data={
-                "file": (BytesIO(data), "test.csv"),
-                "car_no": "88가8888"
-            },
-            content_type="multipart/form-data"
-        )
-        
-        assert response.status_code == 200
-        result = response.get_json()
-        assert result["success"]
-        assert result["scan_id"] == 999
+        make_user("admin_csv", type="admin", password="test456", name="CSV Admin")
+    
+    # Mock process_upload to avoid full processing
+    from app.modules.scanner import upload
+    
+    def mock_process_upload(actor, file, car_no=None, car=None, device=""):
+        return 999  # Fake scan_id
+    
+    monkeypatch.setattr(upload, "process_upload", mock_process_upload)
+    
+    client = app.test_client()
+    admin_login(client, "admin_csv", "test456")
+    
+    data = b"Time,ID,Data\n0.001,7E0,0222F190\n"
+    
+    response = client.post(
+        "/admin/scan/upload",
+        data={
+            "file": (BytesIO(data), "test.csv"),
+            "car_no": "88가8888"
+        },
+        content_type="multipart/form-data"
+    )
+    
+    assert response.status_code == 200
+    result = response.get_json()
+    assert result["success"]
+    assert result["scan_id"] == 999
