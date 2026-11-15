@@ -32,13 +32,13 @@ def test_invalid_percentage_filtered():
     rule = RuleRef(1, 1, "soh", layout, 1.0)
     
     # 95.3% (정상)
-    samples = {(0x7E4, 0x0105): [(1000, bytes([0] * 25 + [0x03, 0xB9])]}  # 953 → 95.3%
+    samples = {(0x7E4, 0x0105): [(1000, bytes([0] * 25 + [0x03, 0xB9]))]}  # 953 → 95.3%
     result = decode_signals(samples, [rule])
     assert "soh" in result
     assert result["soh"]["value"] == 95.3
     
     # 839.9% (비정상) → 필터링됨
-    samples = {(0x7E4, 0x0105): [(1000, bytes([0] * 25 + [0x20, 0xCF])]}  # 8399 → 839.9%
+    samples = {(0x7E4, 0x0105): [(1000, bytes([0] * 25 + [0x20, 0xCF]))]}  # 8399 → 839.9%
     result = decode_signals(samples, [rule])
     assert "soh" not in result
 
