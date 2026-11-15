@@ -500,8 +500,7 @@ def render(scan: Scan, result: dict) -> bytes:
 
 
 def filename(scan: Scan) -> str:
-    """ASCII-safe filename for Content-Disposition header."""
+    """UTF-8 filename with masked plate (for filename* parameter)."""
     stamp = local_display(scan.created_at).replace("-", "").replace(":", "").replace(" ", "-")
-    # ASCII-only: 'wescan-report-YYYYMMDD-HHMMSS.pdf'
-    date_part = stamp.split("-")[0] if "-" in stamp else stamp[:8]
-    return f"wescan-report-{date_part}.pdf"
+    masked_plate = mask_plate(scan.car_no)
+    return f"위스캔-{masked_plate}-{stamp}.pdf"

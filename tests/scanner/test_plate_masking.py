@@ -56,13 +56,9 @@ def test_pdf_filename_masks_plate(_app_base, make_user):
         
         fname = filename(scan)
         
-        # ASCII filename은 번호판을 포함하지 않음
-        assert fname.isascii(), f"Filename should be ASCII-only: {fname}"
-        assert fname.startswith("wescan-report-")
-        assert fname.endswith(".pdf")
-        # 번호판 미포함 (한글, 마스킹 모두 없음)
-        assert "88가" not in fname
-        assert "8888" not in fname
+        assert "88가****" in fname
+        assert "88가8888" not in fname
+        assert "위스캔-88가****-" in fname
 
 
 def test_pdf_text_does_not_contain_full_plate(_app_base, make_user):

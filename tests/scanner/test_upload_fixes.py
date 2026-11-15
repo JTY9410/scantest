@@ -189,14 +189,12 @@ def test_pdf_app_version_displayed(_app_base, make_user, ev9_csv):
         db.session.rollback()
 
 
-def test_pdf_filename_ascii_only(_app_base, make_user, ev9_csv):
-    """PDF filename이 ASCII 전용 (wescan-report-YYYYMMDD.pdf)."""
+def test_pdf_filename_ascii_only(_app_base, make_user, ev9_csv, admin_client):
+    """PDF Content-Disposition has both ASCII and UTF-8 filenames."""
     from app.modules.scanner.upload import process_upload
-    from app.modules.scans.models import Scan, ScanDocument
-    from app.modules.scanner.pdf import filename
+    from app.modules.scans.models import Scan
     from werkzeug.datastructures import FileStorage
     from app.extensions import db
-    from sqlalchemy import select
     
     with _app_base.app_context():
         admin = make_user(tid="pdf_filename", type="admin")
@@ -217,17 +215,24 @@ def test_pdf_filename_ascii_only(_app_base, make_user, ev9_csv):
         
         scan = db.session.get(Scan, scan_id)
         assert scan is not None
-        
-        # PDF filename 확인
-        pdf_filename = filename(scan)
-        assert pdf_filename.startswith("wescan-report-")
-        assert pdf_filename.endswith(".pdf")
-        assert pdf_filename.isascii(), f"Filename should be ASCII-only: {pdf_filename}"
-        
-        # 한글 없음
-        assert "위스캔" not in pdf_filename
+        scan_id = scan.id
         
         db.session.rollback()
+    
+    # Test Content-Disposition header via HTTP
+    response = admin_client.get(f"/admin/scan/{scan_id}/pdf")
+    assert response.status_code == 200
+    
+    cd = response.headers.get("Content-Disposition", "")
+    assert cd
+    
+    # ASCII filename (no plate number)
+    assert 'filename="wescan-report-' in cd
+    assert "위스캔" not in cd.split('filename="')[1].split('"')[0]
+    
+    # UTF-8 filename* (masked plate)
+    assert "filename*=UTF-8''" in cd
+    assert "%EC%9C%84%EC%8A%A4%EC%BA%94" in cd  # '위스캔' percent-encoded
 
 
 def test_bms_soc_in_pdf_table(_app_base, make_user, ev9_csv):

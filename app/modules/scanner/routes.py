@@ -282,9 +282,36 @@ def change_type(scan_id: int):
 @bp.get("/<int:scan_id>/pdf")
 @admin_required
 def pdf(scan_id: int):
-    document = service.scan_document(get_visible_scan(current_user, scan_id))
-    return send_file(BytesIO(document.content), mimetype="application/pdf", as_attachment=True,
-                     download_name=document.filename, max_age=0)
+    from urllib.parse import quote
+    from app.modules.scanner.pdf import local_display
+    
+    scan = get_visible_scan(current_user, scan_id)
+    document = service.scan_document(scan)
+    
+    # Content-Disposition: 두 파라미터 모두 제공
+    # 1. ASCII filename (번호판 없음)
+    stamp = local_display(scan.created_at).replace("-", "").replace(":", "").replace(" ", "-")
+    ascii_filename = f"wescan-report-{stamp}.pdf"
+    
+    # 2. UTF-8 filename* (마스킹된 번호판 포함)
+    utf8_filename = document.filename
+    encoded_filename = quote(utf8_filename.encode('utf-8'))
+    
+    response = send_file(
+        BytesIO(document.content),
+        mimetype="application/pdf",
+        as_attachment=True,
+        download_name=ascii_filename,
+        max_age=0
+    )
+    
+    # RFC 5987 형식: filename="ASCII" + filename*=UTF-8''<encoded>
+    response.headers['Content-Disposition'] = (
+        f'attachment; filename="{ascii_filename}"; '
+        f"filename*=UTF-8''{encoded_filename}"
+    )
+    
+    return response
 
 
 @bp.post("/<int:scan_id>/clear-plan")
