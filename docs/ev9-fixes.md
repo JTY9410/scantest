@@ -1,6 +1,6 @@
 # 기아 EV9 실차 CAN 분석 결과 수정사항
 
-## 완료된 수정 (13건 중 6건)
+## 완료된 수정 (13건 중 9건)
 
 ### ✅ #1: EV9 플랫폼 힌트 추가
 
@@ -89,7 +89,51 @@ if not dtc_read or any(row["result"] == UNREAD for row in rows):
 
 ---
 
-## 설계 완료 (구현 TODO)
+---
+
+### ✅ #5: suppressPosRsp 처리 완료
+
+**파일:** `app/modules/scanner/obd.py`  
+**구현:** evaluate() 함수에 suppressPosRsp 로직 추가
+
+```python
+# 3E 80, 27 8x, 28 8x 등 suppressPosRspMsgIndicationBit
+if subfunction & 0x80:
+    suppress_response = True
+
+if reply is None and suppress_response:
+    return Outcome("ok", "suppressPosRsp: 응답 억제 요청 (무응답 정상)")
+```
+
+**결과:** 3E 80 (76회) 무응답 → 오류 아님, 정상 처리  
+**출처:** ISO 14229-1
+
+---
+
+### ✅ #9: 주행거리 B002 확인
+
+**파일:** `app/modules/scanner/obd.py`  
+**확인:** `ODOMETER_DIDS = ("1050", "B002", "B004", "B001", "B003")`
+
+**결과:** B002가 이미 포함되어 있음 ✅  
+**출처:** OBDb EV9_ODO_KM
+
+---
+
+### ✅ #11: 모듈 온도 B17/B18 추가 완료
+
+**파일:** `app/modules/canlab/engine/references.json`  
+**추가:**
+```json
+{"signal": "module_temp_b17", "request_id": "7E4", "did": "0111", "start": 26, ...},
+{"signal": "module_temp_b18", "request_id": "7E4", "did": "0111", "start": 27, ...}
+```
+
+**출처:** OBDb EV9_BATTERY_PACK_B17/B18
+
+---
+
+## 설계 완료 (구현 TODO, 4건)
 
 ### #4: 차종 판별 개선
 

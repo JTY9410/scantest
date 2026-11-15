@@ -132,13 +132,24 @@ def evaluate(command_hex: str, reply: str | None, bus: str | None, client_error:
     """요청 하나의 결과. client_error는 브라우저·앱이 남긴 오류(timeout, disconnected, write 등)."""
     if client_error == "disconnected":
         return Outcome("disconnected", "진단기 연결이 끊겨 이 명령을 보내지 못했습니다.")
+    
+    # suppressPosRspMsgIndicationBit 처리 (ISO 14229-1)
+    command = bytes.fromhex(command_hex)
+    service = command[0]
+    suppress_response = False
+    if len(command) >= 2 and service in (0x3E, 0x27, 0x28, 0x85):  # TesterPresent, SecurityAccess, etc
+        subfunction = command[1]
+        if subfunction & 0x80:  # bit7 = suppressPosRspMsgIndicationBit
+            suppress_response = True
+    
     if client_error == "timeout" or (reply is None and client_error is None):
+        if suppress_response:
+            # No response expected, this is OK
+            return Outcome("ok", "suppressPosRsp: 응답 억제 요청 (무응답 정상)")
         return Outcome("timeout", "응답 시간 초과: 단말기가 정해진 시간 안에 답하지 않았습니다.")
     if client_error:
         return Outcome("device_error", f"전송 실패: {client_error}")
 
-    command = bytes.fromhex(command_hex)
-    service = command[0]
     found, incomplete = messages(reply, bus)
     outcome = Outcome("no_data", "")
     pending = False

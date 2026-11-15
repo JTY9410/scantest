@@ -40,6 +40,8 @@
     {"signal": "inverter_cap_voltage", "request_id": "7E4", "did": "0101", "start": 51, "width": 2, "endian": "big", "signed": false, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
     {"signal": "isolation_kohm", "request_id": "7E4", "did": "0101", "start": 57, "width": 2, "endian": "big", "signed": false, "scale": 1, "offset": 0, "sources": ["jejusoul_hkmc"]},
     {"signal": "soh", "request_id": "7E4", "did": "0105", "start": 25, "width": 2, "endian": "big", "signed": false, "scale": 0.1, "offset": 0, "sources": ["jejusoul_hkmc"]},
-    {"signal": "soc_display", "request_id": "7E4", "did": "0105", "start": 31, "width": 1, "endian": "big", "signed": false, "scale": 0.5, "offset": 0, "sources": ["jejusoul_hkmc"]}
+    {"signal": "soc_display", "request_id": "7E4", "did": "0105", "start": 31, "width": 1, "endian": "big", "signed": false, "scale": 0.5, "offset": 0, "sources": ["jejusoul_hkmc"]},
+    {"signal": "module_temp_b17", "request_id": "7E4", "did": "0111", "start": 26, "width": 1, "endian": "big", "signed": false, "scale": 1, "offset": 0, "sources": ["obdb_kia_ev9"]},
+    {"signal": "module_temp_b18", "request_id": "7E4", "did": "0111", "start": 27, "width": 1, "endian": "big", "signed": false, "scale": 1, "offset": 0, "sources": ["obdb_kia_ev9"]}
   ]
 }
