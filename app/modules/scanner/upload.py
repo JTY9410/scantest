@@ -94,18 +94,27 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
         # 요청 데이터 (8바이트 초과도 허용)
         request_data = tx.request.hex().upper() if tx.request else ""
         
-        # 헤더 설정 (7DF는 None으로, 나머지는 요청 ID)
-        header = None if tx.request_id == 0x7DF else f"{tx.request_id:03X}"
+        # 헤더 설정: pair_transactions가 이미 request_id를 조정했으므로
+        # (기능주소 응답은 응답 ID - 8로 설정됨)
+        # 모든 request_id를 header로 사용
+        header = f"{tx.request_id:03X}"
         
-        # 명령 (공백 없이)
-        command = request_data
+        # 명령 (ELM 형식: 2자리마다 공백)
+        command = " ".join(request_data[i:i+2] for i in range(0, len(request_data), 2)) if request_data else ""
         
-        # 응답 처리
+        # 응답 처리 (ELM 형식: 응답 주소 + 데이터, 2자리마다 공백)
         reply = None
-        if tx.response:
-            reply = tx.response.hex().upper()
-        elif tx.negative_code is not None:
-            reply = f"7F{tx.service:02X}{tx.negative_code:02X}"
+        if tx.response and tx.response_id:
+            hex_str = tx.response.hex().upper()
+            # ELM 형식: 응답 주소를 앞에 붙임
+            resp_addr = f"{tx.response_id:03X}"
+            data = " ".join(hex_str[i:i+2] for i in range(0, len(hex_str), 2))
+            reply = f"{resp_addr} {data}"
+        elif tx.negative_code is not None and tx.response_id:
+            nrc_hex = f"7F{tx.service:02X}{tx.negative_code:02X}"
+            resp_addr = f"{tx.response_id:03X}"
+            nrc_data = " ".join(nrc_hex[i:i+2] for i in range(0, len(nrc_hex), 2))
+            reply = f"{resp_addr} {nrc_data}"
         elif not tx.expects_response:
             # suppressPosRsp: 응답이 없는 것이 정상
             reply = None
@@ -125,6 +134,7 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
                 "reply": reply,
                 "optional": False,
                 "probe": False,
+                "bus": "can",  # load_trace는 CAN 버스 데이터를 파싱
                 "tMs": getattr(tx, "response_t_ms", None) or i * 100,
             }
     

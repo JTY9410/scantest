@@ -621,7 +621,10 @@ def _record_learning_stats(maker: str | None, model: str | None, steps: list[dic
         _update_verification_status(maker, model)
         
         # Commit savepoint
-        savepoint.commit()
+        try:
+            savepoint.commit()
+        except Exception as commit_exc:
+            current_app.logger.warning(f"Learning stats savepoint commit failed: {commit_exc}")
         
     except Exception as exc:
         # Rollback savepoint, do not fail the scan
