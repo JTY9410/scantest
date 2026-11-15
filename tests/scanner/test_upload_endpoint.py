@@ -37,6 +37,9 @@ def test_upload_endpoint_no_file(upload_admin):
     """파일 없이 요청하면 오류."""
     response = upload_admin.post("/admin/scan/upload")
     
+    # CI 디버깅
+    print(f"DEBUG: status={response.status_code}, content-type={response.headers.get('Content-Type')}, body={response.get_data(as_text=True)[:500]}")
+    
     assert response.status_code == 400
     data = response.get_json()
     assert not data["success"]
@@ -54,6 +57,9 @@ def test_upload_endpoint_invalid_extension(upload_admin):
         },
         content_type="multipart/form-data"
     )
+    
+    # CI 디버깅
+    print(f"DEBUG: status={response.status_code}, content-type={response.headers.get('Content-Type')}, body={response.get_data(as_text=True)[:500]}")
     
     assert response.status_code == 400
     result = response.get_json()
@@ -220,6 +226,9 @@ def test_upload_endpoint_integration(upload_admin, app):
             content_type="multipart/form-data"
         )
         
+        # CI 디버깅
+        print(f"DEBUG: status={response.status_code}, content-type={response.headers.get('Content-Type')}, body={response.get_data(as_text=True)[:500]}")
+        
         assert response.status_code == 200
         result = response.get_json()
         assert result["success"]
@@ -230,6 +239,8 @@ def test_upload_endpoint_integration(upload_admin, app):
             scan = db.session.get(Scan, result["scan_id"])
             assert scan is not None
             assert scan.car_no == "88가8888"
+            # 파일명은 device_type에 포함됨
+            assert "integration_test.csv" in scan.device_type
             
             # 테스트 후 정리
             db.session.delete(scan)
