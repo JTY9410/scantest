@@ -172,7 +172,8 @@ def test_inspection_report_matches_basic_layout():
     assert view["kind"] == "ev" and len(view["judgments"]) == 7
     assert view["dtc_clear"] and [g["count"] for g in view["groups"]] == [0] * 8
     assert view["cells"][0]["voltage"] == 3.46 and len(view["modules"]) == 2
-    assert view["bms"][7]["text"] == "-"
+    # 내부 저항은 인덱스 8 (BMS SOC 추가로 1씩 밀림)
+    assert view["bms"][8]["text"] == "-"
     missed = inspection(scan, {"battery": {"soh": {"value": 70}}, "dtcs": [{"code": "P0A80", "ecu": "7EC"}],
                                "values": [], "steps": []})
     assert missed["overall"] == "점검요" and missed["groups"][0]["count"] == 1

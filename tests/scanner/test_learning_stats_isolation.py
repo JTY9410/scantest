@@ -110,9 +110,9 @@ def test_savepoint_isolation(app, mock_learning_stats, mock_update_verification,
     
     _record_learning_stats("KIA", "EV6", steps, {})
     
-    # Verify savepoint was created and committed
+    # Verify savepoint was created (commit은 자동으로 부모 트랜잭션이 처리)
     mock_session.begin_nested.assert_called_once()
-    mock_savepoint.commit.assert_called_once()
+    # savepoint.commit()은 더 이상 명시적으로 호출하지 않음 (자동 커밋)
 
 
 def test_savepoint_rollback_on_error(app, mock_learning_stats, mock_update_verification, mock_db_session):
