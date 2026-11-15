@@ -298,63 +298,112 @@ def _additional_info_section(view: dict) -> list:
     return story
 
 
-def _issues_section(view: dict) -> list:
-    """문제점 섹션 (수집 실패 명령, 오류, 동력원 충돌, 값 출처 없음 등)."""
+def _additional_info_and_issues_section(view: dict) -> list:
+    """추가 수집 정보와 문제점 섹션 (하나로 통합)."""
+    additional_info = view.get("additional_info", {})
     issues = view.get("issues", {})
-    if not issues:
+    
+    if not additional_info and not issues:
         return []
     
-    story = [_p("문제점", _H2),
-             _p("수집 실패 명령, 오류, 동력원 충돌, 값 출처 없음 등", _SMALL)]
+    story = [PageBreak(), _p("추가 수집 정보와 문제점", _H2),
+             _p("WESCAN 기본 진단서 외 추가로 수집된 정보 및 문제점입니다.", _SMALL)]
     
-    # Tesla 추가 정보 (list 형식)
-    if isinstance(issues, list):
-        for issue in issues:
-            story.append(_p(f"• {issue}", _SMALL))
-        return story
+    # === 추가 수집 정보 ===
+    if additional_info:
+        # Tesla 측정불가 항목 (list 형식)
+        if isinstance(additional_info, list):
+            if additional_info:
+                story.append(_p("【추가 정보】", _SMALL))
+                for info in additional_info:
+                    story.append(_p(f"• {info}", _SMALL))
+        # 기존 dict 형식
+        elif isinstance(additional_info, dict):
+            has_content = False
+            if additional_info.get("freeze_frames"):
+                has_content = True
+                story.append(_p("【Freeze Frame】", _SMALL))
+                for ff in additional_info["freeze_frames"]:
+                    story.append(_p(f"• {ff}", _SMALL))
+            if additional_info.get("uds_snapshots"):
+                has_content = True
+                story.append(_p("【UDS Snapshot】", _SMALL))
+                for snap in additional_info["uds_snapshots"]:
+                    story.append(_p(f"• {snap}", _SMALL))
+            if additional_info.get("module_temps"):
+                has_content = True
+                temps = additional_info["module_temps"]
+                t_min = temps.get('min', 'N/A')
+                t_max = temps.get('max', 'N/A')
+                story.append(_p(f"【모듈 온도】최소: {t_min}°C, 최대: {t_max}°C", _SMALL))
+            if additional_info.get("cell_voltages"):
+                has_content = True
+                cells = additional_info["cell_voltages"]
+                c_min = cells.get('min', 'N/A')
+                c_max = cells.get('max', 'N/A')
+                story.append(_p(f"【셀 전압】최소: {c_min}V, 최대: {c_max}V", _SMALL))
+            if additional_info.get("realtime_values"):
+                has_content = True
+                story.append(_p("【실시간 값】", _SMALL))
+                for key, val in additional_info["realtime_values"].items():
+                    story.append(_p(f"• {key}: {val}", _SMALL))
+            if additional_info.get("emission_monitors"):
+                has_content = True
+                story.append(_p("【배출가스 모니터】", _SMALL))
+                for mon in additional_info["emission_monitors"]:
+                    story.append(_p(f"• {mon}", _SMALL))
+            
+            if not has_content:
+                story.append(_p("추가 수집 정보 없음", _SMALL))
     
-    # 기존 dict 형식
-    # Errors
-    if issues.get("errors"):
-        error_list = issues["errors"].get("list", [])
-        for error in error_list[:5]:  # Limit to 5
-            story.append(_p(f"· 오류: {error}", _SMALL))
-    
-    # Powertrain conflict
-    if issues.get("powertrain_conflict"):
-        conflict = issues["powertrain_conflict"]
-        story.append(_p(f"· 동력원 충돌: {conflict['message']}", _SMALL))
-    
-    # Missing critical values
-    if issues.get("missing_critical_values"):
-        missing = issues["missing_critical_values"]
-        missing_list = missing.get("list", [])
-        story.append(_p(f"· 주요 값 미확인 {missing['count']}건: " + ", ".join(missing_list), _SMALL))
-    
-    # Scan status
-    if issues.get("scan_status"):
-        status = issues["scan_status"]
-        story.append(_p(f"· 스캔 상태: {status['message']}", _SMALL))
-    
-    # Excluded steps from upload
-    if issues.get("excluded_steps"):
-        excluded = issues["excluded_steps"]
-        story.append(_p(f"· {excluded['message']}", _SMALL))
-        if excluded.get('examples'):
-            for example in excluded['examples'][:2]:  # Show max 2 examples
-                reason = example.get('reason', '')
-                story.append(_p(f"  예: {reason}", _SMALL))
-    
-    if not any(issues.get(k) for k in ["errors", "powertrain_conflict", "missing_critical_values", "scan_status", "excluded_steps"]):
-        story.append(_p("문제점 없음", _SMALL))
+    # === 문제점 ===
+    if issues:
+        story.append(_p("【문제점】", _SMALL))
+        
+        # Tesla 추가 정보 (list 형식)
+        if isinstance(issues, list):
+            for issue in issues:
+                story.append(_p(f"• {issue}", _SMALL))
+        # 기존 dict 형식
+        elif isinstance(issues, dict):
+            has_issues = False
+            if issues.get("errors"):
+                has_issues = True
+                error_list = issues["errors"].get("list", [])
+                for error in error_list[:5]:
+                    story.append(_p(f"· 오류: {error}", _SMALL))
+            if issues.get("powertrain_conflict"):
+                has_issues = True
+                conflict = issues["powertrain_conflict"]
+                story.append(_p(f"· 동력원 충돌: {conflict['message']}", _SMALL))
+            if issues.get("missing_critical_values"):
+                has_issues = True
+                missing = issues["missing_critical_values"]
+                missing_list = missing.get("list", [])
+                story.append(_p(f"· 주요 값 미확인 {missing['count']}건: " + ", ".join(missing_list), _SMALL))
+            if issues.get("scan_status"):
+                has_issues = True
+                status = issues["scan_status"]
+                story.append(_p(f"· 스캔 상태: {status['message']}", _SMALL))
+            if issues.get("excluded_steps"):
+                has_issues = True
+                excluded = issues["excluded_steps"]
+                story.append(_p(f"· {excluded['message']}", _SMALL))
+                if excluded.get('examples'):
+                    for example in excluded['examples'][:2]:
+                        reason = example.get('reason', '')
+                        story.append(_p(f"  예: {reason}", _SMALL))
+            
+            if not has_issues:
+                story.append(_p("문제점 없음", _SMALL))
     
     return story
 
 
 def story_ev(view: dict) -> list:
-    """EV 기술 진단 보고서: 표지·주요 진단 데이터+고장코드 상세·고전압 계통·셀·모듈·추가정보·문제점."""
+    """EV 기술 진단 보고서: 표지·주요 진단 데이터+고장코드 상세·고전압 계통·셀·모듈·추가정보와문제점."""
     return [*_cover(view), *_judgment_page(view), *_dtc_detail(view), *_battery_pages(view),
-            *_additional_info_section(view), *_issues_section(view),
+            *_additional_info_and_issues_section(view),
             *[_p(text, _SMALL) for text in _CLOSING]]
 
 

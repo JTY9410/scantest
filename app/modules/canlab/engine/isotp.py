@@ -62,3 +62,58 @@ def reassemble(frames: list[Frame]) -> list[Message]:
         flush(can_id, complete=False)
     messages.sort(key=lambda m: m.t_ms)
     return messages
+
+
+def format_uds_elm_reply(ident: int, payload: bytes) -> str:
+    """UDS 응답을 ELM327 ATH1 형식(ISO-TP PCI 포함)으로 변환.
+    
+    Args:
+        ident: CAN ID (≤0x7FF → 3자리, >0x7FF → 8자리)
+        payload: UDS 응답 페이로드 (서비스 + 데이터)
+    
+    Returns:
+        ELM ATH1 형식 문자열 (여러 프레임은 '\n'으로 구분)
+        
+    Raises:
+        ValueError: 빈 payload 또는 n>0xFFF
+    """
+    if not payload:
+        raise ValueError("Empty payload")
+    
+    n = len(payload)
+    if n > 0xFFF:
+        raise ValueError(f"Payload too long: {n} > 4095")
+    
+    # CAN ID 형식 (3자리 또는 8자리)
+    if ident <= 0x7FF:
+        id_str = f"{ident:03X}"
+    else:
+        id_str = f"{ident:08X}"
+    
+    frames = []
+    
+    if n <= 7:
+        # Single Frame: [0x0n] + payload (8바이트 패딩)
+        frame_data = bytes([n]) + payload + bytes(7 - n)
+        frame_hex = " ".join(f"{b:02X}" for b in frame_data)
+        frames.append(f"{id_str} {frame_hex}")
+    else:
+        # First Frame: [0x10|(n>>8)&0x0F, n&0xFF] + payload[:6] (8바이트)
+        ff_pci = bytes([0x10 | ((n >> 8) & 0x0F), n & 0xFF])
+        ff_data = ff_pci + payload[:6]
+        ff_hex = " ".join(f"{b:02X}" for b in ff_data)
+        frames.append(f"{id_str} {ff_hex}")
+        
+        # Consecutive Frames: [0x20|sn] + 7바이트 (8바이트 패딩)
+        idx = 6
+        sn = 1
+        while idx < n:
+            chunk = payload[idx:idx+7]
+            cf_pci = bytes([0x20 | sn])
+            cf_data = cf_pci + chunk + bytes(7 - len(chunk))
+            cf_hex = " ".join(f"{b:02X}" for b in cf_data)
+            frames.append(f"{id_str} {cf_hex}")
+            idx += 7
+            sn = (sn + 1) % 16
+    
+    return "\n".join(frames)

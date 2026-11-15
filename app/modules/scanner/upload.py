@@ -13,6 +13,7 @@ from werkzeug.datastructures import FileStorage
 from app.extensions import db
 from app.modules.accounts.models import User
 from app.modules.canlab.engine.decode import load_trace
+from app.modules.canlab.engine.isotp import format_uds_elm_reply
 from app.modules.scanner.service import run_scan, ServiceError
 from app.modules.scans.car_info import normalize_car_no, normalize_dto
 
@@ -115,6 +116,10 @@ def convert_to_scan_steps(trace_text: str) -> tuple[list[dict], dict]:
         0x37,  # RequestTransferExit
     }
     
+    def _elm_reply(response_id: int, payload: bytes) -> str:
+        """UDS 응답을 ELM ATH1 형식으로 변환."""
+        return format_uds_elm_reply(response_id, payload)
+    
     # Tesla broadcast 등 transactions가 없으면 frames를 간단한 observation으로 변환
     if not trace.transactions and trace.frames:
         steps = []
@@ -200,10 +205,7 @@ def convert_to_scan_steps(trace_text: str) -> tuple[list[dict], dict]:
             
             reply = None
             if tx.response and tx.response_id:
-                hex_str = tx.response.hex().upper()
-                resp_addr = f"{tx.response_id:03X}"
-                data = " ".join(hex_str[i:i+2] for i in range(0, len(hex_str), 2))
-                reply = f"{resp_addr} {data}"
+                reply = _elm_reply(tx.response_id, tx.response)
             
             # 키가 없거나, 긍정 응답이면 갱신
             if key not in broadcast_map or tx.positive:
@@ -242,18 +244,13 @@ def convert_to_scan_steps(trace_text: str) -> tuple[list[dict], dict]:
         header = f"{tx.request_id:03X}"
         command = " ".join(request_data[i:i+2] for i in range(0, len(request_data), 2)) if request_data else ""
         
-        # 응답 처리 (ELM 형식: 응답 주소 + 데이터, 2자리마다 공백)
+        # 응답 처리 (ELM ATH1 형식: ISO-TP PCI 포함)
         reply = None
         if tx.response and tx.response_id:
-            hex_str = tx.response.hex().upper()
-            resp_addr = f"{tx.response_id:03X}"
-            data = " ".join(hex_str[i:i+2] for i in range(0, len(hex_str), 2))
-            reply = f"{resp_addr} {data}"
+            reply = _elm_reply(tx.response_id, tx.response)
         elif tx.negative_code is not None and tx.response_id:
-            nrc_hex = f"7F{tx.service:02X}{tx.negative_code:02X}"
-            resp_addr = f"{tx.response_id:03X}"
-            nrc_data = " ".join(nrc_hex[i:i+2] for i in range(0, len(nrc_hex), 2))
-            reply = f"{resp_addr} {nrc_data}"
+            nrc_payload = bytes([0x7F, tx.service, tx.negative_code])
+            reply = _elm_reply(tx.response_id, nrc_payload)
         elif not tx.expects_response:
             # suppressPosRsp: 응답이 없는 것이 정상
             reply = None

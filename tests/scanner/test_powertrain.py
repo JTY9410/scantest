@@ -112,7 +112,7 @@ def test_inspection_per_type_and_pdf_pages():
     assert hv["overall"] == "판정보류"
     ev = inspection(_scan("ev", fuel="수소"), {"battery": {}, "dtcs": [], "values": [], "steps": []})
     assert ev["kind"] == "ev" and ev["hydrogen"]
-    for kind, result, pages in (("ev", hev_result, 5), ("hev", hev_result, 5), ("ice", ice_result, 2)):
+    for kind, result, pages in (("ev", hev_result, 6), ("hev", hev_result, 6), ("ice", ice_result, 2)):
         content = pdf.render(_scan(kind), result)
         assert len(PdfReader(BytesIO(content)).pages) == pages, kind
 
