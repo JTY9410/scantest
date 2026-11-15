@@ -47,8 +47,20 @@ def normalize_car_no(car_no: str | None) -> str:
 
 
 def normalize_dto(dto: dict[str, Any]) -> dict[str, Any]:
-    """숫자 필드는 값이 없으면 빈 문자열로 온다. 화면·스캔에서 쓰기 전에 None 또는 숫자로 바꾼다."""
+    """숫자 필드는 값이 없으면 빈 문자열로 온다. 화면·스캔에서 쓰기 전에 None 또는 숫자로 바꾼다.
+    
+    업로드 form 필드(maker/model/fuel)를 진단 필드(diag_company/diag_model/diag_fuel)로 매핑.
+    """
     result = dict(dto)
+    
+    # 업로드 form 필드 → 진단 필드 매핑
+    if 'maker' in result and 'diag_company' not in result:
+        result['diag_company'] = result['maker']
+    if 'model' in result and 'diag_model' not in result:
+        result['diag_model'] = result['model']
+    if 'fuel' in result and 'diag_fuel' not in result:
+        result['diag_fuel'] = result['fuel']
+    
     for key in NUMERIC_FIELDS:
         value = result.get(key)
         if value in ("", None):
