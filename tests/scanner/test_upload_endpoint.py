@@ -17,7 +17,11 @@ def upload_admin(client, make_user, app):
     
     with app.app_context():
         admin = db.session.get(User, admin_id)
-        admin_tid = admin.tid
+        if not admin:
+            # make_user가 User 객체를 반환하는 경우
+            from tests.conftest import query_user
+            admin = query_user("upload_admin")
+        admin_tid = admin.tid if admin else "upload_admin"
     
     token = csrf_token(client, "/admin/login")
     response = client.post("/admin/login", data={
