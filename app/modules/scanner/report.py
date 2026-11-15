@@ -527,7 +527,8 @@ def dtc_rows(result: dict, kind: str = "ev") -> list[dict]:
     for dtc in result.get("dtcs") or []:
         rows.append({"code": dtc.get("code") or "-", "group": _GROUP_LABELS[_dtc_group(dtc, keys)],
                      "ecu": _ecu_name(dtc.get("ecu")) or dtc.get("ecu") or "-",
-                     "status": dtc.get("kind") or "-", "desc": dtc.get("desc") or "설명 없음"})
+                     "status": dtc.get("kind") or "-", "desc": dtc.get("desc") or "설명 없음",
+                     "is_ai": dtc.get("knowledge_source") == "ai"})
     return rows
 
 

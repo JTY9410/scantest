@@ -272,10 +272,27 @@ def formula_names() -> dict[str, str]:
     return {row.pid.upper(): row.detail_name for row in rows if row.pid and row.detail_name}
 
 
-def lookup_dtcs(codes: set[str]) -> dict[str, KnowledgeDTC]:
-    """검증된 고장코드 명칭. 초안은 스캔 설명에 쓰지 않는다."""
+def lookup_dtcs(codes: set[str], *, maker: str | None = None, model: str | None = None,
+                year: int | None = None, ecu: str | None = None, 
+                enable_ai: bool = True) -> dict[str, KnowledgeDTC]:
+    """
+    고장코드 조회. 검증된 DTC 우선, 없으면 AI 조회.
+    
+    Args:
+        codes: DTC 코드 집합
+        maker: 제조사 (AI 조회용)
+        model: 차종 (AI 조회용)
+        year: 연식 (AI 조회용)
+        ecu: ECU 주소 (AI 조회용)
+        enable_ai: AI 조회 활성화 여부 (기본 True)
+    
+    Returns:
+        {code: KnowledgeDTC} 딕셔너리
+    """
     if not codes:
         return {}
+    
+    # Verified DTC lookup
     rows = db.session.scalars(select(KnowledgeDTC).where(
         KnowledgeDTC.code.in_(codes), KnowledgeDTC.status == "verified").order_by(KnowledgeDTC.id))
     chosen: dict[str, KnowledgeDTC] = {}
@@ -283,6 +300,22 @@ def lookup_dtcs(codes: set[str]) -> dict[str, KnowledgeDTC]:
         current = chosen.get(row.code)
         if current is None or (current.source != "public_docs" and row.source == "public_docs"):
             chosen[row.code] = row
+    
+    # AI lookup for missing codes (2026-11-15)
+    if enable_ai:
+        missing_codes = codes - chosen.keys()
+        if missing_codes:
+            try:
+                from app.modules.knowledge.ai_dtc import lookup_and_cache_dtc
+                for code in missing_codes:
+                    ai_dtc = lookup_and_cache_dtc(code, maker, model, year, ecu)
+                    if ai_dtc:
+                        chosen[code] = ai_dtc
+            except Exception as exc:
+                # Isolate AI lookup failures
+                from flask import current_app
+                current_app.logger.warning(f"AI DTC lookup batch failed: {exc}", exc_info=True)
+    
     return chosen
 
 

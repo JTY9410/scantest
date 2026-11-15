@@ -26,6 +26,7 @@ dependencies = [
     "pillow>=12.3,<13",
     "reportlab>=5.0.1,<6",
     "cantools>=45.1.2,<46",
+    "openai>=1.59,<2",
 ]
 
 [project.optional-dependencies]

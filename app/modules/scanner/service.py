@@ -147,7 +147,8 @@ def _describe(dtcs: list[dict], maker: str | None = None) -> dict[str, Code]:
         return {}
     found = {c.code: c for c in db.session.scalars(
         select(Code).where(Code.code.in_(keys), Code.deleted_at.is_(None)).order_by(Code.id))}
-    known = lookup_dtcs(keys)
+    # AI DTC lookup (2026-11-15): pass maker if available
+    known = lookup_dtcs(keys, maker=maker)
     hints = workbook_hints(keys, maker)
     matched = {}
     for dtc in dtcs:
@@ -158,6 +159,8 @@ def _describe(dtcs: list[dict], maker: str | None = None) -> dict[str, Code]:
         dtc["root_cause"] = code.root_cause if code else None
         dtc["howto"] = [h for h in (code.howto_fix1, code.howto_fix2, code.howto_fix3) if h] if code else []
         dtc["unit_name"] = (code.unit_name if code else None) or (row.category if row else None)
+        # AI DTC source (2026-11-15)
+        dtc["knowledge_source"] = row.source if row else None
         hint = hints.get(dtc["code"]) or hints.get(dtc["code"][:5])
         if hint is not None:
             dtc["workbook_ref"] = hint.detail_name

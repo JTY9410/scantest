@@ -1436,7 +1436,8 @@ def _describe_dtcs(diagnosis: dict) -> None:
 
     found = {c.code: c.desc for c in db.session.scalars(
         select(Code).where(Code.code.in_(keys), Code.deleted_at.is_(None)))}
-    known = lookup_dtcs(keys)
+    # AI DTC lookup (2026-11-15): canlab context has no maker info
+    known = lookup_dtcs(keys, maker=None)
     for dtc in dtcs:
         row = known.get(dtc["code"]) or known.get(dtc["code"][:5])
         dtc["desc"] = found.get(dtc["code"]) or found.get(dtc["code"][:5]) or (row.description if row else None)

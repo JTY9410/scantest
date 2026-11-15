@@ -118,7 +118,7 @@
     <table class="rtable mt-3">
       <thead><tr><th scope="col">코드</th><th scope="col">계통</th><th scope="col">제어기</th><th scope="col">상태</th><th scope="col">설명</th></tr></thead>
       <tbody>{% for row in view.dtc_rows %}
-        <tr><td data-primary class="mono font-semibold">{{ row.code }}</td><td data-label="계통">{{ row.group }}</td><td data-label="제어기">{{ row.ecu }}</td><td data-label="상태">{{ row.status }}</td><td data-label="설명" class="text-sm">{{ row.desc }}</td></tr>
+        <tr><td data-primary class="mono font-semibold">{{ row.code }}</td><td data-label="계통">{{ row.group }}</td><td data-label="제어기">{{ row.ecu }}</td><td data-label="상태">{{ row.status }}</td><td data-label="설명" class="text-sm">{{ row.desc }}{% if row.is_ai %} <span class="inline-block rounded bg-warning/20 px-2 py-0.5 text-xs text-warning" title="AI 추정 설명(미검증)">AI 추정(미검증)</span>{% endif %}</td></tr>
       {% endfor %}</tbody>
     </table>
     {% else %}
