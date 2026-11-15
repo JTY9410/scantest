@@ -106,7 +106,14 @@ def test_seed_tesla_reference_idempotent(_app_base):
 def test_report_bms_soc_key_exists():
     """report.py에서 'bms_soc' 키가 아닌 'soc' 키를 사용하는지 확인."""
     import re
-    with open('/agent/repos/scantest/app/modules/scanner/report.py', 'r') as f:
+    import os
+    
+    # 프로젝트 루트 찾기
+    test_dir = os.path.dirname(__file__)
+    repo_root = os.path.abspath(os.path.join(test_dir, '..', '..'))
+    report_path = os.path.join(repo_root, 'app', 'modules', 'scanner', 'report.py')
+    
+    with open(report_path, 'r') as f:
         content = f.read()
     
     # BMS SOC를 읽는 부분에서 "bms_soc" 키를 쓰지 않아야 함
