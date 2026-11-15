@@ -230,8 +230,9 @@ def test_upload_endpoint_integration(upload_admin, app):
             scan = db.session.get(Scan, result["scan_id"])
             assert scan is not None
             assert scan.car_no == "88가8888"
-            # 파일명은 device_type에 포함됨
-            assert "integration_test.csv" in scan.device_type
+            # transport는 "file", device_uid에 파일명 포함
+            assert scan.device_type == "file"
+            assert "integration_test.csv" in scan.device_uid
             
             # 테스트 후 정리
             db.session.delete(scan)
