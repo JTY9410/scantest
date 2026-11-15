@@ -41,6 +41,7 @@ class Transaction:
     negative_code: int | None = None
     extra_responders: list[int] = field(default_factory=list)
     response_t_ms: float | None = None
+    ecu_physical_id: int | None = None  # 기능주소(7DF) 응답 시 ECU 물리주소 (response_id - 8)
 
     @property
     def did(self) -> int | None:
@@ -140,6 +141,9 @@ def pair_transactions(messages: list[Message]) -> list[Transaction]:
                 tx.response_t_ms = later.t_ms
                 tx.response = payload
                 tx.negative_code = payload[2] if payload[0] == 0x7F else None
+                # 기능주소 요청(7DF)에 대한 응답이면 ECU 물리주소 기록
+                if broadcast and later.can_id >= 0x500 and later.can_id <= 0x7FF:
+                    tx.ecu_physical_id = later.can_id - 8
                 if not broadcast:
                     break
             else:

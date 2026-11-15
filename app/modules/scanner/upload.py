@@ -221,6 +221,16 @@ def process_upload(
     car_no = normalize_car_no(car_no)
     car = normalize_dto(car) if car else {}
     
+    # car_no가 있지만 car 정보가 없으면 조회
+    if car_no and not car:
+        from app.modules.scans import car_info
+        try:
+            dto, _ = car_info.lookup(actor, car_no)
+            car = car_info.normalize_dto(dto)
+        except Exception:
+            # 조회 실패해도 업로드는 계속 진행
+            pass
+    
     try:
         scan = run_scan(
             actor,

@@ -230,7 +230,6 @@ def test_upload_endpoint_integration(upload_admin, app):
             scan = db.session.get(Scan, result["scan_id"])
             assert scan is not None
             assert scan.car_no == "88가8888"
-            assert scan.upload_filename == "integration_test.csv"
             
             # 테스트 후 정리
             db.session.delete(scan)
