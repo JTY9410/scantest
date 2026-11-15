@@ -25,19 +25,30 @@ def _app_base():
     """Session-scoped app for creating schema once"""
     app = create_app("testing")
     with app.app_context():
+        db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
         # Use CASCADE to handle foreign key dependencies added by migrations
-        db.session.execute(text("DROP SCHEMA public CASCADE"))
-        db.session.execute(text("CREATE SCHEMA public"))
-        db.session.commit()
-        
-        # Run migrations to create full schema (including tables without ORM models like vin_decode_rules)
-        from flask_migrate import upgrade as flask_migrate_upgrade
-        flask_migrate_upgrade()
+        # SQLite doesn't support SCHEMA, so only for PostgreSQL
+        if "postgresql" in db_uri:
+            db.session.execute(text("DROP SCHEMA public CASCADE"))
+            db.session.execute(text("CREATE SCHEMA public"))
+            db.session.commit()
+            # Run migrations for PostgreSQL
+            from flask_migrate import upgrade as flask_migrate_upgrade
+            flask_migrate_upgrade()
+        else:
+            # SQLite: drop all tables and create from models
+            db.drop_all()
+            db.create_all()
+            
     yield app
     with app.app_context():
-        db.session.execute(text("DROP SCHEMA public CASCADE"))
-        db.session.execute(text("CREATE SCHEMA public"))
-        db.session.commit()
+        db_uri = app.config.get("SQLALCHEMY_DATABASE_URI", "")
+        if "postgresql" in db_uri:
+            db.session.execute(text("DROP SCHEMA public CASCADE"))
+            db.session.execute(text("CREATE SCHEMA public"))
+            db.session.commit()
+        else:
+            db.drop_all()
 
 
 @pytest.fixture
