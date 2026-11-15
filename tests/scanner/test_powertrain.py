@@ -151,3 +151,57 @@ def test_change_type_on_result_page_keeps_history(app, admin_client):
     tabs = admin_client.get("/admin/scans?type=hev").get_data(as_text=True)
     assert "하이브리드" in tabs and 'aria-current="page"' in tabs and CAR_NO in tabs
     assert CAR_NO not in admin_client.get("/admin/scans?type=ev").get_data(as_text=True).split("스캔 목록")[-1]
+
+
+def test_tesla_detection_by_vin_wmi():
+    """Tesla 감지: VIN WMI (5YJ/7SA/LRW)."""
+    # VIN이 5YJ로 시작
+    result = {"vin": "5YJSA1E26HF000123"}
+    got = classify({}, result)
+    assert got["type"] == "ev"
+    assert "Tesla" in got["reason"] or "5YJ" in got["reason"]
+    
+    # VIN이 7SA로 시작
+    result = {"vin": "7SAYGDEF0MF000456"}
+    got = classify({}, result)
+    assert got["type"] == "ev"
+    assert "Tesla" in got["reason"] or "7SA" in got["reason"]
+    
+    # VIN이 LRW로 시작
+    result = {"vin": "LRW3E7EK0NC000789"}
+    got = classify({}, result)
+    assert got["type"] == "ev"
+    assert "Tesla" in got["reason"] or "LRW" in got["reason"]
+
+
+def test_tesla_detection_by_ids():
+    """Tesla 감지: 특유 ID (0x352+0x292+0x401)."""
+    result = {
+        "steps": [
+            {"header": "352", "status": "ok"},
+            {"header": "292", "status": "ok"},
+            {"header": "401", "status": "ok"}
+        ]
+    }
+    got = classify({}, result)
+    assert got["type"] == "ev"
+    assert "Tesla" in got["reason"] or "352" in got["reason"]
+
+
+def test_tesla_detection_by_maker():
+    """Tesla 감지: 제조사명."""
+    got = classify({"diag_company": "테스라"}, {})
+    assert got["type"] == "ev"
+    assert "Tesla" in got["reason"] or "테스라" in got["reason"]
+    
+    got = classify({"maker": "TESLA"}, {})
+    assert got["type"] == "ev"
+    assert "Tesla" in got["reason"] or "TESLA" in got["reason"]
+
+
+def test_tesla_vin_17_chars():
+    """Tesla VIN은 17자."""
+    result = {"vin": "5YJSA1E26HF000123"}
+    got = classify({}, result)
+    assert got["type"] == "ev"
+    assert len(result["vin"]) == 17

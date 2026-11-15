@@ -30,6 +30,8 @@ _EV_MODELS = ("아이오닉5", "아이오닉6", "아이오닉9", "IONIQ5", "IONI
 _MCU = {"7E5", "7ED"}
 _CHARGER = {"7E7", "7EF"}
 _ENGINE = {"7E0", "7E8"}
+_TESLA_IDS = {"352", "292", "401"}  # Tesla 특유 ID
+_TESLA_VIN_WMI = ("5YJ", "7SA", "LRW")  # Tesla VIN WMI codes
 
 
 def _norm(text: Any) -> str:
@@ -81,6 +83,33 @@ def _answered(result: dict) -> set[str]:
     return out
 
 
+def _is_tesla(car: dict, result: dict) -> tuple[bool, str]:
+    """Tesla 감지: VIN WMI, 특유 ID, 제조사명."""
+    # 1. VIN WMI 확인
+    vin = result.get("vin") or car.get("vin") or ""
+    if vin and len(vin) >= 3 and vin[:3] in _TESLA_VIN_WMI:
+        return True, f"VIN WMI {vin[:3]}"
+    
+    # 2. Tesla 특유 ID (0x352, 0x292, 0x401) 존재 확인
+    seen_ids = set()
+    for step in result.get("steps") or []:
+        if step.get("header"):
+            seen_ids.add(str(step["header"]).upper())
+    for dtc in result.get("dtcs") or []:
+        if dtc.get("ecu"):
+            seen_ids.add(str(dtc["ecu"]).upper())
+    
+    if _TESLA_IDS.issubset(seen_ids):
+        return True, "Tesla 특유 ID (0x352+0x292+0x401)"
+    
+    # 3. 제조사명 확인
+    maker = _norm(car.get("diag_company") or car.get("maker") or "")
+    if "테스라" in maker or "TESLA" in maker:
+        return True, f"제조사: {car.get('diag_company') or car.get('maker')}"
+    
+    return False, ""
+
+
 def _from_ecu(result: dict) -> tuple[dict | None, str]:
     fuel_pid = next((v.get("value") for v in result.get("values") or [] if v.get("key") == "fuel_type"), None)
     if fuel_pid is not None and (found := _from_text(_norm(fuel_pid))):
@@ -123,6 +152,12 @@ def classify(car: dict | None, result: dict | None = None, *, manual: str | None
         same = extra.get("type") == manual
         return done({"type": manual, "plugin": same and extra.get("plugin"),
                      "hydrogen": same and extra.get("hydrogen")}, "manual", "검사자가 지정")
+    
+    # Tesla 감지 (VIN WMI, 특유 ID, 제조사)
+    is_tesla, tesla_reason = _is_tesla(car, result)
+    if is_tesla:
+        return done({"type": EV, "plugin": False, "hydrogen": False}, "ecu", f"Tesla 감지: {tesla_reason}")
+    
     fuel = car.get("diag_fuel")
     if found := _from_text(_norm(fuel)):
         named = _from_model(hint)
