@@ -113,18 +113,32 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
         return steps
     
     # (header, command) → step 매핑. 마지막 긍정 응답만 유지
-    # 단, 브로드캐스트(7DF)의 경우 여러 ECU 응답을 개별 step으로 보존
+    # 브로드캐스트도 (ecu_physical_id, command)로 중복 제거
     step_map: dict[tuple[str | None, str], dict] = {}
-    broadcast_steps = []  # 브로드캐스트 응답 개별 step
+    broadcast_map: dict[tuple[str, str], dict] = {}  # 브로드캐스트 중복 제거용
     
     for i, tx in enumerate(trace.transactions):
         # 요청 데이터 (8바이트 초과도 허용)
         request_data = tx.request.hex().upper() if tx.request else ""
+        command = " ".join(request_data[i:i+2] for i in range(0, len(request_data), 2)) if request_data else ""
+        
+        # 세션 제어(10 xx) / Tester Present(3E xx)는 ECU당 1건만
+        # 첫 2자리가 10 또는 3E인지 확인
+        is_session_or_tester = False
+        if len(request_data) >= 2:
+            service = request_data[:2]
+            is_session_or_tester = service in ('10', '3E')
         
         # 브로드캐스트(7DF) 요청인 경우 ecu_physical_id로 별도 step 생성
         if tx.ecu_physical_id is not None:
             header = f"{tx.ecu_physical_id:03X}"
-            command = " ".join(request_data[i:i+2] for i in range(0, len(request_data), 2)) if request_data else ""
+            
+            # 세션 제어/Tester Present는 ECU당 1건만: 키를 service만으로
+            if is_session_or_tester:
+                key = (header, request_data[:2])  # ECU + service
+            else:
+                key = (header, command)
+            
             reply = None
             if tx.response and tx.response_id:
                 hex_str = tx.response.hex().upper()
@@ -132,31 +146,37 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
                 data = " ".join(hex_str[i:i+2] for i in range(0, len(hex_str), 2))
                 reply = f"{resp_addr} {data}"
             
-            broadcast_steps.append({
-                "id": len(step_map) + len(broadcast_steps) + 1,
-                "command": command,
-                "header": header,
-                "reply": reply,
-                "optional": False,
-                "probe": False,
-                "bus": "can",
-                "tMs": getattr(tx, "response_t_ms", None) or i * 100,
-            })
+            # 키가 없거나, 긍정 응답이면 갱신
+            if key not in broadcast_map or tx.positive:
+                broadcast_map[key] = {
+                    "command": command,
+                    "header": header,
+                    "reply": reply,
+                    "optional": False,
+                    "probe": False,
+                    "bus": "can",
+                    "tMs": getattr(tx, "response_t_ms", None) or i * 100,
+                }
             
-            # extra_responders도 개별 step으로
+            # extra_responders도 동일하게 처리
             for extra_id in tx.extra_responders:
                 if 0x500 <= extra_id <= 0x7FF:
                     extra_header = f"{extra_id:03X}"
-                    broadcast_steps.append({
-                        "id": len(step_map) + len(broadcast_steps) + 1,
-                        "command": command,
-                        "header": extra_header,
-                        "reply": reply,  # 같은 응답 형식 사용
-                        "optional": False,
-                        "probe": False,
-                        "bus": "can",
-                        "tMs": getattr(tx, "response_t_ms", None) or i * 100,
-                    })
+                    if is_session_or_tester:
+                        extra_key = (extra_header, request_data[:2])
+                    else:
+                        extra_key = (extra_header, command)
+                    
+                    if extra_key not in broadcast_map or tx.positive:
+                        broadcast_map[extra_key] = {
+                            "command": command,
+                            "header": extra_header,
+                            "reply": reply,
+                            "optional": False,
+                            "probe": False,
+                            "bus": "can",
+                            "tMs": getattr(tx, "response_t_ms", None) or i * 100,
+                        }
             continue
         
         # 일반 요청 처리
@@ -179,12 +199,15 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
             # suppressPosRsp: 응답이 없는 것이 정상
             reply = None
         
-        # (header, command)가 같으면 마지막 긍정 응답으로 덮어씀
-        key = (header, command)
+        # 세션 제어/Tester Present는 ECU당 1건만
+        if is_session_or_tester:
+            key = (header, request_data[:2])
+        else:
+            key = (header, command)
+        
         if key not in step_map:
             # 처음 나온 명령
             step_map[key] = {
-                "id": len(step_map) + len(broadcast_steps) + 1,
                 "command": command,
                 "header": header,
                 "reply": reply,
@@ -198,10 +221,12 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
             step_map[key]["reply"] = reply
             step_map[key]["tMs"] = getattr(tx, "response_t_ms", None) or i * 100
     
-    # 브로드캐스트 응답과 일반 step을 합쳐서 id 순 정렬
-    steps = sorted(list(step_map.values()) + broadcast_steps, key=lambda x: x["id"])
+    # broadcast_map과 step_map을 합쳐서 ID 부여
+    all_steps = list(step_map.values()) + list(broadcast_map.values())
+    for i, step in enumerate(all_steps, start=1):
+        step["id"] = i
     
-    return steps
+    return all_steps
 
 
 def process_upload(
