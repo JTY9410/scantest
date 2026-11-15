@@ -66,6 +66,9 @@ def proxy_fix_hops() -> int:
 class Config:
     APP_ENV = "development"
     APP_VERSION = os.environ.get("APP_VERSION", "2.2.3")
+    
+    # 업로드 크기 제한 (Tesla 실제 로그 134~256MB 대응)
+    MAX_CONTENT_LENGTH = 300 * 1024 * 1024  # 300 MB
 
     SECRET_KEY = os.environ.get("SECRET_KEY")
     SQLALCHEMY_DATABASE_URI = database_url()

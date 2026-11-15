@@ -18,7 +18,7 @@ from app.modules.scans.car_info import normalize_car_no, normalize_dto
 
 
 # 업로드 제한
-MAX_UPLOAD_SIZE = 50 * 1024 * 1024  # 50 MB
+MAX_UPLOAD_SIZE = 300 * 1024 * 1024  # 300 MB (Tesla 실제 로그 134~256MB 대응)
 ALLOWED_EXTENSIONS = {".csv", ".trc", ".txt", ".log"}
 
 
