@@ -34,9 +34,11 @@ CMD ["flask", "run", "--host", "0.0.0.0", "--port", "8000", "--debug"]
 # 4) 운영용: 소스와 빌드된 CSS만 담고 비밀값은 넣지 않는다. AUTO_DB_UPGRADE 예외는 ADR 0002를 따른다.
 FROM base AS prod
 ARG APP_VERSION=2.2.3
-ENV APP_ENV=production \
-    APP_VERSION=${APP_VERSION}
+ENV APP_ENV=production
+# APP_VERSION은 app/__version__.py에서 읽음 (빌드 시 ARG로 주입 가능)
+RUN echo "__version__ = \"${APP_VERSION}\"" > /tmp/__version__.py
 COPY --chown=app:app app ./app
+RUN mv /tmp/__version__.py ./app/__version__.py
 COPY --chown=app:app migrations ./migrations
 COPY --chown=app:app gunicorn.conf.py pyproject.toml ./
 COPY --chown=app:app \
