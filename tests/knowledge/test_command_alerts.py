@@ -89,7 +89,8 @@ def test_device_errors_and_drafts_ignored(app):
         assert _alerts() == []
 
 
-def test_admin_delete_flow(admin_client, app):
+def test_admin_delete_flow(admin_client, app, monkeypatch):
+    monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
     with app.app_context():
         cid = _verified()
         _scan("no_data", times=5)

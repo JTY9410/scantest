@@ -651,7 +651,8 @@ def _elm_capture() -> str:
     ], {"vehicle": "아이오닉5", "source": "web"})
 
 
-def test_live_preview_interprets_without_saving(app, client, admin_client, trained):
+def test_live_preview_interprets_without_saving(app, client, admin_client, trained, monkeypatch):
+    monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
     token = csrf_token(admin_client, "/admin/canlab/live")
     with app.app_context():
         before = db.session.scalar(select(func.count(CanDataset.id)))

@@ -66,7 +66,8 @@ def test_lookup_success_and_failure(admin_client, monkeypatch):
     assert response.get_json()["kind"] == "quota" and response.get_json()["detail"] == "일제한 초과"
 
 
-def test_scanner_requires_admin_and_csrf(client, admin_client):
+def test_scanner_requires_admin_and_csrf(app, client, admin_client, monkeypatch):
+    monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
     assert admin_client.post("/admin/scan/lookup", json={"carNo": "12가3456"}).status_code == 400
     assert client.application.test_client().get("/admin/scan/").status_code in (302, 401, 403)
 
@@ -92,7 +93,8 @@ def test_scan_plan_accepts_csrf_older_than_one_hour(admin_client, monkeypatch):
     assert response.get_json()["steps"]
 
 
-def test_json_csrf_failure_returns_json(admin_client):
+def test_json_csrf_failure_returns_json(app, admin_client, monkeypatch):
+    monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
     response = admin_client.post("/admin/scan/plan", json={"car": None}, headers={"X-CSRFToken": "bad-token"})
 
     assert response.status_code == 400

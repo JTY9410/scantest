@@ -18,7 +18,8 @@ def _obd_config(html: str) -> dict:
     return json.loads(match.group(1))
 
 
-def test_web_remembers_device_for_panel_and_admin_list(admin_client):
+def test_web_remembers_device_for_panel_and_admin_list(app, admin_client, monkeypatch):
+    monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
     assert admin_client.post("/admin/obd/my-devices", json=WEB_DEVICE).status_code == 400
 
     created = _post(admin_client, WEB_DEVICE)

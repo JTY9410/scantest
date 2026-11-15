@@ -28,127 +28,78 @@ def test_login_page_sends_security_headers(client):
     assert response.headers["Cache-Control"] == "no-store"
 
 
-def test_production_skips_hsts_on_insecure_http(app, client):
+def test_production_skips_hsts_on_insecure_http(app, client, monkeypatch):
     """로컬 Docker처럼 HTTP+비보안 쿠키면 HSTS를 보내지 않는다."""
-    orig_env = app.config.get("APP_ENV")
-    orig_secure = app.config.get("SESSION_COOKIE_SECURE")
-    try:
-        app.config["APP_ENV"] = "production"
-        app.config["SESSION_COOKIE_SECURE"] = False
-        response = client.get("/admin/login")
-        assert "Strict-Transport-Security" not in response.headers
-    finally:
-        if orig_env is not None:
-            app.config["APP_ENV"] = orig_env
-        if orig_secure is not None:
-            app.config["SESSION_COOKIE_SECURE"] = orig_secure
+    monkeypatch.setitem(app.config, "APP_ENV", "production")
+    monkeypatch.setitem(app.config, "SESSION_COOKIE_SECURE", False)
+    response = client.get("/admin/login")
+    assert "Strict-Transport-Security" not in response.headers
 
 
-def test_production_sends_hsts_when_secure_cookie_enabled(app, client):
-    orig_env = app.config.get("APP_ENV")
-    orig_secure = app.config.get("SESSION_COOKIE_SECURE")
-    try:
-        app.config["APP_ENV"] = "production"
-        app.config["SESSION_COOKIE_SECURE"] = True
-        response = client.get("/admin/login")
-        assert response.headers["Strict-Transport-Security"].startswith("max-age=")
-    finally:
-        if orig_env is not None:
-            app.config["APP_ENV"] = orig_env
-        if orig_secure is not None:
-            app.config["SESSION_COOKIE_SECURE"] = orig_secure
+def test_production_sends_hsts_when_secure_cookie_enabled(app, client, monkeypatch):
+    monkeypatch.setitem(app.config, "APP_ENV", "production")
+    monkeypatch.setitem(app.config, "SESSION_COOKIE_SECURE", True)
+    response = client.get("/admin/login")
+    assert response.headers["Strict-Transport-Security"].startswith("max-age=")
 
 
-def test_login_requires_csrf_token(app, client, make_user):
-    orig_csrf = app.config.get("WTF_CSRF_ENABLED")
-    try:
-        app.config["WTF_CSRF_ENABLED"] = True
-        make_user("wecar", type="admin", password=ADMIN_PASSWORD)
+def test_login_requires_csrf_token(app, client, make_user, monkeypatch):
+    monkeypatch.setitem(app.config, "WTF_CSRF_ENABLED", True)
+    make_user("wecar", type="admin", password=ADMIN_PASSWORD)
 
-        response = client.post("/admin/login", data={"tid": "wecar", "password": ADMIN_PASSWORD})
+    response = client.post("/admin/login", data={"tid": "wecar", "password": ADMIN_PASSWORD})
 
-        assert response.status_code == 400
-    finally:
-        if orig_csrf is not None:
-            app.config["WTF_CSRF_ENABLED"] = orig_csrf
-        else:
-            app.config.pop("WTF_CSRF_ENABLED", None)
+    assert response.status_code == 400
 
 
-def test_https_login_accepts_origin_when_referrer_missing(app, client, make_user):
+def test_https_login_accepts_origin_when_referrer_missing(app, client, make_user, monkeypatch):
     """일부 브라우저·웹뷰는 POST에 Referer를 빼 Origin만 보낸다. 로그인 400을 막는다."""
-    orig_csrf = app.config.get("WTF_CSRF_ENABLED")
-    try:
-        app.config["WTF_CSRF_ENABLED"] = True
-        make_user("wecar", type="admin", password=ADMIN_PASSWORD)
-        base = "https://admin.test"
-        html = client.get("/admin/login", base_url=base).get_data(as_text=True)
-        match = re.search(r'name="csrf_token"[^>]*value="([^"]+)"', html)
-        assert match
-        response = client.post(
-            "/admin/login",
-            data={"csrf_token": match.group(1), "tid": "wecar", "password": "not-the-password"},
-            base_url=base,
-            headers={"Origin": "https://admin.test"},
-        )
+    monkeypatch.setitem(app.config, "WTF_CSRF_ENABLED", True)
+    make_user("wecar", type="admin", password=ADMIN_PASSWORD)
+    base = "https://admin.test"
+    html = client.get("/admin/login", base_url=base).get_data(as_text=True)
+    match = re.search(r'name="csrf_token"[^>]*value="([^"]+)"', html)
+    assert match
+    response = client.post(
+        "/admin/login",
+        data={"csrf_token": match.group(1), "tid": "wecar", "password": "not-the-password"},
+        base_url=base,
+        headers={"Origin": "https://admin.test"},
+    )
 
-        assert response.status_code == 401
-        assert "아이디 또는 비밀번호가 올바르지 않습니다." in response.get_data(as_text=True)
-    finally:
-        if orig_csrf is not None:
-            app.config["WTF_CSRF_ENABLED"] = orig_csrf
-        else:
-            app.config.pop("WTF_CSRF_ENABLED", None)
+    assert response.status_code == 401
+    assert "아이디 또는 비밀번호가 올바르지 않습니다." in response.get_data(as_text=True)
 
 
-def test_https_login_works_without_referrer_or_origin(app, client, make_user):
+def test_https_login_works_without_referrer_or_origin(app, client, make_user, monkeypatch):
     """운영(HTTPS)에서는 Referer/Origin이 없어도 CSRF 토큰만 맞으면 로그인 검사를 한다."""
-    orig_csrf = app.config.get("WTF_CSRF_ENABLED")
-    orig_ssl = app.config.get("WTF_CSRF_SSL_STRICT")
-    try:
-        app.config["WTF_CSRF_ENABLED"] = True
-        app.config["WTF_CSRF_SSL_STRICT"] = False
-        make_user("wecar", type="admin", password=ADMIN_PASSWORD)
-        base = "https://admin.test"
-        html = client.get("/admin/login", base_url=base).get_data(as_text=True)
-        match = re.search(r'name="csrf_token"[^>]*value="([^"]+)"', html)
-        assert match
+    monkeypatch.setitem(app.config, "WTF_CSRF_ENABLED", True)
+    monkeypatch.setitem(app.config, "WTF_CSRF_SSL_STRICT", False)
+    make_user("wecar", type="admin", password=ADMIN_PASSWORD)
+    base = "https://admin.test"
+    html = client.get("/admin/login", base_url=base).get_data(as_text=True)
+    match = re.search(r'name="csrf_token"[^>]*value="([^"]+)"', html)
+    assert match
 
-        response = client.post(
-            "/admin/login",
-            data={"csrf_token": match.group(1), "tid": "wecar", "password": "not-the-password"},
-            base_url=base,
-        )
+    response = client.post(
+        "/admin/login",
+        data={"csrf_token": match.group(1), "tid": "wecar", "password": "not-the-password"},
+        base_url=base,
+    )
 
-        assert response.status_code == 401
-        assert "아이디 또는 비밀번호가 올바르지 않습니다." in response.get_data(as_text=True)
-    finally:
-        if orig_csrf is not None:
-            app.config["WTF_CSRF_ENABLED"] = orig_csrf
-        else:
-            app.config.pop("WTF_CSRF_ENABLED", None)
-        if orig_ssl is not None:
-            app.config["WTF_CSRF_SSL_STRICT"] = orig_ssl
-        else:
-            app.config.pop("WTF_CSRF_SSL_STRICT", None)
+    assert response.status_code == 401
+    assert "아이디 또는 비밀번호가 올바르지 않습니다." in response.get_data(as_text=True)
 
 
 
-def test_csrf_error_explains_refresh(app, client, make_user):
-    orig_csrf = app.config.get("WTF_CSRF_ENABLED")
-    try:
-        app.config["WTF_CSRF_ENABLED"] = True
-        make_user("wecar", type="admin", password=ADMIN_PASSWORD)
+def test_csrf_error_explains_refresh(app, client, make_user, monkeypatch):
+    monkeypatch.setitem(app.config, "WTF_CSRF_ENABLED", True)
+    make_user("wecar", type="admin", password=ADMIN_PASSWORD)
 
-        response = client.post("/admin/login", data={"tid": "wecar", "password": ADMIN_PASSWORD})
+    response = client.post("/admin/login", data={"tid": "wecar", "password": ADMIN_PASSWORD})
 
-        assert response.status_code == 400
-        assert "보안 토큰이 만료되었습니다" in response.get_data(as_text=True)
-    finally:
-        if orig_csrf is not None:
-            app.config["WTF_CSRF_ENABLED"] = orig_csrf
-        else:
-            app.config.pop("WTF_CSRF_ENABLED", None)
+    assert response.status_code == 400
+    assert "보안 토큰이 만료되었습니다" in response.get_data(as_text=True)
 
 
 def test_wrong_password_is_rejected_and_audited(app, client, make_user):
