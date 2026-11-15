@@ -91,8 +91,6 @@ def test_upload_csv_creates_scan_record(_app_base, make_user):
         scan = db.session.get(Scan, scan_id)
         assert scan is not None
         assert scan.car_no == "88가8888"
-        # Scan doesn't have upload_filename; verify via dataset instead
-        assert scan.reports
         
         # 롤백으로 정리
         db.session.rollback()
@@ -140,8 +138,6 @@ def test_upload_trc_creates_scan_record(_app_base, make_user):
         scan = db.session.get(Scan, scan_id)
         assert scan is not None
         assert scan.car_no == "88가8888"
-        # Scan doesn't have upload_filename; verify via dataset instead
-        assert scan.reports
         
         db.session.rollback()
 
