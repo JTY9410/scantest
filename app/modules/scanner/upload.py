@@ -205,7 +205,7 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
 
 
 def process_upload(
-    actor: User,
+    actor: User | int,
     file: FileStorage,
     car_no: str | None = None,
     car: dict | None = None,
@@ -243,7 +243,37 @@ def process_upload(
     except Exception as exc:
         raise UploadError(f"파일 처리 중 오류가 발생했습니다: {exc}")
     
-    # 4. 스캔 스텝으로 변환
+    # 4. Tesla 감지 (broadcast-only 데이터)
+    from app.modules.canlab.engine.decode import load_trace
+    from app.modules.tesla import detect as tesla_detect
+    
+    trace = load_trace(trace_text)
+    
+    # UDS transactions가 없고 Tesla 시그니처가 있으면 Tesla 경로
+    is_tesla = False
+    extracted_vin = None
+    if not trace.transactions and trace.frames:
+        # frames를 (timestamp, can_id, data) 튜플로 변환
+        frame_tuples = [(f.t_ms / 1000.0, f.can_id, f.data) for f in trace.frames]
+        is_tesla = tesla_detect.is_tesla(frame_tuples, vin=None)
+        
+        if is_tesla:
+            extracted_vin = tesla_detect.extract_vin_from_frames(frame_tuples)
+            if extracted_vin:
+                current_app.logger.info(f"Tesla vehicle detected, VIN: {extracted_vin}")
+    
+    # 5. Tesla 경로: 디코딩 후 결과 저장
+    if is_tesla:
+        return _process_tesla_upload(
+            actor=actor,
+            trace=trace,
+            car_no=car_no,
+            vin=extracted_vin,
+            device=device,
+            filename=filename
+        )
+    
+    # 6. 일반 UDS 경로: 스캔 스텝으로 변환
     try:
         steps = convert_to_scan_steps(trace_text)
     except Exception as exc:
@@ -252,7 +282,7 @@ def process_upload(
     if not steps:
         raise UploadError("유효한 스캔 데이터가 없습니다.")
     
-    # 5. run_scan 호출
+    # 7. run_scan 호출
     car_no = normalize_car_no(car_no)
     car = normalize_dto(car) if car else {}
     
@@ -282,7 +312,145 @@ def process_upload(
         current_app.logger.exception("업로드 파일 스캔 생성 실패")
         raise UploadError(f"스캔 생성 중 오류가 발생했습니다: {exc}")
     
-    # 6. 원본 파일은 저장하지 않음 (run_scan이 이미 처리된 텍스트를 저장함)
+    # 8. 원본 파일은 저장하지 않음 (run_scan이 이미 처리된 텍스트를 저장함)
     current_app.logger.info(f"Upload scan created: {scan.id} from {filename}")
+    
+    return scan.id
+
+
+def _process_tesla_upload(
+    actor: User | int,
+    trace,
+    car_no: str | None,
+    vin: str | None,
+    device: str,
+    filename: str
+) -> int:
+    """
+    Tesla 업로드 처리.
+    
+    Args:
+        actor: 업로드 사용자 ID
+        trace: 파싱된 Trace 객체
+        car_no: 차량번호
+        vin: 추출된 VIN
+        device: 장비명
+        filename: 파일명
+    
+    Returns:
+        생성된 Scan ID
+    """
+    from app.modules.scans.models import Scan
+    from app.modules.tesla import detect as tesla_detect
+    from app.modules.tesla import decode as tesla_decode
+    from app.modules.tesla import soh as tesla_soh
+    
+    # actor가 int면 그대로, 객체면 id 추출
+    actor_id = actor if isinstance(actor, int) else actor.id
+    
+    # 1. 차량 정보
+    car_no = normalize_car_no(car_no) if car_no else "Tesla업로드"
+    
+    # VIN으로 모델 감지
+    frame_tuples = [(f.t_ms / 1000.0, f.can_id, f.data) for f in trace.frames]
+    model = tesla_detect.detect_model(frame_tuples, vin)
+    vin_info = tesla_detect.decode_vin(vin) if vin else {}
+    
+    manufacturer = "Tesla"
+    model_name = model or vin_info.get('model', 'Unknown')
+    year = vin_info.get('year')
+    
+    # 2. CAN 프레임 디코딩
+    frames_by_id = {}
+    for frame in trace.frames:
+        if frame.can_id not in frames_by_id:
+            frames_by_id[frame.can_id] = []
+        frames_by_id[frame.can_id].append((frame.t_ms / 1000.0, frame.data))
+    
+    decoded = {}
+    
+    # 0x352: 에너지 상태
+    if 0x352 in frames_by_id:
+        decoded['energy'] = tesla_decode.decode_0x352_energy(frames_by_id[0x352])
+    
+    # 0x292: SOC
+    if 0x292 in frames_by_id:
+        decoded['soc'] = tesla_decode.decode_0x292_soc(frames_by_id[0x292])
+    
+    # 0x401: 브릭 전압
+    if 0x401 in frames_by_id:
+        decoded['bricks'] = tesla_decode.decode_0x401_brick_voltages(frames_by_id[0x401])
+    
+    # 0x332: 온도/전압 요약
+    if 0x332 in frames_by_id:
+        decoded['summary'] = tesla_decode.decode_0x332_summary(frames_by_id[0x332])
+    
+    # 0x132: 팩 전압/전류
+    if 0x132 in frames_by_id:
+        decoded['pack_vi'] = tesla_decode.decode_0x132_pack_vi(frames_by_id[0x132])
+    
+    # 0x2B4: LV/DC-DC
+    if 0x2B4 in frames_by_id:
+        decoded['lv_dcdc'] = tesla_decode.decode_0x2B4_lv_dcdc(frames_by_id[0x2B4])
+    
+    # 0x3D2: 누적 충방전
+    if 0x3D2 in frames_by_id:
+        decoded['cumulative'] = tesla_decode.decode_0x3D2_cumulative_energy(frames_by_id[0x3D2])
+    
+    # 3. SOH 계산
+    soh_result = None
+    current_full = decoded.get('energy', {}).get('nominal_full_pack_energy')
+    bol_energy = decoded.get('soc', {}).get('bol_energy')
+    
+    if current_full:
+        soh_result = tesla_soh.calculate_soh(
+            current_nominal_full=current_full,
+            manufacturer=manufacturer,
+            model=model_name,
+            year=year,
+            pack_code='Long Range' if current_full > 60 else None,
+            bol_energy=bol_energy
+        )
+        
+        # 교차 검증
+        soc_ave = decoded.get('soc', {}).get('soc_ave')
+        nom_rem = decoded.get('energy', {}).get('nominal_energy_remaining')
+        if soc_ave and nom_rem:
+            soh_result = tesla_soh.cross_check_soh(soh_result, soc_ave, nom_rem)
+    
+    # 4. Scan 생성 (Tesla 데이터를 tesla_data JSON 필드에 저장)
+    tesla_data = {
+        'vin': vin,
+        'manufacturer': manufacturer,
+        'model': model_name,
+        'year': year,
+        'decoded': decoded,
+        'soh': soh_result,
+        'source': 'tesla_broadcast',
+    }
+    
+    scan = Scan(
+        tester_id=actor_id,
+        type="ev",  # Tesla는 EV
+        device_type="file",
+        device_uid=device,
+        car_no=car_no,
+        car_vin=vin or "",
+        scan_vin=vin,
+        car_maker=manufacturer,
+        car_model=model_name or "Unknown",
+        car_year=year,
+        bms_data=tesla_data  # Tesla 데이터를 bms_data에 저장 (기존 필드 재사용)
+    )
+    
+    # 판정보류 (community 출처 또는 기준 없음)
+    if soh_result and not soh_result.get('soh_available'):
+        scan.judgment = "판정보류"
+        scan.judgment_reason = soh_result.get('calculation_note', 'SOH 기준 미확보')
+    
+    db.session.add(scan)
+    db.session.commit()
+    
+    current_app.logger.info(f"Tesla upload scan created: {scan.id} from {filename}")
     
     return scan.id
