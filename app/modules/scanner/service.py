@@ -626,16 +626,13 @@ def _record_learning_stats(maker: str | None, model: str | None, steps: list[dic
         # Update verification status for commands that meet criteria
         _update_verification_status(maker, model)
         
-        # Commit savepoint
-        try:
-            savepoint.commit()
-        except Exception as commit_exc:
-            current_app.logger.warning(f"Learning stats savepoint commit failed: {commit_exc}")
+        # Savepoint는 부모 트랜잭션이 커밋될 때 자동으로 커밋됨
         
     except Exception as exc:
         # Rollback savepoint, do not fail the scan
         try:
-            savepoint.rollback()
+            if savepoint.is_active:
+                savepoint.rollback()
         except Exception:
             pass
         current_app.logger.warning(f"Learning stats recording failed: {exc}", exc_info=True)

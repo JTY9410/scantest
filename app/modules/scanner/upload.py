@@ -412,19 +412,23 @@ def process_upload(
         current_app.logger.exception("업로드 파일 스캔 생성 실패")
         raise UploadError(f"스캔 생성 중 오류가 발생했습니다: {exc}")
     
-    # 8. 제외된 단계 정보를 Scan.raw에 저장
+    # 8. 제외된 단계 정보를 Scan.bms_data에 저장 (실패해도 scan은 이미 저장됨)
     if metadata.get("excluded_steps_count", 0) > 0:
-        from sqlalchemy.orm.attributes import flag_modified
-        
-        scan.raw = scan.raw or {}
-        scan.raw["upload_metadata"] = metadata
-        flag_modified(scan, "raw")
-        db.session.commit()
-        
-        current_app.logger.info(
-            f"Upload scan {scan.id}: excluded {metadata['excluded_steps_count']} steps "
-            f"(included {metadata['included_steps_count']} from {metadata['total_transactions']} transactions)"
-        )
+        try:
+            from sqlalchemy.orm.attributes import flag_modified
+            
+            scan.bms_data = scan.bms_data or {}
+            scan.bms_data["upload_metadata"] = metadata
+            flag_modified(scan, "bms_data")
+            db.session.commit()
+            
+            current_app.logger.info(
+                f"Upload scan {scan.id}: excluded {metadata['excluded_steps_count']} steps "
+                f"(included {metadata['included_steps_count']} from {metadata['total_transactions']} transactions)"
+            )
+        except Exception as exc:
+            current_app.logger.warning(f"Failed to save upload metadata for scan {scan.id}: {exc}", exc_info=True)
+            db.session.rollback()
     
     # 9. 원본 파일은 저장하지 않음 (run_scan이 이미 처리된 텍스트를 저장함)
     current_app.logger.info(f"Upload scan created: {scan.id} from {filename}")

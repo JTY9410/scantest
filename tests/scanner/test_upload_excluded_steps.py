@@ -89,9 +89,9 @@ def test_upload_excludes_security_access_and_write_commands(_app_base, make_user
         scan = db.session.get(Scan, scan_id)
         assert scan is not None
         
-        # 검증 1: 제외된 단계 기록 확인
-        assert scan.raw is not None
-        metadata = scan.raw.get('upload_metadata')
+        # 검증 1: 제외된 단계 기록 확인 (bms_data.upload_metadata에 저장됨)
+        assert scan.bms_data is not None
+        metadata = scan.bms_data.get('upload_metadata')
         assert metadata is not None, "upload_metadata 누락"
         assert metadata['excluded_steps_count'] > 0, "제외된 단계가 기록되지 않음"
         

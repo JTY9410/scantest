@@ -404,17 +404,23 @@ def _collect_additional_info(result: dict, is_ev: bool) -> dict:
     if is_ev:
         modules = module_temperatures(result)
         if modules:
+            temps = [m["temperature"] for m in modules if m.get("temperature") is not None]
             info["module_temperatures"] = {
                 "count": len(modules),
-                "available": True
+                "available": True,
+                "min": min(temps) if temps else None,
+                "max": max(temps) if temps else None
             }
         
         # Cell voltages (셀 전압)
         cells = cell_voltages(result)
         if cells:
+            voltages = [c["voltage"] for c in cells if c["voltage"] is not None]
             info["cell_voltages"] = {
                 "count": len(cells),
-                "available": True
+                "available": True,
+                "min": min(voltages) if voltages else None,
+                "max": max(voltages) if voltages else None
             }
     
     # Real-time values (실시간 데이터)
@@ -698,23 +704,30 @@ def inspection(scan, result: dict) -> dict:
     issues = _collect_issues(result, car, pt)
     
     # 업로드 파일에서 제외된 단계 정보 추가
-    if hasattr(scan, 'raw') and scan.raw and isinstance(scan.raw, dict) and scan.raw.get('upload_metadata'):
-        metadata = scan.raw['upload_metadata']
-        if metadata.get('excluded_steps_count', 0) > 0:
-            excluded_count = metadata['excluded_steps_count']
-            excluded_list = metadata.get('excluded_steps', [])
-            
-            # issues에 제외된 단계 정보 추가
-            if isinstance(issues, dict):
-                issues['excluded_steps'] = {
-                    'count': excluded_count,
-                    'message': f"파일 업로드 시 {excluded_count}개 단계 제외 (SecurityAccess, 루틴, 쓰기/제어 명령 등)",
-                    'examples': excluded_list[:3]  # 처음 3개 예시만
-                }
-            elif isinstance(issues, list):
-                issues.append(f"파일 업로드 시 {excluded_count}개 단계 제외 (SecurityAccess, 루틴, 쓰기/제어 명령 등)")
-                for ex in excluded_list[:3]:
-                    issues.append(f"  예: {ex['header']} {ex['command'][:30]}... ({ex['reason']})")
+    bms_data = getattr(scan, 'bms_data', None) or {}
+    upload_metadata = bms_data.get('upload_metadata') if isinstance(bms_data, dict) else None
+    
+    if upload_metadata and upload_metadata.get('excluded_steps_count', 0) > 0:
+        excluded_count = upload_metadata['excluded_steps_count']
+        excluded_list = upload_metadata.get('excluded_steps', [])
+        
+        # issues에 제외된 단계 정보 추가
+        if isinstance(issues, dict):
+            issues['excluded_steps'] = {
+                'count': excluded_count,
+                'message': f"파일 업로드 시 {excluded_count}개 단계 제외 (SecurityAccess, 루틴, 쓰기/제어 명령 등)",
+                'examples': excluded_list[:3]  # 처음 3개 예시만
+            }
+        elif isinstance(issues, list):
+            issues.append(f"파일 업로드 시 {excluded_count}개 단계 제외 (SecurityAccess, 루틴, 쓰기/제어 명령 등)")
+            for ex in excluded_list[:3]:
+                issues.append(f"  예: {ex['header']} {ex['command'][:30]}... ({ex['reason']})")
+    
+    # 앱 버전 가져오기
+    bms_data = getattr(scan, 'bms_data', None) or {}
+    wescan = bms_data.get('wescan', {}) if isinstance(bms_data, dict) else {}
+    diagnosis_info = wescan.get('diagnosis_info', {}) if isinstance(wescan, dict) else {}
+    app_version = diagnosis_info.get('app_version', '')
     
     return {
         "kind": kind,
@@ -727,6 +740,7 @@ def inspection(scan, result: dict) -> dict:
         "code": code,
         "issued_on": when.strftime("%Y.%m.%d") if when else "-",
         "diagnosed_at": when.strftime("%Y. %m. %d.") if when else "-",
+        "app_version": app_version,
         "vehicle": {
             "manufacturer": maker or "-",
             "model": model or "-",
@@ -758,6 +772,7 @@ def inspection(scan, result: dict) -> dict:
         "bms": [] if kind == "ice" else [
             _measure("SOC (표시)", _battery_value(result, "soc_display")
                      if _battery_value(result, "soc_display") is not None else _battery_value(result, "soc"), "%", 1),
+            _measure("BMS SOC", _battery_value(result, "soc_bms") or _battery_value(result, "bms_soc"), "%", 1),
             _measure("SOH", soh, "%", 1),
             _measure("팩 전압", _battery_value(result, "pack_voltage"), "V", 1),
             _measure("팩 전류", _battery_value(result, "pack_current"), "A", 1),

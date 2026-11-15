@@ -135,14 +135,17 @@ def _cover(view: dict) -> list:
                    [170 / len(view["groups"])] * len(view["groups"])),
         ]
     
+    app_version = view.get("app_version", "")
+    version_text = f" · {app_version}" if app_version else ""
+    
     story += [
         _p("검출된 고장 코드가 없습니다." if view["dtc_clear"] else f"검출된 고장 코드 {view['dtc_count']}건"),
-        _p(f"{view['code']} · 발행일 {view['issued_on']}", _SMALL),
+        _p(f"{view['code']} · 발행일 {view['issued_on']}{version_text}", _SMALL),
         _p("본 진단보고서는 위카모빌리티(주)와 (주)배터와이가 공동개발한 WESCAN 진단솔루션을 기반으로, "
            "스캔 데이터를 분석하여 산출한 자료입니다.", _SMALL),
         PageBreak(),
         _p(f"{view['title']} · {vehicle['number']}", _SMALL),
-        _p(view["code"], _SMALL),
+        _p(f"{view['code']}{version_text}", _SMALL),
     ]
     return story
 
@@ -330,18 +333,24 @@ def _additional_info_and_issues_section(view: dict) -> list:
                 story.append(_p("【UDS Snapshot】", _SMALL))
                 for snap in additional_info["uds_snapshots"]:
                     story.append(_p(f"• {snap}", _SMALL))
-            if additional_info.get("module_temps"):
+            if additional_info.get("module_temperatures"):
                 has_content = True
-                temps = additional_info["module_temps"]
-                t_min = temps.get('min', 'N/A')
-                t_max = temps.get('max', 'N/A')
-                story.append(_p(f"【모듈 온도】최소: {t_min}°C, 최대: {t_max}°C", _SMALL))
+                temps = additional_info["module_temperatures"]
+                t_min = temps.get('min')
+                t_max = temps.get('max')
+                if t_min is not None and t_max is not None:
+                    story.append(_p(f"【모듈 온도】최소: {t_min:.1f}°C, 최대: {t_max:.1f}°C", _SMALL))
+                else:
+                    story.append(_p(f"【모듈 온도】수집됨 (상세 값 {temps.get('count', 0)}개)", _SMALL))
             if additional_info.get("cell_voltages"):
                 has_content = True
                 cells = additional_info["cell_voltages"]
-                c_min = cells.get('min', 'N/A')
-                c_max = cells.get('max', 'N/A')
-                story.append(_p(f"【셀 전압】최소: {c_min}V, 최대: {c_max}V", _SMALL))
+                c_min = cells.get('min')
+                c_max = cells.get('max')
+                if c_min is not None and c_max is not None:
+                    story.append(_p(f"【셀 전압】최소: {c_min:.3f}V, 최대: {c_max:.3f}V", _SMALL))
+                else:
+                    story.append(_p(f"【셀 전압】수집됨 (상세 값 {cells.get('count', 0)}개)", _SMALL))
             if additional_info.get("realtime_values"):
                 has_content = True
                 story.append(_p("【실시간 값】", _SMALL))
@@ -367,6 +376,12 @@ def _additional_info_and_issues_section(view: dict) -> list:
         # 기존 dict 형식
         elif isinstance(issues, dict):
             has_issues = False
+            if issues.get("excluded_steps"):
+                has_issues = True
+                excluded = issues["excluded_steps"]
+                story.append(_p(f"· {excluded.get('message', '')}", _SMALL))
+                for ex in excluded.get('examples', []):
+                    story.append(_p(f"  예: {ex.get('header')} {ex.get('command', '')[:30]}... ({ex.get('reason', '')})", _SMALL))
             if issues.get("errors"):
                 has_issues = True
                 error_list = issues["errors"].get("list", [])
@@ -443,7 +458,9 @@ def _build(scan: Scan, view: dict) -> bytes:
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=16 * mm, rightMargin=16 * mm, topMargin=14 * mm,
                             bottomMargin=16 * mm, title=f"WeSCAN {view['heading']} {masked_plate}", author="WecarScan")
-    label = f"WECARMOBILITY · BETTERWHY  |  {view['heading_en']}"
+    app_version = view.get("app_version", "")
+    version_suffix = f" v{app_version}" if app_version else ""
+    label = f"WECARMOBILITY · BETTERWHY  |  {view['heading_en']}{version_suffix}"
 
     def footer(canvas, document):
         canvas.saveState()
@@ -483,6 +500,8 @@ def render(scan: Scan, result: dict) -> bytes:
 
 
 def filename(scan: Scan) -> str:
+    """ASCII-safe filename for Content-Disposition header."""
     stamp = local_display(scan.created_at).replace("-", "").replace(":", "").replace(" ", "-")
-    masked_plate = mask_plate(scan.car_no)
-    return f"위스캔-{masked_plate}-{stamp}.pdf"
+    # ASCII-only: 'wescan-report-YYYYMMDD-HHMMSS.pdf'
+    date_part = stamp.split("-")[0] if "-" in stamp else stamp[:8]
+    return f"wescan-report-{date_part}.pdf"
