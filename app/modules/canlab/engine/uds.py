@@ -136,10 +136,6 @@ def pair_transactions(messages: list[Message]) -> list[Transaction]:
                 continue
             used.add(later_index)
             if tx.response is None:
-                # 기능주소 요청인 경우, 요청 ID를 응답 ID - 8로 설정하여
-                # interpret에서 ECU를 등록할 수 있도록 함
-                if broadcast:
-                    tx.request_id = later.can_id - 8
                 tx.response_id = later.can_id
                 tx.response_t_ms = later.t_ms
                 tx.response = payload

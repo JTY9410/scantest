@@ -117,15 +117,13 @@ def test_upload_trc_creates_scan_record(_app_base, make_user):
     trc_data = b""";$FILEVERSION=1.1
 ;$STARTTIME=47717.5416666667
 ;
-;   Time (abs)  T  Bus  ID   Reserved  DLC  Data ... Checksum
-;
-      0.001000  Tx   1  0x7DF   00 00 00 00   8  02 01 00 00 00 00 00 00   00
-      0.050000  Rx   1  0x7E8   00 00 00 00   8  06 41 00 BE 1F B8 13 00   00
-      0.100000  Tx   1  0x7DF   00 00 00 00   8  02 09 00 00 00 00 00 00   00
-      0.110000  Rx   1  0x7E8   00 00 00 00   8  10 14 49 00 14 57 5A 5A   00
-      0.115000  Tx   1  0x7DF   00 00 00 00   8  30 00 00 00 00 00 00 00   00
-      0.120000  Rx   1  0x7E8   00 00 00 00   8  21 5A 31 32 33 34 35 36   00
-      0.125000  Rx   1  0x7E8   00 00 00 00   8  22 37 38 39 30 31 32 33   00
+     1)         0.001000  Tx         7DF   8  02 01 00 00 00 00 00 00
+     2)         0.050000  Rx         7E8   8  06 41 00 BE 1F B8 13 00
+     3)         0.100000  Tx         7DF   8  02 09 00 00 00 00 00 00
+     4)         0.110000  Rx         7E8   8  10 14 49 00 14 57 5A 5A
+     5)         0.115000  Tx         7DF   8  30 00 00 00 00 00 00 00
+     6)         0.120000  Rx         7E8   8  21 5A 31 32 33 34 35 36
+     7)         0.125000  Rx         7E8   8  22 37 38 39 30 31 32 33
 """
     
     with _app_base.app_context():
@@ -159,8 +157,8 @@ def test_upload_with_car_lookup(_app_base, make_user):
     from app.extensions import db
     
     csv_data = b"""Time,ID,Data
-0.001,7DF,0100
-0.050,7E8,4100BE1FB813
+0.001,7DF,020100
+0.050,7E8,064100BE1FB813
 """
     
     # car_info.lookup을 Mock으로 대체
@@ -201,8 +199,8 @@ def test_upload_endpoint_integration(upload_admin, app):
     from app.extensions import db
     
     csv_data = b"""Time,ID,Data
-0.001,7DF,0100
-0.050,7E8,4100BE1FB813
+0.001,7DF,020100
+0.050,7E8,064100BE1FB813
 """
     
     # car_info만 Mock (외부 API 호출 방지)

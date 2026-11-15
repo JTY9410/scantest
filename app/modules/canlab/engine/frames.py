@@ -44,7 +44,12 @@ class ParsedTrace:
 
 
 def _bytes(text: str) -> bytes:
-    return bytes(int(token, 16) for token in text.split())
+    text = text.strip()
+    if " " in text:
+        return bytes(int(token, 16) for token in text.split())
+    else:
+        # 공백이 없으면 2자리씩 나눔
+        return bytes(int(text[i:i+2], 16) for i in range(0, len(text), 2))
 
 
 def _parse_trc(lines: list[str]) -> ParsedTrace:

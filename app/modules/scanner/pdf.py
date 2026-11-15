@@ -312,7 +312,6 @@ def _inspection_story(view: dict) -> list:
 
 def _build(scan: Scan, view: dict) -> bytes:
     _fonts()
-    story = _inspection_story(view)
     
     # First pass: count actual pages
     buffer_count = BytesIO()
@@ -323,7 +322,7 @@ def _build(scan: Scan, view: dict) -> bytes:
     def count_pages(canvas, document):
         total_pages[0] = max(total_pages[0], document.page)
     
-    doc_count.build(story, onFirstPage=count_pages, onLaterPages=count_pages)
+    doc_count.build(_inspection_story(view), onFirstPage=count_pages, onLaterPages=count_pages)
     
     # Second pass: render with correct page count
     buffer = BytesIO()
@@ -339,7 +338,7 @@ def _build(scan: Scan, view: dict) -> bytes:
         canvas.drawRightString(A4[0] - 16 * mm, 10 * mm, f"{document.page:02d} / {total_pages[0]:02d}")
         canvas.restoreState()
 
-    doc.build(story, onFirstPage=footer, onLaterPages=footer)
+    doc.build(_inspection_story(view), onFirstPage=footer, onLaterPages=footer)
     return buffer.getvalue()
 
 

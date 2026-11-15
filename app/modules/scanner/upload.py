@@ -70,6 +70,10 @@ def parse_uploaded_trace(content: bytes, filename: str) -> str:
         # 형식은 맞는 것 같지만 파싱 실패
         raise UploadError(f"CAN 로그를 파싱하지 못했습니다: {exc}")
     
+    # 파싱 성공했지만 유효한 프레임이 없음
+    if not trace.frames:
+        raise UploadError("유효한 CAN 로그 프레임이 없습니다.")
+    
     # Tesla broadcast는 UDS transactions 없이 frames만 있음
     # load_trace가 성공하면 유효한 데이터로 간주
     if not trace.transactions:
@@ -142,11 +146,7 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
         
         # (header, command)가 같으면 마지막 긍정 응답으로 덮어씀
         key = (header, command)
-        if key in step_map and tx.positive:
-            # 긍정 응답이면 덮어씀
-            step_map[key]["reply"] = reply
-            step_map[key]["tMs"] = getattr(tx, "response_t_ms", None) or i * 100
-        elif key not in step_map:
+        if key not in step_map:
             # 처음 나온 명령
             step_map[key] = {
                 "id": len(step_map) + 1,
@@ -158,6 +158,10 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
                 "bus": "can",  # load_trace는 CAN 버스 데이터를 파싱
                 "tMs": getattr(tx, "response_t_ms", None) or i * 100,
             }
+        elif tx.positive:
+            # 긍정 응답이면 덮어씀
+            step_map[key]["reply"] = reply
+            step_map[key]["tMs"] = getattr(tx, "response_t_ms", None) or i * 100
     
     # 순서를 유지하기 위해 id 순으로 정렬
     steps = sorted(step_map.values(), key=lambda x: x["id"])
