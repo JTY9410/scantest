@@ -733,6 +733,19 @@ def inspection(scan, result: dict) -> dict:
     diagnosis_info = wescan.get('diagnosis_info', {}) if isinstance(wescan, dict) else {}
     app_version = diagnosis_info.get('app_version', '')
     
+    # Tesla 전용 필드
+    is_tesla = maker and ("테스라" in maker.upper() or "TESLA" in maker.upper())
+    tesla_data = {}
+    if is_tesla and kind == "ev":
+        battery = result.get("battery") or {}
+        tesla_data = {
+            "full_kwh": _battery_value(result, "full_kwh"),
+            "remaining_kwh": _battery_value(result, "remaining_kwh"),
+            "rated_kwh": 74.0,  # Tesla 기준 용량 (Model 3 Standard Range+)
+            "soh_reference_note": "SOH 참고치(미검증): 추정 용량 / 기준 용량 74.0 kWh",
+            "source_note": "기준 용량 출처: Tesla Model 3 제원 (2018-2021 SR+)",
+        }
+    
     return {
         "kind": kind,
         "kind_label": LABELS[kind] + (" (플러그인)" if pt.get("plugin") else "") + (" (수소)" if pt.get("hydrogen") else ""),
@@ -799,6 +812,7 @@ def inspection(scan, result: dict) -> dict:
         "module_min": temp_min if modules else None,
         "module_max": temp_max if modules else None,
         "module_spread": round(max(module_values) - min(module_values), 1) if len(module_values) >= 2 else None,
+        "tesla": tesla_data,
         "additional_info": additional_info,
         "issues": issues,
     }
