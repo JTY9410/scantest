@@ -193,5 +193,99 @@
     <p class="mt-2 text-sm font-semibold">{{ view.code }}</p>
   </article>
   {% endif %}
+
+  {# Additional information section (beyond WESCAN standard) #}
+  {% if view.additional_info %}
+  <article class="mb-6 rounded-lg bg-surface p-6 shadow-md print:break-before-page print:shadow-none">
+    <h2 class="text-xl font-bold">추가 수집 정보</h2>
+    <p class="mt-2 text-sm text-muted">WESCAN 기본 진단서 외 추가로 수집된 정보입니다.</p>
+    
+    <ul class="mt-4 grid gap-3 text-sm">
+      {% if view.additional_info.freeze_frame %}
+      <li>
+        <span class="font-semibold">고장 당시 값 (Freeze Frame):</span>
+        {{ view.additional_info.freeze_frame.count }}건 수집됨
+      </li>
+      {% endif %}
+      {% if view.additional_info.uds_snapshots %}
+      <li>
+        <span class="font-semibold">제어기 고장 당시 데이터 (UDS 19 04):</span>
+        {{ view.additional_info.uds_snapshots.count }}개 ECU
+      </li>
+      {% endif %}
+      {% if view.additional_info.module_temperatures %}
+      <li>
+        <span class="font-semibold">모듈 온도:</span>
+        {{ view.additional_info.module_temperatures.count }}개 모듈
+      </li>
+      {% endif %}
+      {% if view.additional_info.cell_voltages %}
+      <li>
+        <span class="font-semibold">셀 전압:</span>
+        {{ view.additional_info.cell_voltages.count }}개 셀
+      </li>
+      {% endif %}
+      {% if view.additional_info.realtime_values %}
+      <li>
+        <span class="font-semibold">실시간 데이터 (Mode 01):</span>
+        {{ view.additional_info.realtime_values.count}}개 항목
+      </li>
+      {% endif %}
+      {% if view.additional_info.emission_monitors %}
+      <li>
+        <span class="font-semibold">배출 부품 점검 결과 (Mode 06):</span>
+        {{ view.additional_info.emission_monitors.count }}개 항목
+      </li>
+      {% endif %}
+      {% if not view.additional_info|length %}
+      <li class="text-muted">추가 수집 정보 없음</li>
+      {% endif %}
+    </ul>
+  </article>
+  {% endif %}
+
+  {# Issues section (errors, conflicts, missing values) #}
+  {% if view.issues %}
+  <article class="rounded-lg bg-surface p-6 shadow-md print:shadow-none">
+    <h2 class="text-xl font-bold">문제점</h2>
+    <p class="mt-2 text-sm text-muted">수집 실패 명령, 오류, 동력원 충돌, 값 출처 없음 등</p>
+    
+    <ul class="mt-4 grid gap-3 text-sm">
+      {% if view.issues.scan_status and view.issues.scan_status.status != "ok" %}
+      <li class="rounded-md bg-warning/10 px-3 py-2">
+        <span class="font-semibold">스캔 상태:</span>
+        {{ view.issues.scan_status.message }}
+      </li>
+      {% endif %}
+      {% if view.issues.errors %}
+      <li class="rounded-md bg-danger/10 px-3 py-2">
+        <span class="font-semibold">오류 {{ view.issues.errors.count }}건:</span>
+        {% for error in view.issues.errors.summary %}
+          {{ error }}{% if not loop.last %}, {% endif %}
+        {% endfor %}
+        {% if view.issues.errors.count > 5 %}외 {{ view.issues.errors.count - 5 }}건{% endif %}
+      </li>
+      {% endif %}
+      {% if view.issues.powertrain_conflict %}
+      <li class="rounded-md bg-warning/10 px-3 py-2">
+        <span class="font-semibold">동력원 충돌 감지:</span>
+        차량번호 조회({{ view.issues.powertrain_conflict.plate_type }})와
+        VIN 규칙({{ view.issues.powertrain_conflict.vin_type }})이 불일치
+      </li>
+      {% endif %}
+      {% if view.issues.missing_critical_values %}
+      <li class="rounded-md bg-warning/10 px-3 py-2">
+        <span class="font-semibold">주요 값 미확인 {{ view.issues.missing_critical_values.count }}건:</span>
+        {% for item in view.issues.missing_critical_values.list %}
+          {{ item }}{% if not loop.last %}, {% endif %}
+        {% endfor %}
+      </li>
+      {% endif %}
+      {% if not view.issues|length %}
+      <li class="text-success">문제점 없음 - 정상적으로 스캔 완료</li>
+      {% endif %}
+    </ul>
+  </article>
+  {% endif %}
 </main>
 {% endblock %}
