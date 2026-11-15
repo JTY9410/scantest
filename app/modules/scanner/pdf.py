@@ -313,6 +313,19 @@ def _inspection_story(view: dict) -> list:
 def _build(scan: Scan, view: dict) -> bytes:
     _fonts()
     story = _inspection_story(view)
+    
+    # First pass: count actual pages
+    buffer_count = BytesIO()
+    doc_count = SimpleDocTemplate(buffer_count, pagesize=A4, leftMargin=16 * mm, rightMargin=16 * mm, topMargin=14 * mm,
+                                   bottomMargin=16 * mm)
+    total_pages = [0]
+    
+    def count_pages(canvas, document):
+        total_pages[0] = max(total_pages[0], document.page)
+    
+    doc_count.build(story, onFirstPage=count_pages, onLaterPages=count_pages)
+    
+    # Second pass: render with correct page count
     buffer = BytesIO()
     doc = SimpleDocTemplate(buffer, pagesize=A4, leftMargin=16 * mm, rightMargin=16 * mm, topMargin=14 * mm,
                             bottomMargin=16 * mm, title=f"WeSCAN {view['heading']} {scan.car_no}", author="WecarScan")
@@ -323,7 +336,7 @@ def _build(scan: Scan, view: dict) -> bytes:
         canvas.setFont(FONT, 7)
         canvas.setFillColor(MUTED)
         canvas.drawString(16 * mm, 10 * mm, label)
-        canvas.drawRightString(A4[0] - 16 * mm, 10 * mm, f"{document.page:02d} / {view['pages']:02d}")
+        canvas.drawRightString(A4[0] - 16 * mm, 10 * mm, f"{document.page:02d} / {total_pages[0]:02d}")
         canvas.restoreState()
 
     doc.build(story, onFirstPage=footer, onLaterPages=footer)

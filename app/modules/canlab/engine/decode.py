@@ -37,21 +37,48 @@ class RuleRef:
 
 
 def decode_signals(samples: Samples, rules: list[RuleRef]) -> dict[str, dict]:
-    """신호마다 마지막 표본 값과 시간별 값 목록을 만든다. 물리 범위를 벗어나면 값으로 쓰지 않는다."""
+    """신호마다 마지막 표본 값과 시간별 값 목록을 만든다. 
+    
+    물리 범위를 벗어난 값은 '정의불일치'로 표시하고 추가 정보에 기록한다.
+    """
     values = {}
+    out_of_range = []  # 범위 밖 값 목록
+    
     for rule in rules:
         rows = samples.get((rule.layout.request_id, rule.layout.did))
         if not rows:
             continue
         signal = signals.BY_KEY.get(rule.signal_key)
         series = []
+        range_violations = []
+        
         for t_ms, data in rows:
             value = rule.layout.value(data)
-            if value is None or (signal and not signal.minimum <= value <= signal.maximum):
+            if value is None:
+                continue
+            # 범위 체크
+            if signal and not signal.minimum <= value <= signal.maximum:
+                range_violations.append({
+                    "value": value,
+                    "expected_range": f"{signal.minimum} ~ {signal.maximum}",
+                    "unit": signal.unit,
+                })
                 continue
             series.append((round(t_ms, 1), value))
+        
+        if range_violations:
+            # 범위 밖 값 기록
+            out_of_range.append({
+                "signal": rule.signal_key,
+                "label": signal.label if signal else rule.signal_key,
+                "source": f"{rule.layout.request_id:03X} 22 {rule.layout.did:04X}",
+                "violations": range_violations,
+                "reason": "정의불일치 (범위 밖 값)",
+            })
+        
         if not series:
             continue
+            
         values[rule.signal_key] = {
             "value": series[-1][1],
             "series": series,
@@ -63,6 +90,11 @@ def decode_signals(samples: Samples, rules: list[RuleRef]) -> dict[str, dict]:
             "formula": rule.layout.formula(),
             "source": f"{rule.layout.request_id:03X} 22 {rule.layout.did:04X}",
         }
+    
+    # 범위 밖 값을 별도로 반환 (호출자가 처리)
+    if out_of_range:
+        values["_out_of_range_signals"] = out_of_range
+    
     return values
 
 

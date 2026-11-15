@@ -35,6 +35,8 @@ SIGNALS: tuple[Signal, ...] = (
     Signal("module_temp_4", "배터리 모듈 온도 4", "°C", -40, 100,
            ("배터리 모듈 온도 #4", '고전압 배터리 "4번 온도센서"')),
     Signal("module_temp_5", "배터리 모듈 온도 5", "°C", -40, 100, ("배터리 모듈 온도 #5",)),
+    Signal("module_temp_b17", "배터리 모듈 온도 B17", "°C", -40, 150, ("배터리 모듈 온도 #B17",)),
+    Signal("module_temp_b18", "배터리 모듈 온도 B18", "°C", -40, 150, ("배터리 모듈 온도 #B18",)),
     Signal("inlet_temp", "배터리 외기(흡기) 온도", "°C", -40, 100, ("배터리 외기 온도",)),
     Signal("max_cell_v", "최대 셀 전압", "V", 1.5, 4.6, ("최대 셀 전압",), drifting=True),
     Signal("max_cell_no", "최대 셀 전압 셀 번호", "", 1, 300, ("최대 셀 전압 셀 번호",), drifting=True),
