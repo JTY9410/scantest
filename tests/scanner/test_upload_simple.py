@@ -48,5 +48,8 @@ def test_parse_invalid_format():
     """잘못된 형식 오류."""
     content = b"This is not a valid CAN log"
     
-    with pytest.raises(UploadError):
+    # Should raise UploadError for invalid format
+    with pytest.raises(UploadError) as exc_info:
         parse_uploaded_trace(content, "invalid.txt")
+    
+    assert "CAN 로그" in str(exc_info.value)
