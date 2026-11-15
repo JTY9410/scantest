@@ -74,12 +74,16 @@ def test_parse_uploaded_trace_invalid_format():
 def test_upload_endpoint_no_file(app, make_user):
     """파일 없이 요청하면 오류."""
     from tests.conftest import admin_login
+    from app.extensions import db
     
     with app.app_context():
-        make_user("admin_upload", type="admin", password="test123", name="Admin")
+        # Ensure clean state
+        db.session.rollback()
+        make_user("admin_upload_test", type="admin", password="test123upload", name="Upload Admin")
+        db.session.commit()
     
     client = app.test_client()
-    admin_login(client, "admin_upload", "test123")
+    admin_login(client, "admin_upload_test", "test123upload")
     
     response = client.post("/admin/scan/upload")
     
@@ -92,9 +96,13 @@ def test_upload_endpoint_no_file(app, make_user):
 def test_upload_endpoint_with_fake_csv(app, make_user, monkeypatch):
     """가짜 CSV 파일 업로드 (E2E 스텁)."""
     from tests.conftest import admin_login
+    from app.extensions import db
     
     with app.app_context():
-        make_user("admin_csv", type="admin", password="test456", name="CSV Admin")
+        # Ensure clean state
+        db.session.rollback()
+        make_user("admin_csv_test", type="admin", password="test456csv", name="CSV Upload Admin")
+        db.session.commit()
     
     # Mock process_upload to avoid full processing
     from app.modules.scanner import upload
@@ -105,7 +113,7 @@ def test_upload_endpoint_with_fake_csv(app, make_user, monkeypatch):
     monkeypatch.setattr(upload, "process_upload", mock_process_upload)
     
     client = app.test_client()
-    admin_login(client, "admin_csv", "test456")
+    admin_login(client, "admin_csv_test", "test456csv")
     
     data = b"Time,ID,Data\n0.001,7E0,0222F190\n"
     
