@@ -167,8 +167,8 @@ def test_inspection_report_matches_basic_layout():
         "dtcs": [], "values": [{"key": "odometer", "value": 26602}], "steps": [],
     })
     assert view["code"] == "WeSCAN-20261104-00000058"
-    # LDC·인렛 등 부가 항목 3개가 측정불가여도 핵심(SOH·절연·셀·온도)이 읽혔으면 양호.
-    assert view["overall"] == "양호" and view["soh"] == 97.2 and view["unread"] == 3
+    # 2026-11-15: 측정불가 항목이 하나라도 있으면 판정보류 (운영 테스트 결과 반영).
+    assert view["overall"] == "판정보류" and view["soh"] == 97.2 and view["unread"] == 3
     assert view["kind"] == "ev" and len(view["judgments"]) == 7
     assert view["dtc_clear"] and [g["count"] for g in view["groups"]] == [0] * 8
     assert view["cells"][0]["voltage"] == 3.46 and len(view["modules"]) == 2

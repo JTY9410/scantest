@@ -12,6 +12,13 @@ from zoneinfo import ZoneInfo
 
 from app.modules.scanner.powertrain import LABELS, classify
 
+
+def mask_vin(vin: str | None) -> str:
+    """VIN 마스킹: 앞 3자리 + * + 끝 4자리 (예: KMH************1234)"""
+    if not vin or len(vin) < 8:
+        return vin or "-"
+    return f"{vin[:3]}{'*' * (len(vin) - 7)}{vin[-4:]}"
+
 _ECU = {
     "7E0": "엔진", "7E8": "엔진", "7E1": "변속기", "7E9": "변속기",
     "7E2": "ABS", "7EA": "ABS", "7D1": "ABS",
@@ -263,30 +270,16 @@ def count_significant_dtcs(dtcs: list[dict]) -> int:
 
 def overall(rows: list[dict], dtc_count: int, *, dtc_read: bool = True) -> str:
     """종합판정. 측정한 항목이 기준을 벗어나거나 확정·현재실패 고장코드가 있으면 '점검요',
-    그 밖에 핵심 배터리 항목을 못 읽었으면(또는 고장코드를 읽지 못했으면) '판정보류', 모두 충족하면 '양호'.
+    그 밖에 고장코드를 읽지 못했거나 측정불가 항목이 하나라도 있으면 '판정보류', 모두 충족하면 '양호'.
     
-    LDC·인렛·모터 온도 등 부가 항목이 측정불가여도 핵심 배터리 항목(SOH·절연·셀·온도)이
-    읽혔다면 판정보류가 아니라 부분 판정을 내린다.
+    규칙: 측정불가(UNREAD)가 하나라도 있으면 판정보류 (2026-11-15 운영 테스트 결과 반영).
     """
     if dtc_count or any(row["result"] == "주의" for row in rows):
         return "점검요"
     
-    # 핵심 배터리 항목 (EV/HEV 공통)
-    core_battery_items = {"절연 저항", "셀 전압 편차", "모듈 온도 편차"}
-    ev_core_items = core_battery_items | {"배터리 수명 (SOH)"}
-    
-    # 읽은 항목 확인
-    core_unread = [row for row in rows
-                   if row.get("item") in ev_core_items and row["result"] == UNREAD]
-    
-    # 핵심 항목을 못 읽었거나 고장코드를 읽지 못했으면 판정보류
-    if not dtc_read or len(core_unread) > 0:
+    # 고장코드를 읽지 못했거나 측정불가 항목이 하나라도 있으면 판정보류
+    if not dtc_read or any(row["result"] == UNREAD for row in rows):
         return "판정보류"
-    
-    # 부가 항목(LDC·인렛·모터 온도)이 측정불가여도 핵심 항목이 읽혔으면 양호 가능
-    if any(row["result"] == UNREAD for row in rows):
-        # 일부 항목 미측정이지만 핵심은 읽힘 - 양호로 판정 가능
-        return "양호"
     
     return "양호"
 
@@ -674,7 +667,7 @@ def inspection(scan, result: dict) -> dict:
             "year": getattr(scan, "car_year", None) or car.get("diag_year") or "-",
             "fuel": getattr(scan, "car_fuel", None) or car.get("diag_fuel") or "-",
             "number": getattr(scan, "car_no", None) or "-",
-            "vin": result.get("vin") or getattr(scan, "car_vin", None) or "-",
+            "vin": mask_vin(result.get("vin") or getattr(scan, "car_vin", None)),
             "mileage": mileage,
             "mileage_text": f"{mileage:,.0f} km" if mileage is not None else "-",
         },
@@ -692,7 +685,9 @@ def inspection(scan, result: dict) -> dict:
         "dtc_rows": dtc_rows(result, group_kind),
         "groups": groups,
         "judgments": judged,
-        "reconcile": result.get("reconcile") if result.get("source") == "reconcile" else None,
+        "reconcile": (lambda rc: {**rc, "vin": mask_vin(rc.get("vin"))} if rc else None)(
+            result.get("reconcile") if result.get("source") == "reconcile" else None
+        ),
         "reference": result.get("reference") or {},
         "bms": [] if kind == "ice" else [
             _measure("SOC (표시)", _battery_value(result, "soc_display")

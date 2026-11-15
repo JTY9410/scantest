@@ -201,18 +201,106 @@ def _battery_pages(view: dict) -> list:
     return story
 
 
+def _additional_info_section(view: dict) -> list:
+    """추가 수집 정보 섹션 (WESCAN 기본 진단서 외 추가로 수집된 정보)."""
+    additional_info = view.get("additional_info", {})
+    if not additional_info:
+        return []
+    
+    story = [PageBreak(), _p("추가 수집 정보", _H2),
+             _p("WESCAN 기본 진단서 외 추가로 수집된 정보입니다.", _SMALL)]
+    
+    # Freeze frames
+    if additional_info.get("freeze_frames"):
+        story.append(_p(f"Freeze Frame 데이터: {additional_info['freeze_frames']['count']}건", _SMALL))
+    
+    # UDS snapshots
+    if additional_info.get("uds_snapshots"):
+        story.append(_p(f"UDS 스냅샷: {additional_info['uds_snapshots']['count']}건", _SMALL))
+    
+    # Module temperatures
+    if additional_info.get("module_temps"):
+        temps = additional_info["module_temps"]
+        if "min" in temps and "max" in temps:
+            story.append(_p(f"모듈 온도: {temps['count']}개 모듈 (최저 {temps['min']:.1f}℃, 최고 {temps['max']:.1f}℃)", _SMALL))
+        else:
+            story.append(_p(f"모듈 온도: {temps['count']}개 모듈", _SMALL))
+    
+    # Cell voltages
+    if additional_info.get("cell_voltages"):
+        cells = additional_info["cell_voltages"]
+        if "min" in cells and "max" in cells:
+            story.append(_p(f"셀 전압: {cells['count']}개 셀 (최저 {cells['min']:.3f}V, 최고 {cells['max']:.3f}V)", _SMALL))
+        else:
+            story.append(_p(f"셀 전압: {cells['count']}개 셀", _SMALL))
+    
+    # Realtime values
+    if additional_info.get("realtime_values"):
+        story.append(_p(f"실시간 값: {additional_info['realtime_values']['count']}개 항목", _SMALL))
+    
+    # Emission monitors
+    if additional_info.get("emission_monitors"):
+        story.append(_p(f"배출가스 모니터: {additional_info['emission_monitors']['status']}", _SMALL))
+    
+    if not any(additional_info.get(k) for k in ["freeze_frames", "uds_snapshots", "module_temps", 
+                                                  "cell_voltages", "realtime_values", "emission_monitors"]):
+        story.append(_p("추가 수집 정보 없음", _SMALL))
+    
+    return story
+
+
+def _issues_section(view: dict) -> list:
+    """문제점 섹션 (수집 실패 명령, 오류, 동력원 충돌, 값 출처 없음 등)."""
+    issues = view.get("issues", {})
+    if not issues:
+        return []
+    
+    story = [_p("문제점", _H2),
+             _p("수집 실패 명령, 오류, 동력원 충돌, 값 출처 없음 등", _SMALL)]
+    
+    # Errors
+    if issues.get("errors"):
+        error_list = issues["errors"].get("list", [])
+        for error in error_list[:5]:  # Limit to 5
+            story.append(_p(f"· 오류: {error}", _SMALL))
+    
+    # Powertrain conflict
+    if issues.get("powertrain_conflict"):
+        conflict = issues["powertrain_conflict"]
+        story.append(_p(f"· 동력원 충돌: {conflict['message']}", _SMALL))
+    
+    # Missing critical values
+    if issues.get("missing_critical_values"):
+        missing = issues["missing_critical_values"]
+        missing_list = missing.get("list", [])
+        story.append(_p(f"· 주요 값 미확인 {missing['count']}건: " + ", ".join(missing_list), _SMALL))
+    
+    # Scan status
+    if issues.get("scan_status"):
+        status = issues["scan_status"]
+        story.append(_p(f"· 스캔 상태: {status['message']}", _SMALL))
+    
+    if not any(issues.get(k) for k in ["errors", "powertrain_conflict", "missing_critical_values", "scan_status"]):
+        story.append(_p("문제점 없음", _SMALL))
+    
+    return story
+
+
 def story_ev(view: dict) -> list:
-    """EV 기술 진단 보고서 5쪽: 표지·주요 진단 데이터+고장코드 상세·고전압 계통·셀·모듈."""
+    """EV 기술 진단 보고서: 표지·주요 진단 데이터+고장코드 상세·고전압 계통·셀·모듈·추가정보·문제점."""
     return [*_cover(view), *_judgment_page(view), *_dtc_detail(view), *_battery_pages(view),
+            *_additional_info_section(view), *_issues_section(view),
             *[_p(text, _SMALL) for text in _CLOSING]]
 
 
-story_hev = story_ev  # HEV 5쪽: 같은 틀, 판정 항목·계통·구동 칸만 다르다(view가 정한다).
+story_hev = story_ev  # HEV: 같은 틀, 판정 항목·계통·구동 칸만 다르다(view가 정한다).
 
 
 def story_ice(view: dict) -> list:
-    """OBD-II DTC 진단 보고서 2쪽: 표지(6개 계통)·고장 코드 상세."""
-    return [*_cover(view), *_dtc_detail(view), *[_p(text, _SMALL) for text in _CLOSING]]
+    """OBD-II DTC 진단 보고서: 표지(6개 계통)·고장 코드 상세·추가정보·문제점."""
+    return [*_cover(view), *_dtc_detail(view),
+            *_additional_info_section(view), *_issues_section(view),
+            *[_p(text, _SMALL) for text in _CLOSING]]
 
 
 _INSPECTION_STORY = {"ev": story_ev, "hev": story_hev, "ice": story_ice}
