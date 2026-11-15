@@ -49,8 +49,8 @@ def test_overall_rules():
     unread_aux = {"item": "LDC 출력 전압", "result": "측정불가"}
     bad = {"item": "절연 저항", "result": "주의"}
     assert overall([ok, soh_ok], 0) == "양호"
-    # 부가 항목(LDC·인렛)만 측정불가여도 핵심이 읽혔으면 양호
-    assert overall([ok, soh_ok, unread_aux], 0) == "양호"
+    # 2026-11-15: 측정불가가 하나라도 있으면 판정보류 (운영 테스트 결과 반영)
+    assert overall([ok, soh_ok, unread_aux], 0) == "판정보류"
     # 핵심 배터리 항목을 못 읽으면 판정보류
     assert overall([ok, unread_core], 0) == "판정보류"
     assert overall([ok, unread_aux], 1) == "점검요"

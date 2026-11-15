@@ -542,8 +542,20 @@ def _record_learning_stats(maker: str | None, model: str | None, steps: list[dic
     
     Phase 8: Extract success/failure from steps and persist to command_stats.
     Failures are logged but do not fail the scan.
+    
+    Fixed 2026-11-15: Use savepoint isolation, extract ECU from header/command, 
+    reject absolute timestamps (> 300000ms = 5 minutes).
     """
     if not maker or not model:
+        return
+    
+    from app.extensions import db
+    
+    # Use savepoint to isolate learning stats from scan save transaction
+    try:
+        savepoint = db.session.begin_nested()
+    except Exception as exc:
+        current_app.logger.warning(f"Learning stats savepoint creation failed: {exc}", exc_info=True)
         return
     
     try:
@@ -557,11 +569,21 @@ def _record_learning_stats(maker: str | None, model: str | None, steps: list[dic
             if not command or command.startswith("AT"):
                 continue  # Skip AT commands
             
-            # Extract ECU address and command bytes
-            ecu = step.get("ecu", "UNKNOWN")
+            # Extract ECU address from header (e.g. "7E4", "000007E4")
+            header = step.get("header", "")
+            ecu = header[-3:] if header and len(header) >= 3 else "UNKNOWN"
+            if not ecu or not ecu.replace("0", "").replace("X", ""):
+                ecu = "UNKNOWN"
+            
             reply = step.get("reply")
             error = step.get("error")
             t_ms = step.get("t_ms")
+            
+            # Reject absolute timestamps (> 300000ms = 5 minutes)
+            # Normal response times are < 5000ms, absolute timestamps are unix epoch-like values
+            response_time_ms = None
+            if t_ms is not None and 0 < t_ms < 300000:
+                response_time_ms = t_ms
             
             # Determine success/failure
             success = False
@@ -584,7 +606,7 @@ def _record_learning_stats(maker: str | None, model: str | None, steps: list[dic
                 ecu=ecu,
                 command=command,
                 success=success,
-                response_time_ms=t_ms if success else None,
+                response_time_ms=response_time_ms if success else None,
                 error_type=error_type
             )
         
@@ -594,8 +616,15 @@ def _record_learning_stats(maker: str | None, model: str | None, steps: list[dic
         # Update verification status for commands that meet criteria
         _update_verification_status(maker, model)
         
+        # Commit savepoint
+        savepoint.commit()
+        
     except Exception as exc:
-        # Log but do not fail the scan
+        # Rollback savepoint, do not fail the scan
+        try:
+            savepoint.rollback()
+        except Exception:
+            pass
         current_app.logger.warning(f"Learning stats recording failed: {exc}", exc_info=True)
 
 
