@@ -81,49 +81,65 @@ def convert_to_scan_steps(trace_text: str) -> list[dict]:
     """Trace를 스캔 스텝으로 변환.
     
     run_scan이 기대하는 steps 형식으로 변환합니다.
+    같은 (header, command)는 마지막 긍정 응답만 유지하여 단계 수를 줄입니다.
     """
     from app.modules.canlab.engine.decode import load_trace
     
     trace = load_trace(trace_text)
-    steps = []
     
-    # 트랜잭션을 스텝으로 변환
+    # (header, command) → step 매핑. 마지막 긍정 응답만 유지
+    step_map: dict[tuple[str | None, str], dict] = {}
+    
     for i, tx in enumerate(trace.transactions):
-        # 요청 스텝
+        # 요청 데이터 (8바이트 초과도 허용)
         request_data = tx.request.hex().upper() if tx.request else ""
-        step = {
-            "index": i * 2,
-            "time_ms": tx.request_time_ms if hasattr(tx, "request_time_ms") else i * 100,
-            "direction": "tx",
-            "data": request_data,
-            "request_id": f"{tx.request_id:03X}",
-        }
-        steps.append(step)
         
-        # 응답 스텝
-        if tx.response:
-            response_data = tx.response.hex().upper()
-            response_id = tx.response_id or tx.request_id + 8
-            step = {
-                "index": i * 2 + 1,
-                "time_ms": tx.response_time_ms if hasattr(tx, "response_time_ms") else i * 100 + 50,
-                "direction": "rx",
-                "data": response_data,
-                "response_id": f"{response_id:03X}",
+        # 헤더 설정: pair_transactions가 이미 request_id를 조정했으므로
+        # (기능주소 응답은 응답 ID - 8로 설정됨)
+        # 모든 request_id를 header로 사용
+        header = f"{tx.request_id:03X}"
+        
+        # 명령 (ELM 형식: 2자리마다 공백)
+        command = " ".join(request_data[i:i+2] for i in range(0, len(request_data), 2)) if request_data else ""
+        
+        # 응답 처리 (ELM 형식: 응답 주소 + 데이터, 2자리마다 공백)
+        reply = None
+        if tx.response and tx.response_id:
+            hex_str = tx.response.hex().upper()
+            # ELM 형식: 응답 주소를 앞에 붙임
+            resp_addr = f"{tx.response_id:03X}"
+            data = " ".join(hex_str[i:i+2] for i in range(0, len(hex_str), 2))
+            reply = f"{resp_addr} {data}"
+        elif tx.negative_code is not None and tx.response_id:
+            nrc_hex = f"7F{tx.service:02X}{tx.negative_code:02X}"
+            resp_addr = f"{tx.response_id:03X}"
+            nrc_data = " ".join(nrc_hex[i:i+2] for i in range(0, len(nrc_hex), 2))
+            reply = f"{resp_addr} {nrc_data}"
+        elif not tx.expects_response:
+            # suppressPosRsp: 응답이 없는 것이 정상
+            reply = None
+        
+        # (header, command)가 같으면 마지막 긍정 응답으로 덮어씀
+        key = (header, command)
+        if key in step_map and tx.positive:
+            # 긍정 응답이면 덮어씀
+            step_map[key]["reply"] = reply
+            step_map[key]["tMs"] = getattr(tx, "response_t_ms", None) or i * 100
+        elif key not in step_map:
+            # 처음 나온 명령
+            step_map[key] = {
+                "id": len(step_map) + 1,
+                "command": command,
+                "header": header,
+                "reply": reply,
+                "optional": False,
+                "probe": False,
+                "bus": "can",  # load_trace는 CAN 버스 데이터를 파싱
+                "tMs": getattr(tx, "response_t_ms", None) or i * 100,
             }
-            steps.append(step)
-        elif tx.negative_code is not None:
-            # 부정 응답
-            nrc_data = f"7F{tx.service:02X}{tx.negative_code:02X}"
-            response_id = tx.response_id or tx.request_id + 8
-            step = {
-                "index": i * 2 + 1,
-                "time_ms": tx.response_time_ms if hasattr(tx, "response_time_ms") else i * 100 + 50,
-                "direction": "rx",
-                "data": nrc_data,
-                "response_id": f"{response_id:03X}",
-            }
-            steps.append(step)
+    
+    # 순서를 유지하기 위해 id 순으로 정렬
+    steps = sorted(step_map.values(), key=lambda x: x["id"])
     
     return steps
 

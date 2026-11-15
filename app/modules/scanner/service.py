@@ -45,6 +45,7 @@ TRANSPORTS = {
     "lte": "LTE 단말기",
     "doip": "이더넷(DoIP)", 
     "j2534": "J2534 패스스루",
+    "file": "파일 업로드",
 }
 
 # 지원되는 전송 방식 (실제 구현된 것만)
@@ -620,7 +621,10 @@ def _record_learning_stats(maker: str | None, model: str | None, steps: list[dic
         _update_verification_status(maker, model)
         
         # Commit savepoint
-        savepoint.commit()
+        try:
+            savepoint.commit()
+        except Exception as commit_exc:
+            current_app.logger.warning(f"Learning stats savepoint commit failed: {commit_exc}")
         
     except Exception as exc:
         # Rollback savepoint, do not fail the scan

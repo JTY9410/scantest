@@ -262,17 +262,17 @@ def count_significant_dtcs(dtcs: list[dict]) -> int:
     return count
 
 
-def overall(rows: list[dict], dtc_count: int, *, dtc_read: bool = True) -> str:
+def overall(rows: list[dict], dtc_count: int, *, dtc_read: bool = True, mileage: float | int | None = None) -> str:
     """종합판정. 측정한 항목이 기준을 벗어나거나 확정·현재실패 고장코드가 있으면 '점검요',
     그 밖에 고장코드를 읽지 못했거나 측정불가 항목이 하나라도 있으면 '판정보류', 모두 충족하면 '양호'.
     
-    규칙: 측정불가(UNREAD)가 하나라도 있으면 판정보류 (2026-11-15 운영 테스트 결과 반영).
+    규칙: 측정불가(UNREAD)가 하나라도 있거나 주행거리를 읽지 못했으면 판정보류 (2026-11-15 운영 테스트 결과 반영).
     """
     if dtc_count or any(row["result"] == "주의" for row in rows):
         return "점검요"
     
-    # 고장코드를 읽지 못했거나 측정불가 항목이 하나라도 있으면 판정보류
-    if not dtc_read or any(row["result"] == UNREAD for row in rows):
+    # 고장코드를 읽지 못했거나 측정불가 항목이 하나라도 있거나 주행거리 미수신이면 판정보류
+    if not dtc_read or any(row["result"] == UNREAD for row in rows) or mileage is None:
         return "판정보류"
     
     return "양호"
@@ -474,17 +474,25 @@ GROUP_KEYS = {
     "ice": ("engine", "tm", "other", "chassis", "body", "network"),
 }
 _GROUPS = tuple((key, _GROUP_LABELS[key]) for key in GROUP_KEYS["ev"])
-_MODULE = re.compile(r"^module_temp_(\d+)$")
+_MODULE = re.compile(r"^module_temp_(?:(\d+)|([Bb]\d+))$")
 
 
 def module_temperatures(result: dict) -> list[dict]:
-    """모듈 온도. 이상값은 빼서 번호 순으로 돌려준다."""
+    """모듈 온도. 이상값은 빼서 번호 순으로 돌려준다. B17/B18 같은 알파벳 번호도 포함."""
     rows = []
     for key, item in (result.get("battery") or {}).items():
         if not (match := _MODULE.match(key)) or item.get("outlier") or _num(item.get("value")) is None:
             continue
-        rows.append({"no": int(match.group(1)), "value": _num(item.get("value"))})
-    return sorted(rows, key=lambda row: row["no"])
+        # 숫자 번호 또는 B17/B18 같은 알파벳 번호
+        no_str = match.group(1) or match.group(2)
+        rows.append({"no": no_str, "value": _num(item.get("value"))})
+    # 숫자는 정수로, B17은 문자열 그대로 정렬
+    def sort_key(row):
+        no = row["no"]
+        if no.isdigit():
+            return (0, int(no))
+        return (1, no.upper())
+    return sorted(rows, key=sort_key)
 
 
 def cell_voltages(result: dict) -> list[dict]:
@@ -521,7 +529,7 @@ def dtc_rows(result: dict, kind: str = "ev") -> list[dict]:
     for dtc in result.get("dtcs") or []:
         rows.append({"code": dtc.get("code") or "-", "group": _GROUP_LABELS[_dtc_group(dtc, keys)],
                      "ecu": _ecu_name(dtc.get("ecu")) or dtc.get("ecu") or "-",
-                     "status": dtc.get("kind") or "-", "desc": dtc.get("desc") or "설명 없음",
+                     "status": dtc.get("kind") or "-", "desc": dtc.get("desc") or "미확인",
                      "is_ai": dtc.get("knowledge_source") == "ai"})
     return rows
 
@@ -576,7 +584,7 @@ def inspection(scan, result: dict) -> dict:
     ecus = _ecus(result)
     dtc_read = bool(dtcs) or any(e["comm_status"] == "success" for e in ecus) or not result.get("steps")
     significant_dtc_count = count_significant_dtcs(dtcs)
-    verdict = overall(judged, significant_dtc_count, dtc_read=dtc_read)
+    verdict = overall(judged, significant_dtc_count, dtc_read=dtc_read, mileage=mileage)
     if kind != "ev":
         soh_note = "하이브리드 차량은 SOH를 판정하지 않습니다." if kind == "hev" else ""
     elif soh is None:
@@ -597,6 +605,21 @@ def inspection(scan, result: dict) -> dict:
     cell_min = _num(cell_stat.get("min"))
     if cell_max is None or cell_min is None:
         cell_max, cell_min = _battery_value(result, "max_cell_v"), _battery_value(result, "min_cell_v")
+    
+    # 최저 셀 번호 두 기준 (요약 DID vs 셀별 계산)
+    min_cell_summary = _battery_value(result, "min_cell_no")  # 0101 요약에서 읽은 번호
+    min_cell_calculated = []  # 셀별 전압에서 계산한 번호들
+    if cells and cell_min is not None:
+        min_cell_calculated = [c["no"] for c in cells if c.get("voltage") == cell_min]
+    
+    # 두 기준이 모두 있고 불일치하면 표시
+    cell_no_mismatch = None
+    if min_cell_summary is not None and min_cell_calculated and min_cell_summary not in min_cell_calculated:
+        cell_no_mismatch = {
+            "summary": int(min_cell_summary),
+            "calculated": min_cell_calculated,
+            "voltage": cell_min,
+        }
     modules = module_temperatures(result)
     module_values = [row["value"] for row in modules]
     temp_max = max(module_values) if module_values else _battery_value(result, "max_temp")
@@ -704,6 +727,7 @@ def inspection(scan, result: dict) -> dict:
         "cell_min": cell_min,
         "cell_max": cell_max,
         "cell_spread": round(cell_max - cell_min, 3) if cell_max is not None and cell_min is not None else None,
+        "cell_no_mismatch": cell_no_mismatch,
         "modules": modules,
         "module_min": temp_min if modules else None,
         "module_max": temp_max if modules else None,

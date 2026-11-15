@@ -92,6 +92,9 @@ def pair_transactions(messages: list[Message]) -> list[Transaction]:
     
     OBD2 브로드캐스트(7DF)는 요청 PID별로 응답을 짝짓는다. 단순히 서비스 번호만 맞추면
     3초 창 안의 다른 요청 응답을 가로챌 수 있다.
+    
+    기능주소(7DF) 요청에 응답한 ECU는 요청+8 관계가 아니더라도 등록한다.
+    (예: 598/59E/788 → 요청 ID = 응답 ID - 8)
     """
     transactions: list[Transaction] = []
     used: set[int] = set()
@@ -116,7 +119,9 @@ def pair_transactions(messages: list[Message]) -> list[Transaction]:
                 continue
             if broadcast:
                 # 7E8-7EF 범위 + 74C (충전 인렛) 등 현대/기아 ECU
-                if not ((0x7E8 <= later.can_id <= 0x7EF) or later.can_id == 0x74C):
+                # + 기능주소에 응답한 임의의 ECU (예: 598/59E/788)
+                if not ((0x7E8 <= later.can_id <= 0x7EF) or later.can_id == 0x74C or 
+                       (0x500 <= later.can_id <= 0x7FF)):  # 기능주소 응답 범위 확장
                     continue
                 # 브로드캐스트 응답은 요청 PID와 일치해야 함 (서비스 번호만으로는 부족)
                 if request_pid is not None and len(later.payload) >= 2:
@@ -131,6 +136,10 @@ def pair_transactions(messages: list[Message]) -> list[Transaction]:
                 continue
             used.add(later_index)
             if tx.response is None:
+                # 기능주소 요청인 경우, 요청 ID를 응답 ID - 8로 설정하여
+                # interpret에서 ECU를 등록할 수 있도록 함
+                if broadcast:
+                    tx.request_id = later.can_id - 8
                 tx.response_id = later.can_id
                 tx.response_t_ms = later.t_ms
                 tx.response = payload
