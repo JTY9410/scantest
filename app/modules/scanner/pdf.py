@@ -336,7 +336,16 @@ def _issues_section(view: dict) -> list:
         status = issues["scan_status"]
         story.append(_p(f"· 스캔 상태: {status['message']}", _SMALL))
     
-    if not any(issues.get(k) for k in ["errors", "powertrain_conflict", "missing_critical_values", "scan_status"]):
+    # Excluded steps from upload
+    if issues.get("excluded_steps"):
+        excluded = issues["excluded_steps"]
+        story.append(_p(f"· {excluded['message']}", _SMALL))
+        if excluded.get('examples'):
+            for example in excluded['examples'][:2]:  # Show max 2 examples
+                reason = example.get('reason', '')
+                story.append(_p(f"  예: {reason}", _SMALL))
+    
+    if not any(issues.get(k) for k in ["errors", "powertrain_conflict", "missing_critical_values", "scan_status", "excluded_steps"]):
         story.append(_p("문제점 없음", _SMALL))
     
     return story

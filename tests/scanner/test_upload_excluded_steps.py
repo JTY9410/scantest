@@ -126,7 +126,7 @@ def test_convert_to_scan_steps_filters_security_access():
     from app.modules.scanner.upload import convert_to_scan_steps
     
     # SecurityAccess가 포함된 간단한 trace
-    trace_text = """
+    trace_text = """Timestamp,Channel,CAN_ID,DLC,Data
 0.000000,Tx,0x7E4,8,02 10 01 00 00 00 00 00
 0.010000,Rx,0x7EC,8,06 50 01 00 32 01 F4 00
 0.050000,Tx,0x5D0,8,02 27 41 00 00 00 00 00

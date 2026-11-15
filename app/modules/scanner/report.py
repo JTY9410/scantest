@@ -698,7 +698,7 @@ def inspection(scan, result: dict) -> dict:
     issues = _collect_issues(result, car, pt)
     
     # 업로드 파일에서 제외된 단계 정보 추가
-    if hasattr(scan, 'raw') and scan.raw and scan.raw.get('upload_metadata'):
+    if hasattr(scan, 'raw') and scan.raw and isinstance(scan.raw, dict) and scan.raw.get('upload_metadata'):
         metadata = scan.raw['upload_metadata']
         if metadata.get('excluded_steps_count', 0) > 0:
             excluded_count = metadata['excluded_steps_count']
