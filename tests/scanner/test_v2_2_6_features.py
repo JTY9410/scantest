@@ -100,10 +100,8 @@ def test_excluded_items_deduplication():
 
 def test_tesla_report_no_raw_dict():
     """Tesla 보고서에 raw dict 없음 (사람이 읽을 수 있는 형식)."""
-    # Tesla 보고서 포맷팅은 scan_result에서 처리됨
-    # 여기서는 unmeasurable_items 포맷 확인
-    from app.modules.scanner.report import scan_result
-    
+    # Tesla 보고서 포맷팅은 pdf.py에서 처리됨
+    # unmeasurable_items이 dict에서 문자열로 변환되는지 확인
     # 실제 스캔 데이터 필요 - 통합 테스트로 이동
     # 단위 테스트로는 복잡하므로 skip
     pass
