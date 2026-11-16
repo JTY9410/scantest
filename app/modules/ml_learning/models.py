@@ -1,196 +1,180 @@
-"""ML Learning 데이터 모델.
+"""ML learning models for continuous improvement."""
 
-익명화된 특징 저장, 피드백, 학습된 모델 메타데이터.
-"""
-from datetime import datetime, timezone
-from typing import Any
-
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy import JSON
-from sqlalchemy.orm import Mapped, mapped_column, relationship
-
+from datetime import datetime
+from sqlalchemy import Index
 from app.extensions import db
 
 
 class MLScanFeature(db.Model):
-    """익명화된 스캔 특징 (차량번호/VIN 없음)."""
-    __tablename__ = "ml_scan_features"
+    """익명화된 스캔 특징 (ML 학습용)."""
     
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    scan_id: Mapped[int | None] = mapped_column(Integer, nullable=True)  # Anonymized: NULL
+    __tablename__ = 'ml_scan_features'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    scan_id = db.Column(db.Integer, nullable=True, comment='익명화: NULL')
     
     # 차량 정보 (익명화)
-    maker: Mapped[str] = mapped_column(String(50), nullable=False)
-    model: Mapped[str] = mapped_column(String(100), nullable=False)
-    year: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    fuel_type: Mapped[str] = mapped_column(String(20), nullable=False)  # ev, hev, ice
+    maker = db.Column(db.String(50), nullable=False, index=True)
+    model = db.Column(db.String(100), nullable=False)
+    year = db.Column(db.Integer, nullable=True)
+    fuel_type = db.Column(db.String(20), nullable=True, index=True)
     
-    # 스캔 결과
-    overall_judgment: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    dtc_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    significant_dtc_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # 진단 결과
+    overall_judgment = db.Column(db.String(50), nullable=True)
+    dtc_count = db.Column(db.Integer, nullable=False, default=0)
+    significant_dtc_count = db.Column(db.Integer, nullable=False, default=0)
     
-    # 신호 커버리지
-    signals_read: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
+    # 신호 커버리지 (JSON: {signal_name: bool})
+    signals_read = db.Column(db.JSON, nullable=True)
     
-    # 디코딩된 값
-    decoded_values: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
+    # 디코딩된 값 (익명화, JSON)
+    decoded_values = db.Column(db.JSON, nullable=True)
     
     # 측정불가 항목
-    unmeasurable_items: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
-    unmeasurable_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    unmeasurable_items = db.Column(db.JSON, nullable=True)
+    unmeasurable_count = db.Column(db.Integer, nullable=False, default=0)
     
     # 디코더 정보
-    decoder_sources: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
-    decoder_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    decoder_sources = db.Column(db.JSON, nullable=True, comment='사용된 디코더 출처')
+    decoder_version = db.Column(db.String(50), nullable=True)
     
     # 앱/장치 정보
-    device_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    app_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    device_type = db.Column(db.String(50), nullable=True)
+    app_version = db.Column(db.String(50), nullable=True)
+    
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
     
     __table_args__ = (
-        Index("ix_ml_scan_features_maker_model", "maker", "model"),
-        Index("ix_ml_scan_features_created_at", "created_at"),
-        Index("ix_ml_scan_features_judgment", "overall_judgment"),
+        Index('ix_ml_features_maker_model_year', 'maker', 'model', 'year'),
     )
+    
+    def __repr__(self):
+        return f'<MLScanFeature {self.id} {self.maker} {self.model} {self.fuel_type}>'
 
 
-class MLFeedback(db.Model):
-    """관리자 피드백 (labelled training data)."""
-    __tablename__ = "ml_feedback"
+class MLModelRun(db.Model):
+    """ML 모델 학습 실행 기록."""
     
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    admin_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
-    scan_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("scans.id", ondelete="SET NULL"), nullable=True)
-    feature_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("ml_scan_features.id", ondelete="CASCADE"), nullable=True)
+    __tablename__ = 'ml_model_runs'
     
-    # 피드백 타입
-    feedback_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    id = db.Column(db.Integer, primary_key=True)
     
-    # 원래 값과 수정 값
-    original_value: Mapped[str | None] = mapped_column(Text, nullable=True)
-    corrected_value: Mapped[str | None] = mapped_column(Text, nullable=True)
-    signal_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # 실행 정보
+    run_type = db.Column(db.String(50), nullable=False, comment='scheduled/manual/event-triggered')
+    trigger_reason = db.Column(db.String(200), nullable=True, comment='daily/N-rows/manual')
     
-    # 설명/근거
-    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 데이터셋
+    training_samples = db.Column(db.Integer, nullable=False)
+    validation_samples = db.Column(db.Integer, nullable=False)
+    test_samples = db.Column(db.Integer, nullable=False)
     
-    __table_args__ = (
-        Index("ix_ml_feedback_created_at", "created_at"),
-        Index("ix_ml_feedback_type", "feedback_type"),
-    )
+    # 모델 성능
+    accuracy = db.Column(db.Float, nullable=True)
+    precision = db.Column(db.Float, nullable=True)
+    recall = db.Column(db.Float, nullable=True)
+    f1_score = db.Column(db.Float, nullable=True)
+    
+    # 상세 메트릭 (JSON)
+    detailed_metrics = db.Column(db.JSON, nullable=True)
+    
+    # 승진 여부
+    promoted_to_active = db.Column(db.Boolean, nullable=False, default=False)
+    promotion_reason = db.Column(db.Text, nullable=True)
+    
+    # 실행 상태
+    status = db.Column(db.String(50), nullable=False, default='running', comment='running/completed/failed')
+    error_message = db.Column(db.Text, nullable=True)
+    
+    # 실행 시간
+    started_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
+    completed_at = db.Column(db.DateTime, nullable=True)
+    duration_seconds = db.Column(db.Integer, nullable=True)
+    
+    def __repr__(self):
+        return f'<MLModelRun {self.id} {self.status} promoted={self.promoted_to_active}>'
 
 
-class MLModel(db.Model):
-    """학습된 모델 메타데이터."""
-    __tablename__ = "ml_models"
+class MLActiveModel(db.Model):
+    """현재 활성 ML 모델 (싱글톤)."""
     
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    model_type: Mapped[str] = mapped_column(String(50), nullable=False)
-    model_version: Mapped[str] = mapped_column(String(50), nullable=False)
-    status: Mapped[str] = mapped_column(String(20), nullable=False)  # training, candidate, active, retired
+    __tablename__ = 'ml_active_model'
     
-    # 학습 정보
-    training_sample_count: Mapped[int] = mapped_column(Integer, nullable=False)
-    training_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    training_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    id = db.Column(db.Integer, primary_key=True)
     
-    # 메트릭
-    metrics: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
-    validation_metrics: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
+    # 모델 실행 참조
+    model_run_id = db.Column(db.Integer, db.ForeignKey('ml_model_runs.id'), nullable=False)
+    model_run = db.relationship('MLModelRun', backref='active_deployments')
     
-    # 모델 파라미터
-    hyperparameters: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
+    # 활성화 시간
+    activated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    activated_by = db.Column(db.String(100), nullable=True, comment='system/admin-user-id')
     
     # 모델 파일 경로
-    model_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    model_path = db.Column(db.String(500), nullable=True)
     
-    # 승인 정보
-    approved_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    approval_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
-    
-    __table_args__ = (
-        Index("ix_ml_models_type_status", "model_type", "status"),
-        Index("ix_ml_models_version", "model_version"),
-        UniqueConstraint("model_type", "model_version", name="uq_ml_models_type_version"),
-    )
+    def __repr__(self):
+        return f'<MLActiveModel run_id={self.model_run_id}>'
 
 
-class MLAnomalyDetection(db.Model):
-    """이상 탐지 결과."""
-    __tablename__ = "ml_anomaly_detections"
+class MLConsistencyScore(db.Model):
+    """스캔별 데이터 정합성 점수."""
     
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    scan_id: Mapped[int] = mapped_column(Integer, ForeignKey("scans.id", ondelete="CASCADE"), nullable=False)
-    model_id: Mapped[int] = mapped_column(Integer, ForeignKey("ml_models.id", ondelete="CASCADE"), nullable=False)
+    __tablename__ = 'ml_consistency_scores'
     
-    # 이상 탐지 결과
-    is_anomaly: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    anomaly_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    anomaly_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    id = db.Column(db.Integer, primary_key=True)
+    scan_id = db.Column(db.Integer, db.ForeignKey('scans.id'), nullable=False, unique=True)
     
-    affected_signals: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
-    details: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
+    # 정합성 점수 (0-100)
+    score = db.Column(db.Integer, nullable=False)
     
-    # 관리자 확인
-    reviewed_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    review_result: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 점수 상세
+    distribution_match = db.Column(db.Float, nullable=True, comment='같은 차종 분포 대비')
+    physical_plausibility = db.Column(db.Float, nullable=True, comment='물리적 타당성')
     
-    __table_args__ = (
-        Index("ix_ml_anomaly_scan", "scan_id"),
-        Index("ix_ml_anomaly_created_at", "created_at"),
-    )
+    # 검출된 이슈 (JSON list)
+    issues = db.Column(db.JSON, nullable=True)
+    
+    # 데이터 충분성
+    sufficient_data = db.Column(db.Boolean, nullable=False, default=True)
+    min_samples_required = db.Column(db.Integer, nullable=True)
+    actual_samples = db.Column(db.Integer, nullable=True)
+    
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    def __repr__(self):
+        return f'<MLConsistencyScore scan_id={self.scan_id} score={self.score}>'
 
 
 class MLDecoderProposal(db.Model):
-    """미지의 CAN ID/신호 후보."""
-    __tablename__ = "ml_decoder_proposals"
+    """ML이 제안한 디코더 개선 (관리자 승인 대기)."""
     
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
-    model_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("ml_models.id", ondelete="SET NULL"), nullable=True)
+    __tablename__ = 'ml_decoder_proposals'
     
-    # 차량 정보
-    maker: Mapped[str] = mapped_column(String(50), nullable=False)
-    model: Mapped[str] = mapped_column(String(100), nullable=False)
-    year_range: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    id = db.Column(db.Integer, primary_key=True)
     
-    # CAN 정보
-    can_id: Mapped[str] = mapped_column(String(10), nullable=False)
-    signal_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    byte_offset: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    bit_length: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    scale: Mapped[float | None] = mapped_column(Float, nullable=True)
-    offset: Mapped[float | None] = mapped_column(Float, nullable=True)
-    unit: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # 제안 내용
+    maker = db.Column(db.String(50), nullable=False)
+    model = db.Column(db.String(100), nullable=False)
+    did_hex = db.Column(db.String(20), nullable=False)
+    signal_name = db.Column(db.String(200), nullable=False)
     
-    # 신뢰도
-    confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    sample_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    # 제안 상세 (JSON)
+    proposed_decoder = db.Column(db.JSON, nullable=False, comment='제안된 디코더 정의')
+    confidence = db.Column(db.Float, nullable=False, comment='0.0-1.0')
+    supporting_samples = db.Column(db.Integer, nullable=False)
     
-    # 발견된 값 범위
-    observed_min: Mapped[float | None] = mapped_column(Float, nullable=True)
-    observed_max: Mapped[float | None] = mapped_column(Float, nullable=True)
-    observed_values_sample: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
+    # 승인 상태
+    status = db.Column(db.String(50), nullable=False, default='pending', 
+                      comment='pending/approved/rejected')
+    reviewed_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    reviewed_at = db.Column(db.DateTime, nullable=True)
+    review_notes = db.Column(db.Text, nullable=True)
     
-    # 상태
-    status: Mapped[str] = mapped_column(String(20), nullable=False)
-    
-    # 관리자 검토
-    reviewed_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    review_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
     
     __table_args__ = (
-        Index("ix_ml_decoder_maker_model", "maker", "model"),
-        Index("ix_ml_decoder_status", "status"),
-        Index("ix_ml_decoder_can_id", "can_id"),
+        Index('ix_ml_proposals_pending', 'status', 'created_at'),
     )
+    
+    def __repr__(self):
+        return f'<MLDecoderProposal {self.id} {self.maker} {self.signal_name} {self.status}>'

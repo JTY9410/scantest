@@ -69,6 +69,36 @@ def create_app(config_name: str | None = None) -> Flask:
     from app.modules.ml_learning import cli as ml_cli
     ml_cli.init_app(app)
     
+    # Start ML scheduler and auto-backfill on startup (production only)
+    if not app.config.get("TESTING") and config_name == "production":
+        @app.before_request
+        def _start_ml_automation():
+            """Start ML automation on first request."""
+            from app.modules.ml_learning.scheduler import start_scheduler
+            from app.modules.ml_learning.models import MLScanFeature
+            from flask import current_app
+            
+            # Remove this handler after first execution
+            app.before_request_funcs[None].remove(_start_ml_automation)
+            
+            try:
+                # Auto-backfill if features table is empty
+                feature_count = db.session.query(MLScanFeature).count()
+                if feature_count == 0:
+                    current_app.logger.info("ML features table empty, running auto-backfill...")
+                    # Run in background thread to not block first request
+                    import threading
+                    def _backfill():
+                        with app.app_context():
+                            from app.modules.ml_learning.cli import backfill
+                            backfill.callback()
+                    threading.Thread(target=_backfill, daemon=True).start()
+                
+                # Start scheduler
+                start_scheduler()
+            except Exception as exc:
+                current_app.logger.error(f"ML automation startup failed: {exc}", exc_info=True)
+    
     return app
 
 
