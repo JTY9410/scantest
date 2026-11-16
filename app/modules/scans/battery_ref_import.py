@@ -185,12 +185,12 @@ def import_tesla_file(wb, filename):
     """Import Tesla VIN + pack candidate DB file"""
     imported = 0
     
-    # Sheet names to process
+    # Sheet names to process (actual sheet names in the xlsx file)
     sheets_to_process = {
-        '3_팩 후보 DB': import_tesla_pack_db,
-        '4_VIN 복호화': import_tesla_vin_decode,
-        '5_연식별 목록': import_tesla_model_year_list,
-        '6_공식 국내정격': import_tesla_official_domestic,
+        '팩후보_DB': import_tesla_pack_db,
+        'VIN코드표': import_tesla_vin_decode,
+        '연식별_전체목록': import_tesla_model_year_list,
+        '공식_국내정격': import_tesla_official_domestic,
     }
     
     for sheet_name, import_func in sheets_to_process.items():
