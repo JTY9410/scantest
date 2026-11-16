@@ -72,16 +72,18 @@ def upgrade():
                 op.add_column('battery_reference_capacity', 
                     sa.Column(col_name, col_type, nullable=nullable))
     
+    # Rename source_url to source_url_1 BEFORE adding source_url_1 as new column
+    if 'source_url' in existing_cols and 'source_url_1' not in existing_cols:
+        op.alter_column('battery_reference_capacity', 'source_url', new_column_name='source_url_1')
+        existing_cols.remove('source_url')
+        existing_cols.add('source_url_1')
+    
     # Drop old columns that aren't in the model
-    old_cols = ['pack_code', 'reference_energy_kwh', 'reference_definition', 'source_type', 'verified']
+    old_cols = ['pack_code', 'reference_energy_kwh', 'reference_definition', 'source_type', 'verified', 'source_url']
     for col_name in old_cols:
         if col_name in existing_cols:
             op.drop_column('battery_reference_capacity', col_name)
-    
-    # Rename source_url to source_url_1 if needed
-    existing_cols_updated = {c['name'] for c in inspector.get_columns('battery_reference_capacity')}
-    if 'source_url' in existing_cols_updated and 'source_url_1' not in existing_cols_updated:
-        op.alter_column('battery_reference_capacity', 'source_url', new_column_name='source_url_1')
+            existing_cols.discard(col_name)
 
 
 def downgrade():
