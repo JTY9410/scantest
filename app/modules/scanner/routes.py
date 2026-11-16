@@ -397,8 +397,8 @@ def upload_scan_data():
     """
     from app.modules.scanner.upload import process_upload, process_multi_upload, UploadError
     
-    # 다중 파일 확인 (files[] 또는 file)
-    files = request.files.getlist("files")
+    # 다중 파일 확인 (files[], files, 또는 file)
+    files = request.files.getlist("files[]") or request.files.getlist("files")
     if not files or all(not f or not f.filename for f in files):
         # 단일 파일 폴백
         if "file" not in request.files:

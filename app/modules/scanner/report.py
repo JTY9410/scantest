@@ -843,7 +843,7 @@ def tesla_inspection(scan) -> dict:
     
     scan.bms_data에서 Tesla 디코딩 데이터를 읽어 WESCAN EV 진단서 형식으로 변환.
     """
-    from app import __version__
+    from app.__version__ import __version__
     
     when = _local(getattr(scan, "created_at", None))
     tesla_data = scan.bms_data or {}
@@ -886,10 +886,10 @@ def tesla_inspection(scan) -> dict:
     pack_voltage = pack_data.get('pack_voltage')  # V
     pack_current = pack_data.get('pack_current')  # A
     
-    # SOH (community reference)
-    soh_pct = soh_result.get('soh_pct')
+    # SOH (community reference) - use correct key names
+    soh_pct = soh_result.get('soh_percent_reference')  # Real key from Mac logs
     soh_note = soh_result.get('calculation_note', '')
-    reference_kwh = soh_result.get('reference_kwh')
+    reference_kwh = soh_result.get('reference_capacity')  # Real key from Mac logs
     reference_source = soh_result.get('reference_source', '')
     soh_available = soh_result.get('soh_available', False)
     
@@ -973,7 +973,11 @@ def tesla_inspection(scan) -> dict:
         },
         "title": f"{manufacturer} {model}",
         "soh": soh_pct if soh_pct else None,
-        "soh_note": f"{soh_note} (참고·커뮤니티, 미검증)" if soh_pct and soh_note else "SOH를 읽지 못했습니다.",
+        "soh_note": (
+            f"SOH 참고치 {soh_pct:.1f}% (커뮤니티 출처 {reference_kwh:.2f} kWh, 미검증)"
+            if soh_pct and reference_kwh
+            else "SOH 참고치를 계산할 수 없습니다."
+        ),
         "mileage_note": "측정불가: 주행거리 정보 제공 안 됨",
         "overall": judgment,
         "judgment_note": judgment_reason,
@@ -981,7 +985,8 @@ def tesla_inspection(scan) -> dict:
         "dtc_clear": True,
         "dtc_count": 0,
         "significant_dtc_count": 0,
-        "dtc_read": False,
+        "dtc_read": False,  # Tesla uploads don't include DTCs
+        "dtc_note": "고장코드 미조회 (파일 업로드에 DTC 없음)",
         "dtc_rows": [],
         "groups": [],
         "judgments": [],
@@ -994,7 +999,8 @@ def tesla_inspection(scan) -> dict:
             _measure("만충 에너지", current_full, "kWh", 1),
             _measure("잔여 에너지", remaining, "kWh", 1),
             _measure("SOC", soc, "%", 1),
-            _measure("SOH 참고치", soh_pct, "% (참고·커뮤니티, 미검증)", 1) if soh_pct else _measure("SOH 참고치", None, ""),
+            (_measure("SOH 참고치", f"{soh_pct:.1f}% (커뮤니티 {reference_kwh:.2f} kWh, 미검증)", "", 0)
+             if soh_pct and reference_kwh else _measure("SOH 참고치", None, "")),
             _measure("팩 전압", pack_voltage, "V", 1),
             _measure("팩 전류", pack_current, "A", 1),
             _measure("최고 온도", temp_max, "℃", 1),

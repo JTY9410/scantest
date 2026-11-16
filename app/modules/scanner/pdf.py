@@ -174,7 +174,9 @@ def _dtc_detail(view: dict) -> list:
             [row["code"], row["group"], row["ecu"], row["status"], row["desc"]] for row in view["dtc_rows"]],
             [20, 24, 22, 20, 84]))
     else:
-        story.append(_p("검출된 고장 코드가 없습니다." if view["dtc_read"] else "고장 코드를 읽지 못했습니다."))
+        # Use custom note if provided (e.g., Tesla uploads)
+        note = view.get("dtc_note") or ("검출된 고장 코드가 없습니다." if view["dtc_read"] else "고장 코드를 읽지 못했습니다.")
+        story.append(_p(note))
     return story + _reconcile_note(view)
 
 
