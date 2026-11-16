@@ -185,7 +185,7 @@ def _extract_decoder_sources(result: dict) -> dict[str, str]:
 
 def _extract_device_type(scan: Scan) -> str:
     """장치 타입 추출."""
-    device = (scan.device or "").lower()
+    device = (scan.device_type or "").lower()
     if "web" in device:
         return "web"
     elif "lte" in device or "telematics" in device:
