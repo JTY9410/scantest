@@ -201,9 +201,11 @@ def test_learning_progress_tracking(app, learning_test_data):
         assert result is not None
         assert result[0] == 'test_learning_run'
         assert result[1] == 'candidate'
-        # params is a JSON column, comes back as dict
-        assert isinstance(result[2], dict)
-        assert result[2].get('algorithm') == 'ucb'
+        # params is a JSON column - PostgreSQL returns dict, SQLite returns string
+        import json
+        params = result[2] if isinstance(result[2], dict) else json.loads(result[2])
+        assert isinstance(params, dict)
+        assert params.get('algorithm') == 'ucb'
         
         # Cleanup
         db.session.execute(text("DELETE FROM learning_runs WHERE run_name = 'test_learning_run'"))
