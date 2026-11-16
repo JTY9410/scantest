@@ -489,6 +489,13 @@ def process_upload(
             flag_modified(scan, "bms_data")
             db.session.commit()
             
+            # ML 특징 추출
+            try:
+                from app.modules.ml_learning.feature_extractor import extract_and_store_features
+                extract_and_store_features(scan)
+            except Exception as exc:
+                current_app.logger.warning(f"ML feature extraction failed for scan {scan.id}: {exc}")
+            
             current_app.logger.info(
                 f"Upload scan {scan.id}: excluded {metadata['excluded_steps_count']} steps "
                 f"(included {metadata['included_steps_count']} from {metadata['total_transactions']} transactions)"
@@ -643,6 +650,13 @@ def _process_tesla_upload(
     db.session.add(scan)
     db.session.commit()
     
+    # ML 특징 추출
+    try:
+        from app.modules.ml_learning.feature_extractor import extract_and_store_features
+        extract_and_store_features(scan)
+    except Exception as exc:
+        current_app.logger.warning(f"ML feature extraction failed for Tesla scan {scan.id}: {exc}")
+    
     current_app.logger.info(f"Tesla upload scan created: {scan.id} from {filename}")
     
     return scan.id
@@ -714,6 +728,13 @@ def process_multi_upload(actor: User, files: list, car_no: str = None, car: dict
             scan.bms_data["upload_metadata"] = metadata
             flag_modified(scan, "bms_data")
             db.session.commit()
+            
+            # ML 특징 추출
+            try:
+                from app.modules.ml_learning.feature_extractor import extract_and_store_features
+                extract_and_store_features(scan)
+            except Exception as exc:
+                current_app.logger.warning(f"ML feature extraction failed for multi-upload scan {scan.id}: {exc}")
             
             current_app.logger.info(
                 f"Multi-upload scan {scan.id}: merged {len(file_data)} files, "

@@ -863,21 +863,24 @@ def tesla_inspection(scan) -> dict:
     soc_data = decoded.get('soc', {})
     soc = soc_data.get('soc_ui')  # % (UI/displayed SOC, 최신 유효값)
     
-    # 브릭 전압 (0x401)
+    # 브릭 전압 (0x401 또는 0x332 summary)
     bricks_data = decoded.get('bricks', {})
-    brick_min_v = bricks_data.get('min_voltage')  # V
-    brick_max_v = bricks_data.get('max_voltage')  # V
-    brick_min_no = bricks_data.get('min_brick_num')
-    brick_max_no = bricks_data.get('max_brick_num')
+    summary_data = decoded.get('summary', {})
+    
+    # 브릭 전압: bricks 우선, 없으면 summary에서
+    brick_min_v = bricks_data.get('min_voltage') or summary_data.get('voltage_min')  # V
+    brick_max_v = bricks_data.get('max_voltage') or summary_data.get('voltage_max')  # V
+    brick_min_no = bricks_data.get('min_brick_num') or summary_data.get('voltage_min_brick')
+    brick_max_no = bricks_data.get('max_brick_num') or summary_data.get('voltage_max_brick')
+    brick_count = bricks_data.get('brick_count', 96)  # 기본값 96
     brick_spread = round(brick_max_v - brick_min_v, 3) if brick_max_v and brick_min_v else None
     
-    # 온도 (0x332)
-    temps_data = decoded.get('temps', {})
-    temp_max = temps_data.get('max_temp')  # °C
-    temp_min = temps_data.get('min_temp')  # °C
+    # 온도 (0x332 summary)
+    temp_max = summary_data.get('temp_max')  # °C
+    temp_min = summary_data.get('temp_min')  # °C
     
-    # 팩 전압/전류 (0x132)
-    pack_data = decoded.get('pack', {})
+    # 팩 전압/전류 (0x132 pack_vi)
+    pack_data = decoded.get('pack_vi', {})
     pack_voltage = pack_data.get('pack_voltage')  # V
     pack_current = pack_data.get('pack_current')  # A
     
@@ -899,7 +902,7 @@ def tesla_inspection(scan) -> dict:
             "full_kwh": current_full,
             "remaining_kwh": remaining,
             "rated_kwh": reference_kwh,
-            "soh_reference_note": f"{soh_pct:.1f}% (기준: {reference_kwh:.1f} kWh, 출처: 커뮤니티 DBC - 공식 미확인)" if soh_pct else f"기준: {reference_kwh:.1f} kWh (출처: 커뮤니티 DBC - 공식 미확인)",
+            "soh_reference_note": f"{soh_pct:.1f}% (기준: {reference_kwh:.2f} kWh, 출처: 커뮤니티 DBC - 공식 미확인)" if soh_pct else f"기준: {reference_kwh:.2f} kWh (출처: 커뮤니티 DBC - 공식 미확인)",
             "source_note": "커뮤니티 DBC (opendbc tesla_model3_party.dbc PACK_74_KWH), 공식 미확인",
         }
     

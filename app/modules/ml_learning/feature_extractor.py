@@ -24,8 +24,10 @@ def extract_and_store_features(scan: Scan) -> MLScanFeature | None:
         year = scan.car_year
         fuel_type = _determine_fuel_type(scan)
         
-        # 스캔 결과 추출
+        # 스캔 결과 추출 (업로드 스캔은 raw가 list일 수 있음 → bms_data로 대체)
         raw = scan.raw or {}
+        if not isinstance(raw, dict):
+            raw = scan.bms_data or {}
         result = raw.get("result", {})
         
         overall_judgment = _extract_judgment(scan, result)
