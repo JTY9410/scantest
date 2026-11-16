@@ -1,0 +1,34 @@
+{% extends "admin/layout.html" %}
+{% block title %}이상치 탐지 결과{% endblock %}
+{% block content %}
+<div class="container mx-auto py-6 px-4">
+  <h1 class="text-2xl font-bold mb-6">이상치 탐지 결과</h1>
+  
+  <p class="mb-4 text-gray-600">ML 모델이 탐지한 이상치 목록입니다 (ML 추정, 미검증).</p>
+  
+  <table class="w-full border-collapse border">
+    <thead>
+      <tr class="bg-gray-100">
+        <th class="border p-2">ID</th>
+        <th class="border p-2">스캔 ID</th>
+        <th class="border p-2">이상 타입</th>
+        <th class="border p-2">점수</th>
+        <th class="border p-2">영향 신호</th>
+        <th class="border p-2">탐지일</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for det in detections %}
+      <tr>
+        <td class="border p-2">{{ det.id }}</td>
+        <td class="border p-2"><a href="{{ url_for('scanner.inspection', scan_id=det.scan_id) }}" class="text-blue-600 hover:underline">{{ det.scan_id }}</a></td>
+        <td class="border p-2">{{ det.anomaly_type }}</td>
+        <td class="border p-2">{{ (det.anomaly_score * 100)|round(1) if det.anomaly_score else '-' }}%</td>
+        <td class="border p-2">{{ det.affected_signals|join(', ') if det.affected_signals else '-' }}</td>
+        <td class="border p-2">{{ det.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

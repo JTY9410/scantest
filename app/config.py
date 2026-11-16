@@ -72,6 +72,9 @@ class Config:
     
     # 업로드 크기 제한 (Tesla 다중 파일: 134MB + 268MB = 402MB까지 대응)
     MAX_CONTENT_LENGTH = 600 * 1024 * 1024  # 600 MB
+    # Werkzeug form limits: 파일은 디스크로 스트림되므로 메모리 제한에서 제외
+    MAX_FORM_MEMORY_SIZE = 25 * 1024 * 1024  # 25 MB for form fields (not files)
+    MAX_FORM_PARTS = 1000  # Werkzeug 3.0+ DOS protection
 
     SECRET_KEY = os.environ.get("SECRET_KEY")
     SQLALCHEMY_DATABASE_URI = database_url()

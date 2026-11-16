@@ -65,6 +65,10 @@ def create_app(config_name: str | None = None) -> Flask:
     from app.modules.knowledge import cli as knowledge_cli
     knowledge_cli.init_app(app)
     
+    # Register ML learning CLI
+    from app.modules.ml_learning import cli as ml_cli
+    ml_cli.init_app(app)
+    
     return app
 
 
@@ -84,6 +88,7 @@ def _import_models() -> None:
     from app.modules.canlab import models as canlab  # noqa: F401
     from app.modules.definitions import models as definitions  # noqa: F401
     from app.modules.knowledge import models as knowledge  # noqa: F401
+    from app.modules.ml_learning import models as ml_learning  # noqa: F401
     from app.modules.obd import models as obd  # noqa: F401
     from app.modules.reports import models as reports  # noqa: F401
     from app.modules.scans import models as scans  # noqa: F401
@@ -94,6 +99,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.modules.admin.battery_admin import bp as battery_admin_bp
     from app.modules.admin.definitions_admin import bp as definitions_admin_bp
     from app.modules.admin.learning_admin import bp as learning_admin_bp
+    from app.modules.admin.ml_admin import bp as ml_admin_bp
     from app.modules.api import bp as api_bp
     from app.modules.auth.routes import bp as auth_bp
     from app.modules.canlab.routes import bp as canlab_bp
@@ -106,7 +112,7 @@ def _register_blueprints(app: Flask) -> None:
     from app.modules.site.routes import bp as public_bp
 
     csrf.exempt(api_bp)
-    for blueprint in (public_bp, api_bp, auth_bp, admin_bp, battery_admin_bp, definitions_admin_bp, learning_admin_bp, members_bp, catalog_bp, monitoring_bp,
+    for blueprint in (public_bp, api_bp, auth_bp, admin_bp, battery_admin_bp, definitions_admin_bp, learning_admin_bp, ml_admin_bp, members_bp, catalog_bp, monitoring_bp,
                       obd_bp, canlab_bp, scanner_bp, knowledge_bp):
         app.register_blueprint(blueprint)
 

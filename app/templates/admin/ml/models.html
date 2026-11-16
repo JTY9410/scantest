@@ -1,0 +1,55 @@
+{% extends "admin/layout.html" %}
+{% block title %}ML 모델 관리{% endblock %}
+{% block content %}
+<div class="container mx-auto py-6 px-4">
+  <h1 class="text-2xl font-bold mb-6">ML 모델 관리</h1>
+  
+  <p class="mb-4 text-gray-600">학습된 모델 목록입니다. Candidate 모델은 승격 후 활성화됩니다.</p>
+  
+  <table class="w-full border-collapse border">
+    <thead>
+      <tr class="bg-gray-100">
+        <th class="border p-2">ID</th>
+        <th class="border p-2">타입</th>
+        <th class="border p-2">버전</th>
+        <th class="border p-2">상태</th>
+        <th class="border p-2">샘플 수</th>
+        <th class="border p-2">메트릭</th>
+        <th class="border p-2">생성일</th>
+        <th class="border p-2">액션</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for model in models %}
+      <tr>
+        <td class="border p-2">{{ model.id }}</td>
+        <td class="border p-2">{{ model.model_type }}</td>
+        <td class="border p-2">{{ model.model_version }}</td>
+        <td class="border p-2">
+          <span class="px-2 py-1 rounded text-sm
+            {% if model.status == 'active' %}bg-green-100 text-green-800
+            {% elif model.status == 'candidate' %}bg-yellow-100 text-yellow-800
+            {% else %}bg-gray-100 text-gray-800{% endif %}">
+            {{ model.status }}
+          </span>
+        </td>
+        <td class="border p-2">{{ model.training_sample_count }}</td>
+        <td class="border p-2">
+          {% if model.validation_metrics %}
+          MAE: {{ model.validation_metrics.mae|round(2) if model.validation_metrics.mae else '-' }}
+          {% endif %}
+        </td>
+        <td class="border p-2">{{ model.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td class="border p-2">
+          {% if model.status == 'candidate' %}
+          <form method="post" action="{{ url_for('ml_admin.promote_model', model_id=model.id) }}" style="display:inline;">
+            <button type="submit" class="bg-blue-500 hover:bg-blue-700 text-white px-2 py-1 rounded text-sm">승격</button>
+          </form>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

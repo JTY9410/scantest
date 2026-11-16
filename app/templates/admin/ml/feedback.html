@@ -1,0 +1,32 @@
+{% extends "admin/layout.html" %}
+{% block title %}ML 피드백 목록{% endblock %}
+{% block content %}
+<div class="container mx-auto py-6 px-4">
+  <h1 class="text-2xl font-bold mb-6">ML 피드백 목록</h1>
+  
+  <p class="mb-4 text-gray-600">관리자가 제공한 수정 피드백 목록입니다 (학습 데이터).</p>
+  
+  <table class="w-full border-collapse border">
+    <thead>
+      <tr class="bg-gray-100">
+        <th class="border p-2">ID</th>
+        <th class="border p-2">타입</th>
+        <th class="border p-2">수정 값</th>
+        <th class="border p-2">설명</th>
+        <th class="border p-2">제공일</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for fb in feedbacks %}
+      <tr>
+        <td class="border p-2">{{ fb.id }}</td>
+        <td class="border p-2">{{ fb.feedback_type }}</td>
+        <td class="border p-2">{{ fb.corrected_value or '-' }}</td>
+        <td class="border p-2">{{ fb.feedback_text or '-' }}</td>
+        <td class="border p-2">{{ fb.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

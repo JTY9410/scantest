@@ -664,18 +664,29 @@ def process_multi_upload(actor: User, files: list, car_no: str = None, car: dict
     if not files:
         raise UploadError("파일이 없습니다.")
     
-    # 파일 검증 및 읽기
+    # 파일 검증 및 읽기 (스트림으로 처리하여 메모리 사용 최소화)
     file_data = []
     total_size = 0
     for file in files:
         validate_upload(file)
+        # 파일 크기 먼저 확인 (seek를 사용하여 크기 측정)
+        file.seek(0, 2)  # EOF로 이동
+        size = file.tell()
+        file.seek(0)  # 처음으로 되돌림
+        
+        total_size += size
+        
+        # 개별 파일 크기 확인
+        if size > MAX_UPLOAD_SIZE:
+            raise UploadError(f"{file.filename}: 파일 크기가 너무 큽니다. 최대 {MAX_UPLOAD_SIZE // 1024 // 1024}MB까지 업로드 가능합니다.")
+        
+        # 전체 크기 확인
+        if total_size > MAX_UPLOAD_SIZE:
+            raise UploadError(f"전체 파일 크기가 너무 큽니다. 최대 {MAX_UPLOAD_SIZE // 1024 // 1024}MB까지 업로드 가능합니다.")
+        
+        # 내용 읽기
         content = file.read()
-        total_size += len(content)
         file_data.append((file.filename, content))
-    
-    # 전체 크기 확인
-    if total_size > MAX_UPLOAD_SIZE:
-        raise UploadError(f"전체 파일 크기가 너무 큽니다. 최대 {MAX_UPLOAD_SIZE // 1024 // 1024}MB까지 업로드 가능합니다.")
     
     # 파일 병합
     try:
