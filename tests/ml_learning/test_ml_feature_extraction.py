@@ -77,8 +77,8 @@ def test_ml_feature_extraction_tesla_upload_real_path(_app_base, make_user):
         
         assert feature is not None
         
-        # Requirement: scan_id is NULL (익명화)
-        assert feature.scan_id is None
+        # Requirement: scan_id is stored for idempotency (not NULL)
+        assert feature.scan_id == scan.id
         
         # Requirement: maker/model/fuel populated
         assert feature.maker == "Tesla"
@@ -162,7 +162,7 @@ def test_ml_feature_extraction_ev_upload_real_path(_app_base, make_user):
         ).first()
         
         assert feature is not None
-        assert feature.scan_id is None  # 익명화
+        assert feature.scan_id == scan.id  # Stored for idempotency
         
         # Requirement: decoded_values에 plate/VIN 없음
         decoded_values = feature.decoded_values or {}

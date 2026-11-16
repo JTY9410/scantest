@@ -999,8 +999,8 @@ def tesla_inspection(scan) -> dict:
             _measure("만충 에너지", current_full, "kWh", 1),
             _measure("잔여 에너지", remaining, "kWh", 1),
             _measure("SOC", soc, "%", 1),
-            (_measure("SOH 참고치", f"{soh_pct:.1f}% (커뮤니티 {reference_kwh:.2f} kWh, 미검증)", "", 0)
-             if soh_pct and reference_kwh else _measure("SOH 참고치", None, "")),
+            {"label": "SOH 참고치", "value": f"{soh_pct:.1f}% (커뮤니티 {reference_kwh:.2f} kWh, 미검증)", "unit": ""}
+             if soh_pct and reference_kwh else _measure("SOH 참고치", None, ""),
             _measure("팩 전압", pack_voltage, "V", 1),
             _measure("팩 전류", pack_current, "A", 1),
             _measure("최고 온도", temp_max, "℃", 1),
