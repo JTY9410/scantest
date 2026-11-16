@@ -77,7 +77,13 @@ def _clean_database(app):
             # Use TRUNCATE CASCADE for PostgreSQL (faster and handles FKs)
             if "postgresql" in app.config["SQLALCHEMY_DATABASE_URI"]:
                 db.session.execute(text("SET lock_timeout = '5s'"))
-                db.session.execute(text(f"TRUNCATE TABLE {', '.join(tables)} RESTART IDENTITY CASCADE"))
+                # Only truncate tables that actually exist
+                for table_name in tables:
+                    try:
+                        db.session.execute(text(f"TRUNCATE TABLE {table_name} RESTART IDENTITY CASCADE"))
+                    except Exception:
+                        # Table doesn't exist (e.g., new models without migration)
+                        pass
             else:
                 # SQLite fallback (skip tables that don't exist)
                 for table in reversed(db.metadata.sorted_tables):

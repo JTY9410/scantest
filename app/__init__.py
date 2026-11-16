@@ -69,8 +69,8 @@ def create_app(config_name: str | None = None) -> Flask:
     from app.modules.ml_learning import cli as ml_cli
     ml_cli.init_app(app)
     
-    # Start ML scheduler and auto-backfill on startup (production only)
-    if not app.config.get("TESTING") and config_name == "production":
+    # Start ML scheduler and auto-backfill on startup (production only, never in tests)
+    if config_name == "production" and not app.config.get("TESTING"):
         @app.before_request
         def _start_ml_automation():
             """Start ML automation on first request."""
