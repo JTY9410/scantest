@@ -1,7 +1,6 @@
 """End-to-end test for powertrain conflict detection and override.
 
 사용자 요구사항 (b):
-- citation_url에 가짜 URL 입력
 - 충돌 감지, 결과 페이지 모달, override 저장, plan 반영
 """
 import pytest
@@ -43,13 +42,13 @@ def test_conflict_detection_and_storage(app, conflict_e2e_cleanup):
         )
         db.session.add(test_user)
         
-        # Add VIN rule for ICE with citation_url
+        # Add VIN rule for ICE with source_url
         # vds_position and vds_value_pattern must be NULL for simple WMI-only matching
         db.session.execute(text("""
             INSERT INTO vin_decode_rules 
-                (wmi_pattern, vds_position, vds_value_pattern, manufacturer, powertrain, confidence, source_url, citation_url)
+                (wmi_pattern, vds_position, vds_value_pattern, manufacturer, powertrain, confidence, source_url)
             VALUES 
-                ('ZZZ', NULL, NULL, 'ConflictMaker', 'ICE', 0.9, 'https://example.test/vin', 'https://example.test/vin-rule')
+                ('ZZZ', NULL, NULL, 'ConflictMaker', 'ICE', 0.9, 'https://example.test/vin')
         """))
         db.session.commit()
         
@@ -100,7 +99,8 @@ def test_conflict_detection_and_storage(app, conflict_e2e_cleanup):
             """)).scalar()
             print(f"Debug - VIN rules with ZZZ: {vin_check}")
         
-        assert scan_data[0] is True, f"powertrain_conflict should be True, got {scan_data[0]}"
+        # SQLite stores booleans as integers: 1 = True, 0 = False
+        assert scan_data[0] in (True, 1), f"powertrain_conflict should be True/1, got {scan_data[0]}"
         assert scan_data[1] == 'BEV', f"plate_powertrain should be BEV, got {scan_data[1]}"
         assert scan_data[2] == 'ICE', f"vin_powertrain should be ICE, got {scan_data[2]}"
         # Type uses plate as primary (BEV -> ev)
@@ -131,9 +131,9 @@ def test_conflict_modal_in_html(app, client, conflict_e2e_cleanup):
         # Add VIN rule
         db.session.execute(text("""
             INSERT INTO vin_decode_rules 
-                (wmi_pattern, vds_position, vds_value_pattern, manufacturer, powertrain, confidence, source_url, citation_url)
+                (wmi_pattern, vds_position, vds_value_pattern, manufacturer, powertrain, confidence, source_url)
             VALUES 
-                ('ZZZ', NULL, NULL, 'ModalMaker', 'ICE', 0.9, 'https://example.test/vin', 'https://example.test/vin-rule')
+                ('ZZZ', NULL, NULL, 'ModalMaker', 'ICE', 0.9, 'https://example.test/vin')
         """))
         db.session.commit()
         
@@ -214,9 +214,9 @@ def test_override_saves_to_db(app, client, conflict_e2e_cleanup):
         # Add VIN rule
         db.session.execute(text("""
             INSERT INTO vin_decode_rules 
-                (wmi_pattern, vds_position, vds_value_pattern, manufacturer, powertrain, confidence, source_url, citation_url)
+                (wmi_pattern, vds_position, vds_value_pattern, manufacturer, powertrain, confidence, source_url)
             VALUES 
-                ('ZZZ', NULL, NULL, 'OverrideMaker', 'ICE', 0.9, 'https://example.test/vin', 'https://example.test/vin-rule')
+                ('ZZZ', NULL, NULL, 'OverrideMaker', 'ICE', 0.9, 'https://example.test/vin')
         """))
         db.session.commit()
         
