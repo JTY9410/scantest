@@ -1886,7 +1886,12 @@ def register_cli(app: Flask) -> None:
     app.cli.add_command(battery)
     
     # Battery reference capacity import
-    from app.cli.battery_ref_import import register_commands as register_battery_ref_commands
+    import sys
+    from pathlib import Path
+    cli_dir = Path(__file__).parent / 'cli'
+    if str(cli_dir) not in sys.path:
+        sys.path.insert(0, str(cli_dir))
+    from battery_ref_import import register_commands as register_battery_ref_commands
     register_battery_ref_commands(app)
     
     @app.cli.command("seed-tesla-reference")

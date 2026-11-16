@@ -57,9 +57,14 @@ def battery_ref_import_command(xlsx_path, clear):
         return 1
     
     if clear:
-        count = BatteryReferenceCapacity.query.filter_by(source_file=file_type).delete()
-        db.session.commit()
-        click.echo(f"Cleared {count} existing {file_type} records")
+        try:
+            count = BatteryReferenceCapacity.query.filter_by(source_file=file_type).delete()
+            db.session.commit()
+            click.echo(f"Cleared {count} existing {file_type} records")
+        except Exception as e:
+            # Table might not exist yet
+            db.session.rollback()
+            click.echo(f"Note: Could not clear (table may not exist yet): {e}")
     
     wb = openpyxl.load_workbook(xlsx_path, data_only=True)
     total_imported = 0
