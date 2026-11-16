@@ -14,17 +14,15 @@ TESLA_REFERENCE_DATA = [
     # 출처 조사 결과: 공식 1차 문서 미확인
     # 커뮤니티 DBC 라벨 "PACK_74_KWH" 존재
     {
-        'manufacturer': 'Tesla',
+        'maker': 'Tesla',
         'model': 'Model 3',
         'year_from': 2018,
         'year_to': 2021,
-        'pack_code': 'Long Range',
-        'reference_energy_kwh': 74.0,
-        'reference_definition': '공칭 용량 (버퍼 포함, 커뮤니티 DBC 라벨)',
-        'source_url': 'https://github.com/commaai/opendbc/blob/master/opendbc/dbc/tesla_model3_party.dbc',
-        'source_type': 'community',
-        'verified': False,
-        'notes': 'commaai/opendbc GTW_packEnergy 라벨 PACK_74_KWH. 공식 1차 문서 미확인.',
+        'trim': 'Long Range',  # pack_code is a property; use trim
+        'gross_capacity_kwh': 74.0,  # reference_energy_kwh is a property
+        'verification_level': '2차 자료 기반 후보값',  # community source
+        'source_url_1': 'https://github.com/commaai/opendbc/blob/master/opendbc/dbc/tesla_model3_party.dbc',
+        'notes': '공칭 용량 (버퍼 포함, 커뮤니티 DBC 라벨). commaai/opendbc GTW_packEnergy 라벨 PACK_74_KWH. 공식 1차 문서 미확인.',
     },
     
     # 참고: 언론 인용된 "무공해차 통합누리집 72 kWh"는 2차 출처이며 원문 미확인
@@ -39,11 +37,11 @@ TESLA_REFERENCE_DATA = [
 def seed_tesla_reference_data():
     """Tesla 기준 용량 데이터 시드."""
     for data in TESLA_REFERENCE_DATA:
-        # 중복 체크
+        # 중복 체크 (using trim for pack identification)
         existing = BatteryReferenceCapacity.query.filter_by(
-            manufacturer=data['manufacturer'],
+            maker=data['maker'],
             model=data['model'],
-            pack_code=data['pack_code'],
+            trim=data['trim'],
             year_from=data['year_from'],
         ).first()
         

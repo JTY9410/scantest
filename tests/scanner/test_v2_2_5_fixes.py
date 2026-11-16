@@ -93,12 +93,13 @@ def test_seed_tesla_reference_idempotent(_app_base):
         
         # Model 3 행 존재 확인
         row = db.session.execute(
-            text("SELECT * FROM battery_reference_capacity WHERE manufacturer='Tesla' AND model='Model 3' LIMIT 1")
+            text("SELECT * FROM battery_reference_capacity WHERE maker='Tesla' AND model='Model 3' LIMIT 1")
         ).fetchone()
         
         assert row is not None
-        assert row.reference_energy_kwh == 74.0
-        assert row.source_type == 'community'
+        # reference_energy_kwh and source_type are properties; check actual columns
+        assert row.gross_capacity_kwh == 74.0
+        assert '2차 자료' in row.verification_level  # source_type='community' maps to this
         
         db.session.rollback()
 
