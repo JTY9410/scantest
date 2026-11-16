@@ -147,7 +147,8 @@ def test_production_config_starts_no_threads(monkeypatch):
     from app import create_app
     
     # Set all required production env vars via monkeypatch (applied before config load)
-    monkeypatch.setenv('SQLALCHEMY_DATABASE_URI', 'sqlite:///:memory:')
+    # Production config reads DATABASE_URL (not SQLALCHEMY_DATABASE_URI)
+    monkeypatch.setenv('DATABASE_URL', 'sqlite:///:memory:')
     monkeypatch.setenv('SECRET_KEY', 'test-secret-key-for-thread-test')
     monkeypatch.setenv('JWT_SECRET', 'test-jwt-secret-for-thread-test')
     # Ensure scheduler is disabled (defaults)
