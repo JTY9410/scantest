@@ -231,22 +231,21 @@ def _battery_pages(view: dict) -> list:
             _pairs([(item["label"], _with_unit(item)) for item in view["power"]]),
         ]
     
-    story += [
-        PageBreak(),
-        _p(f"셀 별 전압 분포 · 총 {len(view['cells'])}개 셀", _H2),
-        _pairs([
-            ("최저 전압", f"{view['cell_min']:.3f} V" if view["cell_min"] is not None else "-"),
-            ("최고 전압", f"{view['cell_max']:.3f} V" if view["cell_max"] is not None else "-"),
-            ("편차 (Max−Min)", f"{view['cell_spread']:.3f} V" if view["cell_spread"] is not None else "-"),
-        ]),
-    ]
-    if view["cells"]:
+    # 셀 전압 (데이터가 있을 때만 표시)
+    if view.get("cells") and len(view["cells"]) > 0:
+        story += [
+            PageBreak(),
+            _p(f"셀 별 전압 분포 · 총 {len(view['cells'])}개 셀", _H2),
+            _pairs([
+                ("최저 전압", f"{view['cell_min']:.3f} V" if view["cell_min"] is not None else "-"),
+                ("최고 전압", f"{view['cell_max']:.3f} V" if view["cell_max"] is not None else "-"),
+                ("편차 (Max−Min)", f"{view['cell_spread']:.3f} V" if view["cell_spread"] is not None else "-"),
+            ]),
+        ]
         cells = [f"{cell['no']}  {cell['voltage']:.3f} V" for cell in view["cells"]]
         rows = [cells[i:i + 4] for i in range(0, len(cells), 4)]
         rows[-1] += [""] * (4 - len(rows[-1]))
         story.append(_table(rows, [42.5] * 4, header=False))
-    else:
-        story.append(_p("셀 전압을 읽지 못했습니다."))
     story += [
         PageBreak(),
         _p(f"모듈 별 온도 분포 · 총 {len(view['modules'])}개 모듈", _H2),
@@ -331,7 +330,7 @@ def _additional_info_and_issues_section(view: dict) -> list:
     if not additional_info and not issues:
         return []
     
-    story = [PageBreak(), _p("추가 수집 정보와 문제점", _H2),
+    story = [_p("추가 수집 정보와 문제점", _H2),
              _p("WESCAN 기본 진단서 외 추가로 수집된 정보 및 문제점입니다.", _SMALL)]
     
     # === 추가 수집 정보 ===
