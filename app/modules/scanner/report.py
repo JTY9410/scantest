@@ -929,10 +929,26 @@ def tesla_inspection(scan) -> dict:
     
     code = f"WeSCAN-{(when or datetime.now(ZoneInfo('Asia/Seoul'))):%Y%m%d}-{int(getattr(scan, 'id', 0) or 0):08d}"
     
+    # Tesla detection basis
+    detection_basis_parts = []
+    if vin and vin.startswith("5YJ"):
+        detection_basis_parts.append("VIN WMI (5YJ)")
+    can_ids_found = [hex(cid) for cid in [0x132, 0x292, 0x352, 0x401] 
+                     if any(f.can_id == cid for f in getattr(scan, '_trace_frames', []))]
+    if can_ids_found:
+        detection_basis_parts.append(f"CAN IDs ({', '.join(can_ids_found)})")
+    detection_basis = " + ".join(detection_basis_parts) if detection_basis_parts else "Tesla 고유 CAN 시그니처"
+    
     return {
         "kind": "ev",
         "kind_label": "전기차 (Tesla)",
-        "powertrain": {"type": "ev", "source": "tesla_upload", "plugin": False, "hydrogen": False},
+        "powertrain": {
+            "type": "ev", 
+            "source": "tesla_upload", 
+            "source_label": detection_basis,
+            "plugin": False, 
+            "hydrogen": False
+        },
         "plugin": False,
         "hydrogen": False,
         "heading_en": "ELECTRIC VEHICLE DIAGNOSTIC REPORT",
@@ -946,15 +962,15 @@ def tesla_inspection(scan) -> dict:
             "manufacturer": manufacturer,
             "model": model,
             "year": year or "-",
-            "fuel": "electric",
+            "fuel": "전기",
             "number": _mask_plate(scan.car_no),
             "vin": vin or "-",
             "mileage": None,
             "mileage_text": "-",
         },
         "title": f"{manufacturer} {model}",
-        "soh": soh_pct,
-        "soh_note": f"SOH 참고치(미검증): {soh_note}" if soh_note else "SOH를 읽지 못했습니다.",
+        "soh": soh_pct if soh_pct else None,
+        "soh_note": f"{soh_note} (참고·커뮤니티, 미검증)" if soh_pct and soh_note else "SOH를 읽지 못했습니다.",
         "mileage_note": "측정불가: 주행거리 정보 제공 안 됨",
         "overall": judgment,
         "judgment_note": judgment_reason,
@@ -975,7 +991,7 @@ def tesla_inspection(scan) -> dict:
             _measure("만충 에너지", current_full, "kWh", 1),
             _measure("잔여 에너지", remaining, "kWh", 1),
             _measure("SOC", soc, "%", 1),
-            _measure("SOH 참고치", soh_pct, "%", 1) if soh_pct else _measure("SOH 참고치", None, ""),
+            _measure("SOH 참고치", soh_pct, "% (참고·커뮤니티, 미검증)", 1) if soh_pct else _measure("SOH 참고치", None, ""),
             _measure("팩 전압", pack_voltage, "V", 1),
             _measure("팩 전류", pack_current, "A", 1),
             _measure("최고 온도", temp_max, "℃", 1),
