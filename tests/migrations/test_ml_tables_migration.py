@@ -104,11 +104,10 @@ def test_migration_from_v228_head(app):
         """))
         scan_id = db.session.execute(text("SELECT id FROM scans WHERE car_no = '11가1111'")).scalar()
         
+        # ml_scan_features at v2.2.8 has: id, scan_id, created_at (no feature_vector, decoded_values, signals_read)
         db.session.execute(text(f"""
-            INSERT INTO ml_scan_features 
-                (scan_id, feature_vector, decoded_values, signals_read, created_at)
-            VALUES 
-                ({scan_id}, '{{}}', '{{}}', '{{}}', NOW())
+            INSERT INTO ml_scan_features (scan_id, created_at)
+            VALUES ({scan_id}, NOW())
         """))
         
         db.session.commit()
