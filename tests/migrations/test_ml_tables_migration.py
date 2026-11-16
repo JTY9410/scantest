@@ -69,6 +69,10 @@ def test_migration_from_v228_head(app):
             db.session.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
         db.session.commit()
         
+        # Set longer lock timeout for migration DDL operations
+        db.session.execute(text("SET lock_timeout = '60s'"))
+        db.session.commit()
+        
         # Upgrade to v2.2.8 head (20261116_120000) via full migration chain
         upgrade(revision='20261116_120000')
         
@@ -113,6 +117,10 @@ def test_migration_from_v228_head(app):
         # Note: ml_scan_features at v2.2.8 is empty (new table), and later migrations add
         # NOT NULL columns (maker, etc), so we can't insert v2.2.8-compatible data that survives
         # all migrations. Production v2.2.8 databases have empty ml_scan_features tables.
+        
+        # Ensure lock timeout is set before upgrading to head (DDL operations need time)
+        db.session.execute(text("SET lock_timeout = '60s'"))
+        db.session.commit()
         
         # Now upgrade to current head (production path)
         upgrade()
