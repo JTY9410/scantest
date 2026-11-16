@@ -16,7 +16,7 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 revision = '20261116_120000'
-down_revision = '20261115_add_battery_reference_capacity'
+down_revision = '3e8f9c4d1234'  # 20261115_add_battery_reference_capacity
 branch_labels = None
 depends_on = None
 
