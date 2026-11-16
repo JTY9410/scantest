@@ -16,14 +16,27 @@ def find_matching_references(
     Find all matching reference capacity entries.
     
     Matching logic:
-    1. maker + model (required)
+    1. maker + model (required, but model can be overridden by VIN for Tesla)
     2. year (if provided, must be within year_from/year_to range)
     3. trim (if provided, must match)
-    4. Tesla VIN decoding (if VIN provided and maker is Tesla)
+    4. Tesla VIN decoding (if VIN provided and maker is Tesla, overrides model/year)
     
     Returns:
         List of matching references (may be multiple candidates)
     """
+    # Tesla VIN decoding FIRST: override model and year before building query
+    if vin and maker.lower() == 'tesla':
+        from app.modules.tesla.vin_decoder import decode_tesla_vin
+        decoded = decode_tesla_vin(vin)
+        
+        if decoded.get('valid'):
+            # Override model and year from VIN decode
+            if decoded.get('model'):
+                model = decoded['model']
+            if decoded.get('year'):
+                year = decoded['year']
+    
+    # Start query with maker and model
     query = db.session.query(BatteryReferenceCapacity).filter_by(maker=maker, model=model)
     
     # Year filter
@@ -37,7 +50,7 @@ def find_matching_references(
     if trim:
         query = query.filter_by(trim=trim)
     
-    # Tesla VIN decoding
+    # WMI filter for Tesla
     if vin and maker.lower() == 'tesla':
         wmi = vin[:3] if len(vin) >= 3 else None
         if wmi:
