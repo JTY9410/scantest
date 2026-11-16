@@ -84,14 +84,20 @@ def test_migration_from_v228_head(app):
                  'https://example.com/old', 'Official', true, NOW())
         """))
         
-        # Insert test scans and ml_scan_features to verify they survive
-        # (Many scans columns are NOT NULL at v2.2.8)
+        # Create test user for foreign key (scans.tester_id references users.id)
         db.session.execute(text("""
+            INSERT INTO users (tid, name, user_type, is_active, created_at, updated_at)
+            VALUES ('test_tester', 'Test Tester', 'tester', true, NOW(), NOW())
+        """))
+        tester_id = db.session.execute(text("SELECT id FROM users WHERE tid = 'test_tester'")).scalar()
+        
+        # Insert test scans and ml_scan_features to verify they survive
+        db.session.execute(text(f"""
             INSERT INTO scans 
                 (type, device_type, device_uid, tester_id, car_no, car_vin, car_model,
                  created_at, updated_at)
             VALUES 
-                ('ev', 'obd', 'TEST-DEVICE-001', 1, '11가1111', 'TEST1234567890123', 
+                ('ev', 'obd', 'TEST-DEVICE-001', {tester_id}, '11가1111', 'TEST1234567890123', 
                  'Model 3', NOW(), NOW())
         """))
         scan_id = db.session.execute(text("SELECT id FROM scans WHERE car_no = '11가1111'")).scalar()
