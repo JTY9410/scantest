@@ -33,7 +33,13 @@ def upgrade():
         existing_cols.remove('manufacturer')
         existing_cols.add('maker')
     
-    # Add missing columns idempotently
+    # Rename source_url to source_url_1 FIRST (before adding columns)
+    if 'source_url' in existing_cols and 'source_url_1' not in existing_cols:
+        op.alter_column('battery_reference_capacity', 'source_url', new_column_name='source_url_1')
+        existing_cols.remove('source_url')
+        existing_cols.add('source_url_1')
+    
+    # Add missing columns idempotently (NOTE: source_url_1 is NOT in this list - it comes from rename)
     columns_to_add = [
         ('source_file', sa.String(100), True, None),  # Nullable, no default
         ('sheet_name', sa.String(100), True, None),
@@ -56,7 +62,7 @@ def upgrade():
         ('verification_level', sa.String(50), True, None),
         ('domestic_sales_verified', sa.String(100), True, None),
         ('domestic_application_evidence', sa.String(200), True, None),
-        ('source_url_1', sa.Text(), True, None),
+        # source_url_1 omitted - comes from renaming source_url above
         ('source_url_2', sa.Text(), True, None),
         ('source_id', sa.String(100), True, None),
         ('warnings', sa.Text(), True, None),
@@ -71,12 +77,6 @@ def upgrade():
             else:
                 op.add_column('battery_reference_capacity', 
                     sa.Column(col_name, col_type, nullable=nullable))
-    
-    # Rename source_url to source_url_1 BEFORE adding source_url_1 as new column
-    if 'source_url' in existing_cols and 'source_url_1' not in existing_cols:
-        op.alter_column('battery_reference_capacity', 'source_url', new_column_name='source_url_1')
-        existing_cols.remove('source_url')
-        existing_cols.add('source_url_1')
     
     # Drop old columns that aren't in the model
     old_cols = ['pack_code', 'reference_energy_kwh', 'reference_definition', 'source_type', 'verified', 'source_url']
