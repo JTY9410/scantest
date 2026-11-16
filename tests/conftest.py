@@ -79,10 +79,14 @@ def _clean_database(app):
                 db.session.execute(text("SET lock_timeout = '5s'"))
                 db.session.execute(text(f"TRUNCATE TABLE {', '.join(tables)} RESTART IDENTITY CASCADE"))
             else:
-                # SQLite fallback
+                # SQLite fallback (skip tables that don't exist)
                 for table in reversed(db.metadata.sorted_tables):
                     if table.name != 'alembic_version':
-                        db.session.execute(text(f"DELETE FROM {table.name}"))
+                        try:
+                            db.session.execute(text(f"DELETE FROM {table.name}"))
+                        except Exception:
+                            # Table doesn't exist in test DB (e.g., battery_reference_capacity)
+                            pass
                 try:
                     db.session.execute(text("DELETE FROM sqlite_sequence"))
                 except Exception:
