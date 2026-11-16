@@ -7,6 +7,7 @@ from typing import Any
 
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
@@ -32,17 +33,17 @@ class MLScanFeature(db.Model):
     significant_dtc_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     
     # 신호 커버리지
-    signals_read: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    signals_read: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
     
     # 디코딩된 값
-    decoded_values: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    decoded_values: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
     
     # 측정불가 항목
-    unmeasurable_items: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    unmeasurable_items: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
     unmeasurable_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     
     # 디코더 정보
-    decoder_sources: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    decoder_sources: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
     decoder_version: Mapped[str | None] = mapped_column(String(50), nullable=True)
     
     # 앱/장치 정보
@@ -99,11 +100,11 @@ class MLModel(db.Model):
     training_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     
     # 메트릭
-    metrics: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    validation_metrics: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    metrics: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
+    validation_metrics: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
     
     # 모델 파라미터
-    hyperparameters: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    hyperparameters: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
     
     # 모델 파일 경로
     model_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -134,8 +135,8 @@ class MLAnomalyDetection(db.Model):
     anomaly_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     anomaly_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     
-    affected_signals: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
-    details: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    affected_signals: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
+    details: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
     
     # 관리자 확인
     reviewed_by: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
@@ -178,7 +179,7 @@ class MLDecoderProposal(db.Model):
     # 발견된 값 범위
     observed_min: Mapped[float | None] = mapped_column(Float, nullable=True)
     observed_max: Mapped[float | None] = mapped_column(Float, nullable=True)
-    observed_values_sample: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
+    observed_values_sample: Mapped[dict[str, Any] | None] = mapped_column(JSONB().with_variant(JSON(), "sqlite"), nullable=True)
     
     # 상태
     status: Mapped[str] = mapped_column(String(20), nullable=False)
