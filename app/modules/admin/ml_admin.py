@@ -3,7 +3,7 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for
 from flask_login import login_required
 
-from app.core.auth import admin_required
+from app.modules.auth.access import admin_required
 from app.extensions import db
 from app.modules.ml_learning.models import MLAnomalyDetection, MLDecoderProposal, MLFeedback, MLModel
 
