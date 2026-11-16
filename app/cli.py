@@ -526,59 +526,118 @@ def register_cli(app: Flask) -> None:
         
         click.echo("\nRecovering makers...")
         
+        # Detect database type (PostgreSQL vs SQLite)
+        is_postgres = 'postgresql' in str(db.engine.url)
+        like_op = 'ILIKE' if is_postgres else 'LIKE'
+        
         # 1. Aston -> Aston Martin
-        result = db.session.execute(text("""
-            UPDATE vehicle_definitions vd
-            SET maker = 'Aston Martin'
-            FROM definition_sources ds
-            WHERE vd.source_id = ds.id
-            AND vd.maker = 'Aston'
-            AND (ds.file_path ILIKE '%Aston%Martin%' OR ds.file_path ILIKE '%AstonMartin%')
-        """))
+        if is_postgres:
+            result = db.session.execute(text(f"""
+                UPDATE vehicle_definitions vd
+                SET maker = 'Aston Martin'
+                FROM definition_sources ds
+                WHERE vd.source_id = ds.id
+                AND vd.maker = 'Aston'
+                AND (ds.file_path {like_op} '%Aston%Martin%' OR ds.file_path {like_op} '%AstonMartin%')
+            """))
+        else:
+            result = db.session.execute(text(f"""
+                UPDATE vehicle_definitions
+                SET maker = 'Aston Martin'
+                WHERE maker = 'Aston'
+                AND source_id IN (
+                    SELECT id FROM definition_sources
+                    WHERE file_path {like_op} '%Aston%Martin%' OR file_path {like_op} '%AstonMartin%'
+                )
+            """))
         click.echo(f"  Aston → Aston Martin: {result.rowcount} rows")
         
         # 2. MV -> MV Agusta
-        result = db.session.execute(text("""
-            UPDATE vehicle_definitions vd
-            SET maker = 'MV Agusta'
-            FROM definition_sources ds
-            WHERE vd.source_id = ds.id
-            AND vd.maker = 'MV'
-            AND (ds.file_path ILIKE '%MV%Agusta%' OR ds.file_path ILIKE '%MVAgusta%')
-        """))
+        if is_postgres:
+            result = db.session.execute(text(f"""
+                UPDATE vehicle_definitions vd
+                SET maker = 'MV Agusta'
+                FROM definition_sources ds
+                WHERE vd.source_id = ds.id
+                AND vd.maker = 'MV'
+                AND (ds.file_path {like_op} '%MV%Agusta%' OR ds.file_path {like_op} '%MVAgusta%')
+            """))
+        else:
+            result = db.session.execute(text(f"""
+                UPDATE vehicle_definitions
+                SET maker = 'MV Agusta'
+                WHERE maker = 'MV'
+                AND source_id IN (
+                    SELECT id FROM definition_sources
+                    WHERE file_path {like_op} '%MV%Agusta%' OR file_path {like_op} '%MVAgusta%'
+                )
+            """))
         click.echo(f"  MV → MV Agusta: {result.rowcount} rows")
         
         # 3. Legend -> Legend Cars
-        result = db.session.execute(text("""
-            UPDATE vehicle_definitions vd
-            SET maker = 'Legend Cars'
-            FROM definition_sources ds
-            WHERE vd.source_id = ds.id
-            AND vd.maker = 'Legend'
-            AND (ds.file_path ILIKE '%Legend%Cars%' OR ds.file_path ILIKE '%LegendCars%')
-        """))
+        if is_postgres:
+            result = db.session.execute(text(f"""
+                UPDATE vehicle_definitions vd
+                SET maker = 'Legend Cars'
+                FROM definition_sources ds
+                WHERE vd.source_id = ds.id
+                AND vd.maker = 'Legend'
+                AND (ds.file_path {like_op} '%Legend%Cars%' OR ds.file_path {like_op} '%LegendCars%')
+            """))
+        else:
+            result = db.session.execute(text(f"""
+                UPDATE vehicle_definitions
+                SET maker = 'Legend Cars'
+                WHERE maker = 'Legend'
+                AND source_id IN (
+                    SELECT id FROM definition_sources
+                    WHERE file_path {like_op} '%Legend%Cars%' OR file_path {like_op} '%LegendCars%'
+                )
+            """))
         click.echo(f"  Legend → Legend Cars: {result.rowcount} rows")
         
         # 4. SCCA -> SCCA Enterprises
-        result = db.session.execute(text("""
-            UPDATE vehicle_definitions vd
-            SET maker = 'SCCA Enterprises'
-            FROM definition_sources ds
-            WHERE vd.source_id = ds.id
-            AND vd.maker = 'SCCA'
-            AND (ds.file_path ILIKE '%SCCA%Enterprises%' OR ds.file_path ILIKE '%SCCAEnterprises%')
-        """))
+        if is_postgres:
+            result = db.session.execute(text(f"""
+                UPDATE vehicle_definitions vd
+                SET maker = 'SCCA Enterprises'
+                FROM definition_sources ds
+                WHERE vd.source_id = ds.id
+                AND vd.maker = 'SCCA'
+                AND (ds.file_path {like_op} '%SCCA%Enterprises%' OR ds.file_path {like_op} '%SCCAEnterprises%')
+            """))
+        else:
+            result = db.session.execute(text(f"""
+                UPDATE vehicle_definitions
+                SET maker = 'SCCA Enterprises'
+                WHERE maker = 'SCCA'
+                AND source_id IN (
+                    SELECT id FROM definition_sources
+                    WHERE file_path {like_op} '%SCCA%Enterprises%' OR file_path {like_op} '%SCCAEnterprises%'
+                )
+            """))
         click.echo(f"  SCCA → SCCA Enterprises: {result.rowcount} rows")
         
         # 5. BT1 -> General Motors
-        result = db.session.execute(text("""
-            UPDATE vehicle_definitions vd
-            SET maker = 'General Motors'
-            FROM definition_sources ds
-            WHERE vd.source_id = ds.id
-            AND vd.maker = 'BT1'
-            AND ds.file_path ILIKE '%BT1%'
-        """))
+        if is_postgres:
+            result = db.session.execute(text(f"""
+                UPDATE vehicle_definitions vd
+                SET maker = 'General Motors'
+                FROM definition_sources ds
+                WHERE vd.source_id = ds.id
+                AND vd.maker = 'BT1'
+                AND ds.file_path {like_op} '%BT1%'
+            """))
+        else:
+            result = db.session.execute(text(f"""
+                UPDATE vehicle_definitions
+                SET maker = 'General Motors'
+                WHERE maker = 'BT1'
+                AND source_id IN (
+                    SELECT id FROM definition_sources
+                    WHERE file_path {like_op} '%BT1%'
+                )
+            """))
         click.echo(f"  BT1 → General Motors: {result.rowcount} rows")
         
         # 6. 공통규격 -> not_vehicle

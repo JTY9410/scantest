@@ -18,13 +18,13 @@ def test_normalize_makers_only_touches_vehicle_definitions(app):
         # by checking that a normalize operation works without any scans data
         db.session.execute(text("""
             INSERT INTO definition_sources (id, source_type, file_path, sha256, file_size, imported_at)
-            VALUES (1, 'dbc', '/test/path', '0000000000000000000000000000000000000000000000000000000000000000', 100, NOW())
+            VALUES (1, 'dbc', '/test/path', '0000000000000000000000000000000000000000000000000000000000000000', 100, CURRENT_TIMESTAMP)
         """))
         db.session.execute(text("""
             INSERT INTO vehicle_definitions (
                 id, source_id, maker, model, powertrain, created_at
             ) VALUES (
-                1, 1, 'Hyundai_ Ioniq', 'Ioniq', 'unknown', NOW()
+                1, 1, 'Hyundai_ Ioniq', 'Ioniq', 'unknown', CURRENT_TIMESTAMP
             )
         """))
         db.session.commit()
@@ -52,13 +52,13 @@ def test_normalize_makers_report_only_mode(app):
     with app.app_context():
         db.session.execute(text("""
             INSERT INTO definition_sources (id, source_type, file_path, sha256, file_size, imported_at)
-            VALUES (1, 'dbc', '/test/path', '0'*64, 100, NOW())
+            VALUES (1, 'dbc', '/test/path', '0'*64, 100, CURRENT_TIMESTAMP)
         """))
         db.session.execute(text("""
             INSERT INTO vehicle_definitions (
                 id, source_id, maker, model, powertrain, created_at
             ) VALUES (
-                1, 1, 'Hyundai_ Ioniq', 'Ioniq', 'unknown', NOW()
+                1, 1, 'Hyundai_ Ioniq', 'Ioniq', 'unknown', CURRENT_TIMESTAMP
             )
         """))
         db.session.commit()
