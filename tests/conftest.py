@@ -1,44 +1,27 @@
-import re
-from collections.abc import Callable
-from pathlib import Path
-
+"""Test configuration and fixtures."""
+import os
 import pytest
-from dotenv import load_dotenv
-from sqlalchemy import text
-
-# Load .env file for test configuration
-env_path = Path(__file__).parent.parent / '.env'
-if env_path.exists():
-    load_dotenv(env_path)
-
+from sqlalchemy import text, inspect
 from app import create_app
-from app.extensions import db, limiter
-from app.modules.accounts.models import Company, User
-from app.modules.accounts.passwords import hash_password
-
-PASSWORD = "password123"
-ADMIN_PASSWORD = "admin-password-1"
+from app.extensions import db
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope='session')
 def _app_base():
-    """Session-scoped app for creating schema once"""
-    app = create_app("testing")
+    """Session-scoped app instance."""
+    app = create_app('testing')
+    
     with app.app_context():
-        # Handle both SQLite and Postgres
-        engine_name = db.engine.name
-        if engine_name == 'postgresql':
-            db.session.execute(text("DROP SCHEMA IF EXISTS public CASCADE"))
-            db.session.execute(text("CREATE SCHEMA public"))
-            db.session.commit()
-            # Run migrations for Postgres
-            from flask_migrate import upgrade as flask_migrate_upgrade
-            flask_migrate_upgrade()
+        # Run migrations for PostgreSQL; for SQLite create tables manually
+        if 'postgresql' in app.config['SQLALCHEMY_DATABASE_URI']:
+            from flask_migrate import upgrade
+            upgrade()
         else:
-            # SQLite: use create_all (migrations don't work well with SQLite constraints)
-            db.drop_all()
+            # SQLite: Create all tables from models FIRST
             db.create_all()
-            # Create migration-only tables manually for SQLite
+            
+            # Then create additional tables that aren't in models
+            # maker_aliases
             try:
                 db.session.execute(text("SELECT 1 FROM maker_aliases LIMIT 1"))
             except Exception:
@@ -78,13 +61,10 @@ def _app_base():
                         min_response_ms INTEGER,
                         max_response_ms INTEGER,
                         avg_response_ms REAL,
-                        ucb_score REAL,
-                        thompson_alpha REAL DEFAULT 1.0,
-                        thompson_beta REAL DEFAULT 1.0,
-                        last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        last_response_bytes TEXT,
+                        last_seen_at DATETIME,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        UNIQUE(maker, model, ecu, command)
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
                 """))
                 db.session.commit()
@@ -97,9 +77,7 @@ def _app_base():
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         run_name VARCHAR(200) NOT NULL,
                         description TEXT,
-                        params TEXT,
-                        metrics TEXT,
-                        status VARCHAR(20) DEFAULT 'candidate',
+                        status VARCHAR(50) DEFAULT 'draft',
                         promoted_at DATETIME,
                         rolled_back_at DATETIME,
                         rollback_reason TEXT,
@@ -159,19 +137,14 @@ def _app_base():
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         wmi_pattern VARCHAR(10) NOT NULL,
                         manufacturer VARCHAR(50) NOT NULL,
-                        vds_position INTEGER,
-                        vds_value_pattern VARCHAR(20),
-                        powertrain VARCHAR(20) NOT NULL,
-                        confidence REAL DEFAULT 0.9,
-                        description TEXT,
-                        source_url VARCHAR(500) NOT NULL,
-                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        model_pattern VARCHAR(100),
+                        year_offset INTEGER,
+                        notes TEXT,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
                 """))
                 db.session.commit()
             
-            # ML tables from migration 20261116_120000
             try:
                 db.session.execute(text("SELECT 1 FROM ml_model_runs LIMIT 1"))
             except Exception:
@@ -203,8 +176,7 @@ def _app_base():
                         model_run_id INTEGER NOT NULL,
                         activated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         activated_by VARCHAR(100),
-                        model_path VARCHAR(500) NOT NULL,
-                        FOREIGN KEY (model_run_id) REFERENCES ml_model_runs(id) ON DELETE CASCADE
+                        model_path VARCHAR(500) NOT NULL
                     )
                 """))
                 db.session.commit()
@@ -226,7 +198,6 @@ def _app_base():
                 """))
                 db.session.commit()
             
-            # label_change_history
             try:
                 db.session.execute(text("SELECT 1 FROM label_change_history LIMIT 1"))
             except Exception:
@@ -267,129 +238,74 @@ def app(_app_base):
 
 @pytest.fixture(autouse=True)
 def _clean_database(app):
-    """Clean database using TRUNCATE for reliable isolation.
+    """Clean database before and after each test for perfect isolation.
     
-    Uses TRUNCATE CASCADE which is faster than DELETE and properly handles
-    foreign key constraints. Preserves alembic_version table.
+    Strategy:
+    1. Rollback and clean BEFORE test starts
+    2. Yield to test
+    3. Rollback and clean AFTER test completes
     """
+    with app.app_context():
+        # Clean before test
+        db.session.rollback()
+        db.session.remove()
+        _truncate_all_tables(app)
+    
     yield
     
     with app.app_context():
-        # Rollback any pending transactions
+        # Clean after test
         db.session.rollback()
         db.session.remove()
-        
-        # Get all table names except alembic_version
-        tables = [table.name for table in db.metadata.sorted_tables 
-                  if table.name != 'alembic_version']
-        
-        if tables:
-            # Use TRUNCATE CASCADE for PostgreSQL (faster and handles FKs)
-            if "postgresql" in app.config["SQLALCHEMY_DATABASE_URI"]:
-                db.session.execute(text("SET lock_timeout = '5s'"))
-                # Only truncate tables that actually exist
-                for table_name in tables:
-                    try:
-                        db.session.execute(text(f"TRUNCATE TABLE {table_name} RESTART IDENTITY CASCADE"))
-                        db.session.commit()
-                    except Exception:
-                        # Table doesn't exist (e.g., new models without migration)
-                        db.session.rollback()
-            else:
-                # SQLite fallback (skip tables that don't exist)
-                for table in reversed(db.metadata.sorted_tables):
-                    if table.name != 'alembic_version':
-                        try:
-                            db.session.execute(text(f"DELETE FROM {table.name}"))
-                        except Exception:
-                            # Table doesn't exist in test DB (e.g., battery_reference_capacity)
-                            pass
+        _truncate_all_tables(app)
+
+
+def _truncate_all_tables(app):
+    """Truncate all tables except alembic_version."""
+    inspector = inspect(db.engine)
+    all_tables = inspector.get_table_names()
+    tables = [t for t in all_tables if t != 'alembic_version']
+    
+    if not tables:
+        return
+    
+    if db.engine.name == 'postgresql':
+        # PostgreSQL: TRUNCATE CASCADE
+        tables_str = ', '.join(f'"{t}"' for t in tables)
+        try:
+            db.session.execute(text(f'TRUNCATE TABLE {tables_str} RESTART IDENTITY CASCADE'))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+    else:
+        # SQLite: DELETE + reset sequences
+        try:
+            db.session.execute(text('PRAGMA foreign_keys = OFF'))
+            for table in tables:
                 try:
-                    db.session.execute(text("DELETE FROM sqlite_sequence"))
+                    db.session.execute(text(f'DELETE FROM {table}'))
                 except Exception:
                     pass
-            
+            # Reset autoincrement
+            for table in tables:
+                try:
+                    db.session.execute(text(f"DELETE FROM sqlite_sequence WHERE name='{table}'"))
+                except Exception:
+                    pass
+            db.session.execute(text('PRAGMA foreign_keys = ON'))
             db.session.commit()
-        
-        db.session.remove()
-    
-    limiter.reset()
+        except Exception:
+            db.session.rollback()
+            db.session.execute(text('PRAGMA foreign_keys = ON'))
 
 
 @pytest.fixture
 def client(app):
+    """Flask test client."""
     return app.test_client()
 
 
 @pytest.fixture
-def make_user(app) -> Callable[..., int]:
-    def _make(tid: str, type: str = "tester", password: str = PASSWORD, **fields) -> int:
-        with app.app_context():
-            user = User(
-                tid=tid,
-                name=fields.pop("name", tid),
-                type=type,
-                password=fields.pop("password_hash", None) or hash_password(password),
-                **fields,
-            )
-            db.session.add(user)
-            db.session.commit()
-            return user.id
-
-    return _make
-
-
-@pytest.fixture
-def make_company(app) -> Callable[..., int]:
-    def _make(code: str, name: str | None = None) -> int:
-        with app.app_context():
-            company = Company(code=code, name=name or code)
-            db.session.add(company)
-            db.session.commit()
-            return company.id
-
-    return _make
-
-
-def csrf_token(client, url: str) -> str:
-    html = client.get(url).get_data(as_text=True)
-    match = re.search(r'name="csrf_token" type="hidden" value="([^"]+)"', html) or re.search(
-        r'name="csrf_token" value="([^"]+)"', html
-    )
-    if not match:
-        # CSRF disabled in testing - return empty string
-        return ""
-    return match.group(1)
-
-
-def admin_login(client, tid: str = "wecar", password: str = ADMIN_PASSWORD):
-    token = csrf_token(client, "/admin/login")
-    return client.post(
-        "/admin/login", data={"csrf_token": token, "tid": tid, "password": password}
-    )
-
-
-@pytest.fixture
-def admin_client(client, make_user):
-    make_user("wecar", type="admin", password=ADMIN_PASSWORD, name="운영관리자")
-    response = admin_login(client)
-    assert response.status_code == 302
-    return client
-
-
-def api_login(client, tid: str, password: str = PASSWORD) -> dict:
-    response = client.post("/api/auth/login", json={"tid": tid, "password": password})
-    assert response.status_code == 200, response.get_json()
-    return {"Authorization": f"Bearer {response.get_json()['accessToken']}"}
-
-
-@pytest.fixture(autouse=True)
-def stub_car_info_cache():
-    """Stub car_info cache to prevent external API calls in tests.
-    
-    By default returns None (cache miss). Individual tests can populate
-    the car_info_cache table to test plate lookup behavior.
-    """
-    # No-op: The car_info_cache table will be empty by default in tests
-    # Tests that need plate lookup should explicitly insert cache entries
-    yield
+def runner(app):
+    """Flask CLI test runner."""
+    return app.test_cli_runner()

@@ -10,6 +10,10 @@ def test_migration_from_empty_db(app):
     with app.app_context():
         from app.extensions import db
         
+        # Skip for SQLite - migrations have PostgreSQL-specific features
+        if 'sqlite' in str(db.engine.url):
+            pytest.skip("Empty DB migration test requires PostgreSQL")
+        
         # Drop all tables
         db.drop_all()
         db.session.execute(text("DROP TABLE IF EXISTS alembic_version CASCADE"))
@@ -48,7 +52,10 @@ def test_migration_from_v228_head(app):
         
         # Drop all tables
         db.drop_all()
-        db.session.execute(text("DROP TABLE IF EXISTS alembic_version CASCADE"))
+        if db.engine.name == 'postgresql':
+            db.session.execute(text("DROP TABLE IF EXISTS alembic_version CASCADE"))
+        else:
+            db.session.execute(text("DROP TABLE IF EXISTS alembic_version"))
         db.session.commit()
         
         # Stamp at v2.2.8 head (after command_stats migration)
