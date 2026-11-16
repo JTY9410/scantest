@@ -165,6 +165,55 @@ def upgrade():
         sa.Index('ix_ml_anomaly_created_at', 'created_at'),
     )
     
+    # ml_model_runs: 모델 학습 실행 기록
+    op.create_table(
+        'ml_model_runs',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('run_type', sa.String(50), nullable=False, comment='scheduled/manual/event-triggered'),
+        sa.Column('trigger_reason', sa.String(200), nullable=True, comment='daily/N-rows/manual'),
+        sa.Column('training_samples', sa.Integer(), nullable=False),
+        sa.Column('validation_samples', sa.Integer(), nullable=False),
+        sa.Column('test_samples', sa.Integer(), nullable=False),
+        sa.Column('model_type', sa.String(50), nullable=False),
+        sa.Column('model_path', sa.String(500), nullable=True),
+        sa.Column('metrics', postgresql.JSONB(), nullable=True),
+        sa.Column('status', sa.String(20), nullable=False, comment='success/failed/running'),
+        sa.Column('error_message', sa.String(500), nullable=True),
+        sa.Column('started_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
+        sa.Column('completed_at', sa.DateTime(timezone=True), nullable=True),
+        sa.PrimaryKeyConstraint('id'),
+        sa.Index('ix_ml_model_runs_started_at', 'started_at'),
+        sa.Index('ix_ml_model_runs_status', 'status'),
+    )
+    
+    # ml_active_model: 현재 활성 ML 모델 (싱글톤)
+    op.create_table(
+        'ml_active_model',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('model_run_id', sa.Integer(), nullable=False),
+        sa.Column('activated_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
+        sa.Column('activated_by', sa.String(100), nullable=True, comment='system/admin-user-id'),
+        sa.Column('model_path', sa.String(500), nullable=False),
+        sa.PrimaryKeyConstraint('id'),
+        sa.ForeignKeyConstraint(['model_run_id'], ['ml_model_runs.id'], ondelete='CASCADE'),
+    )
+    
+    # ml_consistency_scores: 스캔별 데이터 정합성 점수
+    op.create_table(
+        'ml_consistency_scores',
+        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('scan_id', sa.Integer(), nullable=False),
+        sa.Column('score', sa.Integer(), nullable=False, comment='0-100'),
+        sa.Column('distribution_match', sa.Float(), nullable=True, comment='같은 차종 분포 대비'),
+        sa.Column('physical_plausibility', sa.Float(), nullable=True, comment='물리적 타당성'),
+        sa.Column('issues_detected', postgresql.JSONB(), nullable=True, comment='검출된 이슈 리스트'),
+        sa.Column('created_at', sa.DateTime(timezone=True), nullable=False, server_default=sa.text('now()')),
+        sa.PrimaryKeyConstraint('id'),
+        sa.UniqueConstraint('scan_id'),
+        sa.ForeignKeyConstraint(['scan_id'], ['scans.id'], ondelete='CASCADE'),
+        sa.Index('ix_ml_consistency_scan', 'scan_id'),
+    )
+    
     # ml_decoder_proposals: 미지의 CAN ID/신호 후보
     op.create_table(
         'ml_decoder_proposals',
@@ -215,6 +264,9 @@ def upgrade():
 
 def downgrade():
     op.drop_table('ml_decoder_proposals')
+    op.drop_table('ml_consistency_scores')
+    op.drop_table('ml_active_model')
+    op.drop_table('ml_model_runs')
     op.drop_table('ml_anomaly_detections')
     op.drop_table('ml_models')
     op.drop_table('ml_feedback')
