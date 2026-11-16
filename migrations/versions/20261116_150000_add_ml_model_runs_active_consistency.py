@@ -12,7 +12,7 @@ from sqlalchemy import inspect
 
 # revision identifiers, used by Alembic.
 revision = '20261116_150000'
-down_revision = '3e8f9c4d1234'  # 20261115 battery_reference_capacity  # add_comprehensive_battery_reference
+down_revision = '20261116_120000'  # add_ml_learning_tables  # add_comprehensive_battery_reference
 branch_labels = None
 depends_on = None
 
