@@ -17,13 +17,12 @@ def test_audit_queries_work(app):
         """)).scalar()
         assert orphan_scans >= 0
         
-        # Duplicates check
+        # Duplicates check (battery_reference_capacity)
         dup_specs = db.session.execute(text("""
             SELECT COUNT(*) FROM (
-                SELECT maker, model, trim_grade, model_year, COUNT(*) as cnt
-                FROM battery_specs
-                WHERE is_active = true
-                GROUP BY maker, model, trim_grade, model_year
+                SELECT maker, model, year_from, COUNT(*) as cnt
+                FROM battery_reference_capacity
+                GROUP BY maker, model, year_from
                 HAVING COUNT(*) > 1
             ) sub
         """)).scalar()
