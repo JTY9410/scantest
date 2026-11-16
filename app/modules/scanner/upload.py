@@ -709,6 +709,42 @@ def process_multi_upload(actor: User, files: list, car_no: str = None, car: dict
         raise UploadError(f"파일 병합 실패: {exc}")
     
     # 병합된 데이터로 스캔 처리
+    # Tesla 감지: 병합된 trace에서 Tesla 시그니처 체크
+    from app.modules.canlab.engine.decode import load_trace
+    from app.modules.tesla import detect as tesla_detect
+    
+    trace = load_trace(merged_text)
+    
+    # Tesla 감지 (VIN + CAN IDs)
+    is_tesla = False
+    extracted_vin = None
+    if trace.frames:
+        # VIN 추출 시도
+        from app.modules.tesla.detect import extract_vin_from_frames
+        frame_tuples = [(f.t_ms / 1000.0, f.can_id, f.data) for f in trace.frames]
+        extracted_vin = extract_vin_from_frames(frame_tuples)
+        extracted_vin = _sanitize_vin(extracted_vin)
+        
+        # Tesla 시그니처 체크
+        frame_tuples_for_detect = [(f.t_ms / 1000.0, f.data) for f in trace.frames if f.can_id == 0x405]
+        is_tesla = tesla_detect.is_tesla(frame_tuples_for_detect, vin=extracted_vin)
+    
+    # Tesla 경로
+    if is_tesla:
+        current_app.logger.info(f"Multi-upload: Tesla detected, routing to Tesla upload path")
+        # 차량번호 폴백
+        if not car_no or car_no == "미확인":
+            car_no = "미확인"
+        return _process_tesla_upload(
+            actor=actor,
+            trace=trace,
+            car_no=car_no,
+            vin=extracted_vin,
+            device=device,
+            filename=f"merged_{len(file_data)}_files"
+        )
+    
+    # 일반 UDS 경로
     steps, metadata = convert_to_scan_steps(merged_text)
     
     # 차량 정보 정규화
