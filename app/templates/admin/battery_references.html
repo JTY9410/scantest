@@ -1,0 +1,112 @@
+{% extends "admin/layout.html" %}
+{% block title %}Battery Reference Capacities{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Battery Reference Capacity Database</h2>
+    <div>
+      <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#reimportModal">
+        <i class="bi bi-upload"></i> Re-import Data
+      </button>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div class="card mb-3">
+    <div class="card-body">
+      <form method="get" class="row g-3">
+        <div class="col-md-3">
+          <input type="text" name="maker" class="form-control" placeholder="Maker" value="{{ request.args.get('maker', '') }}">
+        </div>
+        <div class="col-md-3">
+          <input type="text" name="model" class="form-control" placeholder="Model" value="{{ request.args.get('model', '') }}">
+        </div>
+        <div class="col-md-2">
+          <input type="number" name="year" class="form-control" placeholder="Year" value="{{ request.args.get('year', '') }}">
+        </div>
+        <div class="col-md-2">
+          <select name="verification" class="form-control">
+            <option value="">All Verification Levels</option>
+            <option value="official">Official</option>
+            <option value="2차 자료">2nd-hand Data</option>
+          </select>
+        </div>
+        <div class="col-md-2">
+          <button type="submit" class="btn btn-secondary w-100">Filter</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Results table -->
+  <div class="card">
+    <div class="card-body">
+      <p class="text-muted">Total: {{ references|length }} references</p>
+      <div class="table-responsive">
+        <table class="table table-hover">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>Maker</th>
+              <th>Model</th>
+              <th>Trim</th>
+              <th>Year</th>
+              <th>Gross (kWh)</th>
+              <th>Net (kWh)</th>
+              <th>Verification</th>
+              <th>Source</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for ref in references %}
+            <tr>
+              <td>{{ ref.id }}</td>
+              <td>{{ ref.maker }}</td>
+              <td>{{ ref.model }}</td>
+              <td>{{ ref.trim or '-' }}</td>
+              <td>{{ ref.year_from }}-{{ ref.year_to }}</td>
+              <td>{{ ref.gross_capacity_kwh or '-' }}</td>
+              <td>{{ ref.net_capacity_kwh or '-' }}</td>
+              <td><span class="badge bg-{{ 'success' if '제조사' in ref.verification_level else 'info' }}">{{ ref.verification_level }}</span></td>
+              <td><a href="{{ ref.source_url_1 }}" target="_blank" class="text-truncate d-inline-block" style="max-width: 200px">{{ ref.source_url_1 }}</a></td>
+              <td>
+                <a href="{{ url_for('admin.battery_reference_edit', id=ref.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>
+              </td>
+            </tr>
+            {% else %}
+            <tr><td colspan="10" class="text-center text-muted">No references found</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Re-import Modal -->
+<div class="modal fade" id="reimportModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Re-import Battery References</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <form method="post" action="{{ url_for('admin.battery_reference_reimport') }}" enctype="multipart/form-data">
+        <div class="modal-body">
+          <div class="mb-3">
+            <label for="file" class="form-label">Upload Excel File (xlsx)</label>
+            <input type="file" class="form-control" id="file" name="file" accept=".xlsx" required>
+          </div>
+          <p class="text-muted small">Supported files: import7_brands_capacity_master.xlsx, tesla_vin_pack_db.xlsx</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary">Import</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

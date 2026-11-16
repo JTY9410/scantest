@@ -308,3 +308,162 @@ def wescan_profiles():
         maker_filter=maker_filter,
         commands=commands
     )
+
+
+@bp.get("/battery-references")
+@admin_required
+def battery_references():
+    """Battery reference capacity list and management."""
+    from app.modules.scans.battery_capacity import BatteryReferenceCapacity
+    
+    # Filters
+    maker = request.args.get('maker', '').strip()
+    model = request.args.get('model', '').strip()
+    year_str = request.args.get('year', '').strip()
+    verification = request.args.get('verification', '').strip()
+    
+    query = db.session.query(BatteryReferenceCapacity)
+    
+    if maker:
+        query = query.filter(BatteryReferenceCapacity.maker.ilike(f'%{maker}%'))
+    if model:
+        query = query.filter(BatteryReferenceCapacity.model.ilike(f'%{model}%'))
+    if year_str and year_str.isdigit():
+        year = int(year_str)
+        query = query.filter(
+            (BatteryReferenceCapacity.year_from.is_(None) | (BatteryReferenceCapacity.year_from <= year)),
+            (BatteryReferenceCapacity.year_to.is_(None) | (BatteryReferenceCapacity.year_to >= year))
+        )
+    if verification:
+        query = query.filter(BatteryReferenceCapacity.verification_level.ilike(f'%{verification}%'))
+    
+    references = query.order_by(
+        BatteryReferenceCapacity.maker,
+        BatteryReferenceCapacity.model,
+        BatteryReferenceCapacity.year_from
+    ).limit(200).all()
+    
+    return render_template('admin/battery_references.html', references=references)
+
+
+@bp.get("/battery-reference/<int:id>")
+@admin_required
+def battery_reference_edit(id):
+    """Edit battery reference capacity."""
+    from app.modules.scans.battery_capacity import BatteryReferenceCapacity
+    
+    reference = db.session.get(BatteryReferenceCapacity, id)
+    if not reference:
+        flash("Reference not found", "error")
+        return redirect(url_for('admin.battery_references'))
+    
+    return render_template('admin/battery_reference_edit.html', reference=reference)
+
+
+@bp.post("/battery-reference/<int:id>")
+@admin_required
+def battery_reference_update(id):
+    """Update battery reference capacity."""
+    from app.modules.scans.battery_capacity import BatteryReferenceCapacity
+    
+    reference = db.session.get(BatteryReferenceCapacity, id)
+    if not reference:
+        flash("Reference not found", "error")
+        return redirect(url_for('admin.battery_references'))
+    
+    # Update fields
+    reference.maker = request.form.get('maker', '').strip()
+    reference.model = request.form.get('model', '').strip()
+    reference.trim = request.form.get('trim', '').strip() or None
+    reference.year_from = int(request.form['year_from']) if request.form.get('year_from') else None
+    reference.year_to = int(request.form['year_to']) if request.form.get('year_to') else None
+    reference.gross_capacity_kwh = float(request.form['gross_capacity_kwh']) if request.form.get('gross_capacity_kwh') else None
+    reference.net_capacity_kwh = float(request.form['net_capacity_kwh']) if request.form.get('net_capacity_kwh') else None
+    reference.verification_level = request.form.get('verification_level', '')
+    reference.source_url_1 = request.form.get('source_url_1', '').strip() or None
+    reference.notes = request.form.get('notes', '').strip() or None
+    
+    db.session.commit()
+    flash("Reference updated successfully", "success")
+    return redirect(url_for('admin.battery_references'))
+
+
+@bp.post("/battery-reference/reimport")
+@admin_required
+def battery_reference_reimport():
+    """Re-import battery reference data from uploaded xlsx."""
+    from werkzeug.utils import secure_filename
+    import tempfile
+    import os
+    
+    if 'file' not in request.files:
+        flash("No file uploaded", "error")
+        return redirect(url_for('admin.battery_references'))
+    
+    file = request.files['file']
+    if not file.filename or not file.filename.endswith('.xlsx'):
+        flash("Please upload an Excel (.xlsx) file", "error")
+        return redirect(url_for('admin.battery_references'))
+    
+    # Save to temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.xlsx') as tmp:
+        file.save(tmp.name)
+        tmp_path = tmp.name
+    
+    try:
+        # Import via CLI command
+        from app.cli import battery_ref_import_command
+        battery_ref_import_command(tmp_path)
+        flash(f"Successfully imported {file.filename}", "success")
+    except Exception as e:
+        current_app.logger.error(f"Import failed: {e}", exc_info=True)
+        flash(f"Import failed: {str(e)}", "error")
+    finally:
+        os.unlink(tmp_path)
+    
+    return redirect(url_for('admin.battery_references'))
+
+
+@bp.post("/scan/<int:scan_id>/recalculate-soh")
+@admin_required
+def scan_recalculate_soh(scan_id):
+    """Recalculate SOH for a scan with selected pack ID."""
+    from app.modules.scans.battery_capacity import BatteryReferenceCapacity
+    from app.modules.scans.battery_soh import calculate_soh
+    
+    scan = db.session.get(Scan, scan_id)
+    if not scan:
+        return jsonify({"error": "Scan not found"}), 404
+    
+    pack_id = request.json.get('pack_id')
+    if not pack_id:
+        return jsonify({"error": "pack_id required"}), 400
+    
+    reference = db.session.get(BatteryReferenceCapacity, pack_id)
+    if not reference:
+        return jsonify({"error": "Reference not found"}), 404
+    
+    # Get current capacity from scan (placeholder - actual extraction depends on scan type)
+    current_capacity_kwh = scan.bms_data.get('current_full_kwh') if scan.bms_data else None
+    if not current_capacity_kwh:
+        return jsonify({"error": "Current capacity not available in scan"}), 400
+    
+    # Calculate SOH
+    soh_percent, error_reason = calculate_soh(current_capacity_kwh, 'gross', reference)
+    
+    if error_reason:
+        return jsonify({"error": error_reason}), 400
+    
+    # Update scan metadata
+    if not scan.metadata:
+        scan.metadata = {}
+    scan.metadata['soh_percent'] = soh_percent
+    scan.metadata['soh_reference_id'] = reference.id
+    scan.metadata['soh_reference_capacity'] = reference.gross_capacity_kwh
+    db.session.commit()
+    
+    return jsonify({
+        "soh_percent": soh_percent,
+        "reference_capacity": reference.gross_capacity_kwh,
+        "reference_source": reference.verification_level
+    })
