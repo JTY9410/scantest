@@ -19,7 +19,7 @@ def wescan_test_commands(app):
         # Create definition source
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('canze', :path, :sha, 100, NOW())
+            VALUES ('canze', :path, :sha, 100, CURRENT_TIMESTAMP)
         """), {'path': file_path, 'sha': sha_hash})
         db.session.commit()
         
@@ -247,7 +247,7 @@ def test_canze_vehicle_definitions_join(app):
         # Create definition source (canze type)
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('canze', :path, :sha, 100, NOW())
+            VALUES ('canze', :path, :sha, 100, CURRENT_TIMESTAMP)
         """), {'path': file_path, 'sha': sha_hash})
         db.session.commit()
         
@@ -258,7 +258,7 @@ def test_canze_vehicle_definitions_join(app):
         # Create vehicle_definition with maker/model
         db.session.execute(text("""
             INSERT INTO vehicle_definitions (source_id, maker, model, year_from, year_to, submodel, created_at)
-            VALUES (:sid, 'Renault', 'ZOE', 2019, 2023, 'R135', NOW())
+            VALUES (:sid, 'Renault', 'ZOE', 2019, 2023, 'R135', CURRENT_TIMESTAMP)
         """), {'sid': source_id})
         db.session.commit()
         
@@ -300,7 +300,7 @@ def test_wican_null_ecu_address(app):
         # Create definition source (wican type)
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('wican', :path, :sha, 100, NOW())
+            VALUES ('wican', :path, :sha, 100, CURRENT_TIMESTAMP)
         """), {'path': file_path, 'sha': sha_hash})
         db.session.commit()
         
@@ -346,7 +346,7 @@ def test_common_pid_separation(app):
         # Create definition source
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('obdb', :path, :sha, 100, NOW())
+            VALUES ('obdb', :path, :sha, 100, CURRENT_TIMESTAMP)
         """), {'path': file_path, 'sha': sha_hash})
         db.session.commit()
         
@@ -385,13 +385,20 @@ def test_nissan_infiniti_alias(app):
         from app.core.makers import resolve_maker
         from app.modules.scanner.wescan_profiles import build_profiles, get_profile_coverage
         
-        # Ensure NissanInfiniti alias exists in DB
-        db.session.execute(text("""
-            INSERT INTO maker_aliases (standard_key, english_name, korean_name, aliases)
-            VALUES ('nissan', 'Nissan', '닛산', ARRAY['nissan', 'NissanInfiniti', 'nissaninfiniti', '닛산', '닛싼'])
-            ON CONFLICT (standard_key) DO UPDATE SET
-                aliases = EXCLUDED.aliases
-        """))
+        # Ensure NissanInfiniti alias exists in DB (UPDATE existing nissan entry)
+        # SQLite stores aliases as TEXT, PostgreSQL as ARRAY
+        if "postgresql" in str(db.engine.url):
+            db.session.execute(text("""
+                UPDATE maker_aliases 
+                SET aliases = ARRAY['nissan', 'NissanInfiniti', 'nissaninfiniti', '닛산', '닛싼', 'NISSAN', 'Infiniti', 'INFINITI']
+                WHERE standard_key = 'nissan'
+            """))
+        else:
+            db.session.execute(text("""
+                UPDATE maker_aliases 
+                SET aliases = 'NISSAN,nissan,닛산,Infiniti,INFINITI,NissanInfiniti,nissaninfiniti,닛싼'
+                WHERE standard_key = 'nissan'
+            """))
         db.session.commit()
         
         # Clear cache to force reload
@@ -407,7 +414,7 @@ def test_nissan_infiniti_alias(app):
         # Create definition source
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('obdb', :path, :sha, 100, NOW())
+            VALUES ('obdb', :path, :sha, 100, CURRENT_TIMESTAMP)
         """), {'path': file_path, 'sha': sha_hash})
         db.session.commit()
         
@@ -454,7 +461,7 @@ def test_nfd_common_marker(app):
         # Create definition source
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('obdb', :path, :sha, 100, NOW())
+            VALUES ('obdb', :path, :sha, 100, CURRENT_TIMESTAMP)
         """), {'path': file_path, 'sha': sha_hash})
         db.session.commit()
         
@@ -497,10 +504,22 @@ def test_nissaninfiniti_with_maker_aliases_db(app):
         from app.core.makers import resolve_maker
         from app.modules.scanner.wescan_profiles import build_profiles, get_profile_coverage
         
-        # Run migration to add NissanInfiniti
-        from flask import current_app
-        from flask_migrate import upgrade
-        upgrade()
+        # Ensure NissanInfiniti is in nissan aliases (added by migration c2d8a1f12aa2)
+        # Database should already have this from migrations/conftest setup
+        # Update to ensure NissanInfiniti is included
+        if "postgresql" in str(db.engine.url):
+            db.session.execute(text("""
+                UPDATE maker_aliases 
+                SET aliases = ARRAY['nissan', 'NISSAN', 'NissanInfiniti', 'nissaninfiniti', '닛산', '닛싼', 'Infiniti', 'INFINITI']
+                WHERE standard_key = 'nissan'
+            """))
+        else:
+            db.session.execute(text("""
+                UPDATE maker_aliases 
+                SET aliases = 'NISSAN,nissan,닛산,Infiniti,INFINITI,NissanInfiniti,nissaninfiniti,닛싼'
+                WHERE standard_key = 'nissan'
+            """))
+        db.session.commit()
         
         # Clear cache to reload from DB
         import app.core.makers as makers_module
@@ -517,7 +536,7 @@ def test_nissaninfiniti_with_maker_aliases_db(app):
         
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('obdb', :path, :sha, 100, NOW())
+            VALUES ('obdb', :path, :sha, 100, CURRENT_TIMESTAMP)
         """), {'path': file_path, 'sha': sha_hash})
         db.session.commit()
         
@@ -560,7 +579,7 @@ def test_aaa_generic_common_classification(app):
         # Create definition source
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('obdb', :path, :sha, 100, NOW())
+            VALUES ('obdb', :path, :sha, 100, CURRENT_TIMESTAMP)
         """), {'path': file_path, 'sha': sha_hash})
         db.session.commit()
         
@@ -598,10 +617,22 @@ def test_opel_alias_normalization(app):
     with app.app_context():
         from app.core.makers import resolve_maker
         from app.modules.scanner.wescan_profiles import build_profiles, get_profile_coverage
-        from flask_migrate import upgrade
         
-        # Run migration to add Opel
-        upgrade()
+        # Ensure Opel exists in maker_aliases (added by migration cd16565ff8cb)
+        result = db.session.execute(text("SELECT 1 FROM maker_aliases WHERE standard_key = 'opel'")).scalar()
+        if not result:
+            # Add Opel if missing (for SQLite tests that might not run all migrations)
+            if "postgresql" in str(db.engine.url):
+                db.session.execute(text("""
+                    INSERT INTO maker_aliases (standard_key, english_name, korean_name, aliases)
+                    VALUES ('opel', 'Opel', '오펠', ARRAY['opel', 'Opel', '오펠'])
+                """))
+            else:
+                db.session.execute(text("""
+                    INSERT INTO maker_aliases (standard_key, english_name, korean_name, aliases)
+                    VALUES ('opel', 'Opel', '오펠', 'opel,Opel,오펠')
+                """))
+            db.session.commit()
         
         # Clear cache to reload from DB
         import app.core.makers as makers_module
@@ -618,7 +649,7 @@ def test_opel_alias_normalization(app):
         
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('obdb', :path, :sha, 100, NOW())
+            VALUES ('obdb', :path, :sha, 100, CURRENT_TIMESTAMP)
         """), {'path': file_path, 'sha': sha_hash})
         db.session.commit()
         
@@ -671,7 +702,7 @@ def test_canze_multirow_1to1_matching(app, tmp_path):
         
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('canze', :path, :sha, 100, NOW())
+            VALUES ('canze', :path, :sha, 100, CURRENT_TIMESTAMP)
         """), {'path': file_path, 'sha': sha_hash})
         db.session.commit()
         

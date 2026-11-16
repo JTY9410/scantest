@@ -13,9 +13,9 @@ def destroyed_makers_data(app):
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
             VALUES 
-                ('dbc', '/data/dbc/Aston_Martin_DB11.dbc', :sha1, 100, NOW()),
-                ('dbc', '/data/dbc/MV_Agusta_F4.dbc', :sha2, 100, NOW()),
-                ('dbc', '/data/dbc/Legend_Cars_34.dbc', :sha3, 100, NOW())
+                ('dbc', '/data/dbc/Aston_Martin_DB11.dbc', :sha1, 100, CURRENT_TIMESTAMP),
+                ('dbc', '/data/dbc/MV_Agusta_F4.dbc', :sha2, 100, CURRENT_TIMESTAMP),
+                ('dbc', '/data/dbc/Legend_Cars_34.dbc', :sha3, 100, CURRENT_TIMESTAMP)
         """), {
             'sha1': 'a' + '0' * 63,
             'sha2': 'b' + '0' * 63,
@@ -38,9 +38,9 @@ def destroyed_makers_data(app):
         db.session.execute(text("""
             INSERT INTO vehicle_definitions (source_id, maker, model, powertrain, created_at)
             VALUES 
-                (:aston_id, 'Aston', 'DB11', 'ICE', NOW()),
-                (:mv_id, 'MV', 'F4', 'ICE', NOW()),
-                (:legend_id, 'Legend', '34', 'ICE', NOW())
+                (:aston_id, 'Aston', 'DB11', 'ICE', CURRENT_TIMESTAMP),
+                (:mv_id, 'MV', 'F4', 'ICE', CURRENT_TIMESTAMP),
+                (:legend_id, 'Legend', '34', 'ICE', CURRENT_TIMESTAMP)
         """), {'aston_id': aston_id, 'mv_id': mv_id, 'legend_id': legend_id})
         db.session.commit()
         

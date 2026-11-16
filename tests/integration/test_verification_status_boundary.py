@@ -42,7 +42,7 @@ def test_9_attempts_not_verified(app, boundary_cleanup):
         # Create source and command
         source_id = db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('canze', '/test/boundary1.json', 'hash1', 100, NOW())
+            VALUES ('canze', '/test/boundary1.json', 'hash1', 100, CURRENT_TIMESTAMP)
             RETURNING id
         """)).scalar()
         
@@ -89,7 +89,7 @@ def test_10_attempts_70_percent_not_verified(app, boundary_cleanup):
         # Create source and command
         source_id = db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('canze', '/test/boundary2.json', 'hash2', 100, NOW())
+            VALUES ('canze', '/test/boundary2.json', 'hash2', 100, CURRENT_TIMESTAMP)
             RETURNING id
         """)).scalar()
         
@@ -138,7 +138,7 @@ def test_10_attempts_80_percent_verified(app, boundary_cleanup):
         # Create source and command
         source_id = db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('canze', '/test/boundary3.json', 'hash3', 100, NOW())
+            VALUES ('canze', '/test/boundary3.json', 'hash3', 100, CURRENT_TIMESTAMP)
             RETURNING id
         """)).scalar()
         

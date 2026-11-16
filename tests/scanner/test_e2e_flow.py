@@ -21,7 +21,7 @@ def e2e_test_data(app):
         # Create definition source
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('canze', :path, :sha, 100, NOW())
+            VALUES ('canze', :path, :sha, 100, CURRENT_TIMESTAMP)
         """), {'path': file_path, 'sha': sha_hash})
         db.session.commit()
         
@@ -211,7 +211,7 @@ def test_e2e_null_ecu_handling(app):
         
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('wican', :path, :sha, 100, NOW())
+            VALUES ('wican', :path, :sha, 100, CURRENT_TIMESTAMP)
         """), {'path': file_path, 'sha': sha_hash})
         db.session.commit()
         

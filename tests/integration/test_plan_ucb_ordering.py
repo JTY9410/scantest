@@ -42,7 +42,7 @@ def test_plan_orders_commands_by_ucb(app, plan_ucb_cleanup):
         # Create source and commands
         source_id = db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('canze', '/test/plan_ucb.json', 'hash_plan_ucb', 100, NOW())
+            VALUES ('canze', '/test/plan_ucb.json', 'hash_plan_ucb', 100, CURRENT_TIMESTAMP)
             RETURNING id
         """)).scalar()
         
