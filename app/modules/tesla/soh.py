@@ -1,7 +1,7 @@
 """Tesla SOH (State of Health) calculation."""
 
 from typing import Dict, Any, Optional, Tuple
-from app.modules.scans.battery_capacity import find_reference_capacity, BatteryReferenceCapacity
+from app.modules.scans.battery_soh import prepare_soh_report_data
 
 
 def calculate_soh(current_nominal_full: float, 
@@ -48,39 +48,50 @@ def calculate_soh(current_nominal_full: float,
     elif bol_energy:
         result['warnings'].append(f'BOL 에너지 신호 {bol_energy:.2f} kWh는 비정상 범위 (40-120 kWh 밖)')
     
-    # 기준 용량 테이블 조회
-    ref_cap = find_reference_capacity(manufacturer, model, year, pack_code)
+    # Use comprehensive reference capacity lookup with like-for-like matching
+    # Assume Tesla current_nominal_full is gross capacity
+    soh_data = prepare_soh_report_data(
+        current_capacity_kwh=current_nominal_full,
+        current_capacity_type='gross',
+        maker=manufacturer,
+        model=model,
+        year=year,
+        trim=pack_code,
+        vin=None  # VIN should be passed if available
+    )
     
-    if not ref_cap:
+    result['reference_capacity'] = soh_data['reference_capacity_kwh']
+    result['reference_source'] = soh_data['reference_source']
+    result['reference_verification_level'] = soh_data['reference_verification_level']
+    result['candidates'] = soh_data.get('candidates', [])
+    
+    if soh_data['soh_status']:
+        # Could not calculate SOH (multiple candidates or no reference)
         result['soh_available'] = False
-        result['calculation_note'] = '기준 용량 미등록 → SOH 산정불가 → 판정보류'
-        return result
-    
-    # official/government만 확정 SOH로 사용
-    if ref_cap.source_type in ['official', 'government']:
-        result['reference_capacity'] = ref_cap.reference_energy_kwh
-        result['reference_source'] = ref_cap.source_type
-        result['reference_url'] = ref_cap.source_url
-        result['reference_definition'] = ref_cap.reference_definition
-        result['soh_percent'] = round((current_nominal_full / ref_cap.reference_energy_kwh) * 100, 1)
+        result['calculation_note'] = soh_data['soh_status']
+        if soh_data['candidates']:
+            result['warnings'].append(f"팩 후보 {len(soh_data['candidates'])}개: 관리자 팩ID 선택 필요")
+    elif soh_data['soh_percent']:
+        # SOH calculated successfully
+        result['soh_percent'] = round(soh_data['soh_percent'], 1)
         result['soh_available'] = True
+        ref_type_label = {
+            'gross': '총용량',
+            'net': '사용가능',
+            '공표': '공표'
+        }.get(soh_data['reference_capacity_type'], '총용량')
         result['calculation_note'] = (
-            f'기준: {ref_cap.reference_energy_kwh:.2f} kWh '
-            f'({ref_cap.reference_definition or "공칭 만충"}, {ref_cap.source_type})'
+            f'기준: {soh_data["reference_capacity_kwh"]:.2f} kWh '
+            f'({ref_type_label}, {soh_data["reference_source"]})'
         )
-    
-    # community 출처는 참고치로만
-    elif ref_cap.source_type == 'community':
-        result['reference_capacity'] = ref_cap.reference_energy_kwh
-        result['reference_source'] = 'community'
-        result['reference_url'] = ref_cap.source_url
-        result['soh_percent_reference'] = round((current_nominal_full / ref_cap.reference_energy_kwh) * 100, 1)
+        # Add reference-only info if community source
+        if '2차 자료' in (soh_data['reference_source'] or ''):
+            result['soh_percent_reference'] = result['soh_percent']
+            result['soh_available'] = False  # Mark as reference only
+            result['warnings'].append('2차 자료 출처는 참고용 → 공식 SOH 판정보류')
+    else:
         result['soh_available'] = False
-        result['calculation_note'] = (
-            f'참고 비율 {result["soh_percent_reference"]:.1f}% '
-            f'(커뮤니티 출처 {ref_cap.reference_energy_kwh:.2f} kWh 대비, 미검증)'
-        )
-        result['warnings'].append('커뮤니티 출처는 공식 SOH로 채택하지 않음 → 판정보류')
+        result['calculation_note'] = '기준 용량 미등록 → SOH 산정불가'
     
     return result
 
