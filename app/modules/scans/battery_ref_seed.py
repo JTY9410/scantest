@@ -8,16 +8,51 @@ from app.modules.scans.battery_capacity import BatteryReferenceCapacity
 
 
 def should_seed_battery_references() -> bool:
-    """Check if battery reference data needs seeding."""
-    count = db.session.query(BatteryReferenceCapacity).count()
-    return count == 0
+    """Check if battery reference data needs seeding.
+    
+    Checks for both empty table and old-format rows that need migrating.
+    """
+    total_count = db.session.query(BatteryReferenceCapacity).count()
+    if total_count == 0:
+        return True
+    
+    # Check if old-format rows exist (rows without source_file - from v2.2.8)
+    old_format_count = db.session.query(BatteryReferenceCapacity).filter(
+        BatteryReferenceCapacity.source_file.is_(None)
+    ).count()
+    
+    if old_format_count > 0:
+        current_app.logger.info(f"Found {old_format_count} old-format rows, will re-import")
+        return True
+    
+    # Check if we have the expected count (593 rows: 65 + 528)
+    if total_count < 593:
+        current_app.logger.info(f"Found only {total_count} rows, expected 593, will re-import")
+        return True
+    
+    return False
 
 
 def seed_battery_references():
-    """Idempotently import battery reference data from xlsx files."""
+    """Idempotently import battery reference data from xlsx files.
+    
+    Handles:
+    - Empty table
+    - Old-format rows from v2.2.8 (no source_file) - deletes and re-imports
+    - Partial data - fills in missing rows
+    """
     if not should_seed_battery_references():
-        current_app.logger.info("Battery reference data already seeded, skipping")
+        total = db.session.query(BatteryReferenceCapacity).count()
+        current_app.logger.info(f"Battery reference data already complete ({total} rows), skipping")
         return
+    
+    # Delete old-format rows if they exist
+    old_count = db.session.query(BatteryReferenceCapacity).filter(
+        BatteryReferenceCapacity.source_file.is_(None)
+    ).delete()
+    if old_count > 0:
+        db.session.commit()
+        current_app.logger.info(f"Removed {old_count} old-format rows")
     
     current_app.logger.info("Seeding battery reference capacity data...")
     

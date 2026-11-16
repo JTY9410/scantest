@@ -89,6 +89,23 @@ def battery_ref_import_command(xlsx_path, clear):
         return 1
 
 
+@click.command('battery-ref-seed')
+@with_appcontext
+def battery_ref_seed_command():
+    """Seed battery reference data from data/battery_reference/*.xlsx (idempotent).
+    
+    Runs automatically from entrypoint after migrations. Can be run manually.
+    """
+    from app.modules.scans.battery_ref_seed import seed_battery_references
+    
+    try:
+        seed_battery_references()
+        return 0
+    except Exception as e:
+        click.echo(f"Error seeding battery references: {e}", err=True)
+        return 1
+
+
 def import_import7_file(wb, filename):
     """Import import7 brands capacity master file"""
     imported = 0

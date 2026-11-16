@@ -8,6 +8,13 @@ if ! flask db upgrade; then
   exit 1
 fi
 
+# Always seed battery reference data (idempotent, needed for Tesla SOH)
+echo "Seeding battery reference data..."
+if ! flask battery-ref-seed; then
+  echo "ERROR: Battery reference seed failed. Container startup is aborted." >&2
+  exit 1
+fi
+
 # Import DTC data and seed reference data (only if AUTO_DB_UPGRADE is explicitly enabled)
 case "${AUTO_DB_UPGRADE:-}" in
   1|true|TRUE|True|yes|YES|Yes|on|ON|On)
