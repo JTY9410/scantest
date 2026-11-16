@@ -31,6 +31,8 @@ htmlcov/
 /data/*
 !/data/seed/
 !/data/seed/**
+!/data/battery_reference/
+!/data/battery_reference/**
 /*.trc
 /*.pdf
 
