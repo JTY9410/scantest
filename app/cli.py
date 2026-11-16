@@ -1421,7 +1421,7 @@ def register_cli(app: Flask) -> None:
         
         db.session.execute(text("""
             UPDATE learning_runs 
-            SET status = 'promoted', promoted_at = now(), updated_at = now()
+            SET status = 'promoted', promoted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
             WHERE id = :id
         """), {'id': run_id})
         db.session.commit()
@@ -1454,8 +1454,8 @@ def register_cli(app: Flask) -> None:
         
         db.session.execute(text("""
             UPDATE learning_runs 
-            SET status = 'rolled_back', rolled_back_at = now(), 
-                rollback_reason = :reason, updated_at = now()
+            SET status = 'rolled_back', rolled_back_at = CURRENT_TIMESTAMP, 
+                rollback_reason = :reason, updated_at = CURRENT_TIMESTAMP
             WHERE id = :id
         """), {'id': run_id, 'reason': reason})
         db.session.commit()
@@ -1527,14 +1527,14 @@ def register_cli(app: Flask) -> None:
                 # Restore old label
                 db.session.execute(text("""
                     UPDATE diagnostic_commands
-                    SET label = :old_label, updated_at = now()
+                    SET label = :old_label, updated_at = CURRENT_TIMESTAMP
                     WHERE id = :cmd_id
                 """), {'old_label': h[2], 'cmd_id': h[1]})
                 
                 # Mark as reverted
                 db.session.execute(text("""
                     UPDATE label_change_history
-                    SET reverted_at = now()
+                    SET reverted_at = CURRENT_TIMESTAMP
                     WHERE id = :history_id
                 """), {'history_id': h[0]})
                 reverted += 1
@@ -1788,7 +1788,7 @@ def register_cli(app: Flask) -> None:
             if 'new_unit' in change:
                 db.session.execute(text("""
                     UPDATE diagnostic_commands
-                    SET label = :new_label, unit = :new_unit, updated_at = now()
+                    SET label = :new_label, unit = :new_unit, updated_at = CURRENT_TIMESTAMP
                     WHERE id = :cmd_id
                 """), {
                     'new_label': change['new_label'],
@@ -1798,7 +1798,7 @@ def register_cli(app: Flask) -> None:
             else:
                 db.session.execute(text("""
                     UPDATE diagnostic_commands
-                    SET label = :new_label, updated_at = now()
+                    SET label = :new_label, updated_at = CURRENT_TIMESTAMP
                     WHERE id = :cmd_id
                 """), {'new_label': change['new_label'], 'cmd_id': change['cmd_id']})
             updated += 1

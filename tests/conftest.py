@@ -225,6 +225,29 @@ def _app_base():
                     )
                 """))
                 db.session.commit()
+            
+            # label_change_history
+            try:
+                db.session.execute(text("SELECT 1 FROM label_change_history LIMIT 1"))
+            except Exception:
+                db.session.execute(text("""
+                    CREATE TABLE label_change_history (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        command_id INTEGER NOT NULL,
+                        old_label TEXT NOT NULL,
+                        new_label TEXT NOT NULL,
+                        operation VARCHAR(50) NOT NULL,
+                        changed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        reverted_at DATETIME
+                    )
+                """))
+                db.session.execute(text("""
+                    CREATE INDEX ix_label_change_history_command_id ON label_change_history(command_id)
+                """))
+                db.session.execute(text("""
+                    CREATE INDEX ix_label_change_history_operation ON label_change_history(operation)
+                """))
+                db.session.commit()
     yield app
     with app.app_context():
         engine_name = db.engine.name

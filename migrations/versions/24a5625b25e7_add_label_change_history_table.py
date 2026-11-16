@@ -24,7 +24,7 @@ def upgrade():
         sa.Column('old_label', sa.Text(), nullable=False),
         sa.Column('new_label', sa.Text(), nullable=False),
         sa.Column('operation', sa.String(50), nullable=False),  # 'canze_reimport', etc.
-        sa.Column('changed_at', sa.DateTime(), nullable=False, server_default=sa.text('now()')),
+        sa.Column('changed_at', sa.DateTime(), nullable=False, server_default=sa.text('CURRENT_TIMESTAMP')),
         sa.Column('reverted_at', sa.DateTime(), nullable=True),
         sa.PrimaryKeyConstraint('id'),
         sa.ForeignKeyConstraint(['command_id'], ['diagnostic_commands.id'], ondelete='CASCADE')
