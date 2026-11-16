@@ -79,7 +79,8 @@ def _pairs(items: list[tuple[str, object]]) -> Table:
     cells = [[_p(k, _SMALL), _p(v)] for k, v in items]
     blank = [Paragraph("", _BODY), Paragraph("", _BODY)]
     rows = [cells[i] + (cells[i + 1] if i + 1 < len(cells) else blank) for i in range(0, len(cells), 2)]
-    return _table(rows, [26, 59, 26, 59], header=False)
+    # 레이블 폭 증가 (긴 한국어 레이블 수용: 최고/최저 전압 브릭 번호, 인버터 커패시터 전압 등)
+    return _table(rows, [32, 53, 32, 53], header=False)
 
 
 def _with_unit(item: dict) -> str:

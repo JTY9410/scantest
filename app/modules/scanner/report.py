@@ -996,6 +996,7 @@ def tesla_inspection(scan) -> dict:
             _measure("팩 전류", pack_current, "A", 1),
             _measure("최고 온도", temp_max, "℃", 1),
             _measure("최저 온도", temp_min, "℃", 1),
+            _measure("브릭 개수", brick_count, "개", 0),
             _measure("브릭 최고 전압", brick_max_v, "V", 3),
             _measure("브릭 최저 전압", brick_min_v, "V", 3),
             _measure("브릭 전압 편차", brick_spread, "V", 3),
