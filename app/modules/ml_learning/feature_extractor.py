@@ -9,7 +9,7 @@ from app.modules.scans.models import Scan
 
 def extract_and_store_features(scan: Scan) -> MLScanFeature | None:
     """
-    스캔에서 익명화된 특징을 추출하여 저장.
+    스캔에서 특징을 추출하여 저장 (idempotent per scan_id).
     
     Args:
         scan: Scan 객체
@@ -18,7 +18,12 @@ def extract_and_store_features(scan: Scan) -> MLScanFeature | None:
         생성된 MLScanFeature 또는 None (실패 시)
     """
     try:
-        # 차량번호/VIN 제외 (익명화)
+        # Idempotency: skip if already extracted
+        existing = db.session.query(MLScanFeature).filter_by(scan_id=scan.id).first()
+        if existing:
+            return existing
+        
+        # 차량 정보 (VIN/plate 제외, scan_id는 저장)
         maker = scan.car_maker or "Unknown"
         model = scan.car_model or "Unknown"
         year = scan.car_year
@@ -57,9 +62,9 @@ def extract_and_store_features(scan: Scan) -> MLScanFeature | None:
         device_type = _extract_device_type(scan)
         app_version = _extract_app_version(scan)
         
-        # ML feature 생성 (scan_id는 NULL로 - 익명화)
+        # ML feature 생성 (scan_id 저장 for idempotency)
         feature = MLScanFeature(
-            scan_id=None,  # 익명화: 연결 끊음
+            scan_id=scan.id,  # Track which scan this came from
             maker=maker,
             model=model,
             year=year,
@@ -136,18 +141,32 @@ def _count_significant_dtcs(result: dict) -> int:
 
 def _extract_signal_coverage(result: dict) -> dict[str, bool]:
     """어떤 신호가 읽혔는지 기록 (Tesla upload 레이아웃 포함)."""
-    # Tesla upload layout: decoded dict at top level
+    # Tesla upload layout: decoded dict at top level or nested structures
     if "decoded" in result and isinstance(result["decoded"], dict):
         decoded = result["decoded"]
+        
+        # Check nested structures (soc, pack_vi, bricks, summary, etc.)
+        has_soc = ("soc" in decoded and isinstance(decoded["soc"], dict) and "soc_ui" in decoded["soc"]) or "soc_ui" in decoded
+        has_pack_v = ("pack_vi" in decoded and isinstance(decoded["pack_vi"], dict) and "pack_voltage" in decoded["pack_vi"]) or "pack_voltage" in decoded
+        has_pack_i = ("pack_vi" in decoded and isinstance(decoded["pack_vi"], dict) and "pack_current" in decoded["pack_vi"]) or "pack_current" in decoded
+        
+        summary = decoded.get("summary", {})
+        has_max_temp = "temp_max" in summary or "max_temp" in decoded
+        has_min_temp = "temp_min" in summary or "min_temp" in decoded
+        
+        bricks = decoded.get("bricks", {})
+        has_max_cell = "max_voltage" in bricks or "max_cell_v" in decoded
+        has_min_cell = "min_voltage" in bricks or "min_cell_v" in decoded
+        
         coverage = {
-            "soc": "soc" in decoded or "SOC" in decoded,
-            "soh": "soh" in decoded or "SOH" in decoded,
-            "pack_voltage": any(k in decoded for k in ["pack_voltage", "PackVoltage", "배터리전압"]),
-            "pack_current": any(k in decoded for k in ["pack_current", "PackCurrent", "배터리전류"]),
-            "max_cell_v": any(k in decoded for k in ["max_cell_v", "MaxCellV"]),
-            "min_cell_v": any(k in decoded for k in ["min_cell_v", "MinCellV"]),
-            "max_temp": any(k in decoded for k in ["max_temp", "MaxTemp"]),
-            "min_temp": any(k in decoded for k in ["min_temp", "MinTemp"]),
+            "soc": has_soc,
+            "soh": "soh" in result or "soh_percent_reference" in (result.get("soh", {}) if "soh" in result and isinstance(result["soh"], dict) else {}),
+            "pack_voltage": has_pack_v,
+            "pack_current": has_pack_i,
+            "max_cell_v": has_max_cell,
+            "min_cell_v": has_min_cell,
+            "max_temp": has_max_temp,
+            "min_temp": has_min_temp,
         }
         return coverage
     
@@ -164,17 +183,49 @@ def _extract_signal_coverage(result: dict) -> dict[str, bool]:
 
 
 def _extract_decoded_values(result: dict) -> dict[str, Any]:
-    """디코딩된 주요 값 추출 (Tesla upload 레이아웃 포함, 익명화)."""
+    """디코딩된 주요 값 추출 (Tesla upload 레이아웃 포함, VIN/plate 제외)."""
     values = {}
     
-    # Tesla upload layout: decoded dict at top level
+    # Tesla upload layout: extract from nested structures
     if "decoded" in result and isinstance(result["decoded"], dict):
         decoded = result["decoded"]
+        
+        # Extract from nested structures
+        if "soc" in decoded and isinstance(decoded["soc"], dict):
+            soc_ui = decoded["soc"].get("soc_ui")
+            if soc_ui is not None:
+                values["soc_ui"] = soc_ui
+        
+        if "pack_vi" in decoded and isinstance(decoded["pack_vi"], dict):
+            pack_v = decoded["pack_vi"].get("pack_voltage")
+            pack_i = decoded["pack_vi"].get("pack_current")
+            if pack_v is not None:
+                values["pack_voltage"] = pack_v
+            if pack_i is not None:
+                values["pack_current"] = pack_i
+        
+        if "bricks" in decoded and isinstance(decoded["bricks"], dict):
+            brick_count = decoded["bricks"].get("brick_count")
+            if brick_count is not None:
+                values["brick_count"] = brick_count
+        
+        if "summary" in decoded and isinstance(decoded["summary"], dict):
+            summary = decoded["summary"]
+            for k in ["temp_max", "temp_min"]:
+                if k in summary and summary[k] is not None:
+                    values[k] = summary[k]
+        
+        # Also check top-level for flat values
         for sig_name, sig_val in decoded.items():
-            # 익명화: VIN / 차량번호 제외
-            if "vin" not in sig_name.lower() and "plate" not in sig_name.lower():
-                if isinstance(sig_val, (str, int, float, bool)):
-                    values[sig_name] = sig_val
+            if isinstance(sig_val, (int, float, bool)) and "vin" not in sig_name.lower():
+                values[sig_name] = sig_val
+        
+        # SOH from result.soh
+        if "soh" in result and isinstance(result["soh"], dict):
+            soh_pct = result["soh"].get("soh_percent_reference")
+            if soh_pct is not None:
+                values["soh_percent_reference"] = soh_pct
+        
         return values
     
     # 일반 UDS layout
@@ -224,7 +275,13 @@ def _extract_decoder_sources(result: dict) -> dict[str, str]:
 
 
 def _extract_device_type(scan: Scan) -> str:
-    """장치 타입 추출."""
+    """장치 타입 추출 (uploads는 'file')."""
+    # Check if this is an upload scan
+    if hasattr(scan, 'bms_data') and isinstance(scan.bms_data, dict):
+        source = scan.bms_data.get('source')
+        if source in ('tesla_upload', 'file_upload'):
+            return "file"
+    
     device = (scan.device_type or "").lower()
     if "web" in device:
         return "web"
