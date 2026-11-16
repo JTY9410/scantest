@@ -15,13 +15,13 @@ def conflict_e2e_cleanup(app):
     """Cleanup for conflict E2E tests."""
     with app.app_context():
         db.session.execute(text("DELETE FROM scans WHERE car_no = '88가8888'"))
-        db.session.execute(text("DELETE FROM vin_decode_rules WHERE wmi_pattern = 'ZZZ'"))
+        db.session.execute(text("DELETE FROM vin_decode_rules WHERE wmi_pattern LIKE 'ZZ%'"))
         db.session.commit()
         
         yield
         
         db.session.execute(text("DELETE FROM scans WHERE car_no = '88가8888'"))
-        db.session.execute(text("DELETE FROM vin_decode_rules WHERE wmi_pattern = 'ZZZ'"))
+        db.session.execute(text("DELETE FROM vin_decode_rules WHERE wmi_pattern LIKE 'ZZ%'"))
         db.session.commit()
 
 
@@ -48,7 +48,7 @@ def test_conflict_detection_and_storage(app, conflict_e2e_cleanup):
             INSERT INTO vin_decode_rules 
                 (wmi_pattern, vds_position, vds_value_pattern, manufacturer, powertrain, confidence, source_url, citation_url)
             VALUES 
-                ('ZZZ', NULL, NULL, 'ConflictMaker', 'ICE', 0.9, 'https://example.test/vin', 'https://example.test/vin')
+                ('ZZ1', NULL, NULL, 'ConflictMaker', 'ICE', 0.9, 'https://example.test/vin', 'https://example.test/vin')
         """))
         db.session.commit()
         
@@ -58,7 +58,7 @@ def test_conflict_detection_and_storage(app, conflict_e2e_cleanup):
             'diag_fuel': '전기',  # Plate lookup = BEV
             'diag_company': 'ConflictMaker',
             'model': 'ConflictModel',
-            'diag_car_id': 'ZZZ12345678901234'  # VIN rule = ICE
+            'diag_car_id': 'ZZ112345678901234'  # VIN rule = ICE
         }
         
         fake_steps = [
@@ -133,7 +133,7 @@ def test_conflict_modal_in_html(app, client, conflict_e2e_cleanup):
             INSERT INTO vin_decode_rules 
                 (wmi_pattern, vds_position, vds_value_pattern, manufacturer, powertrain, confidence, source_url, citation_url)
             VALUES 
-                ('ZZZ', NULL, NULL, 'ModalMaker', 'ICE', 0.9, 'https://example.test/vin', 'https://example.test/vin')
+                ('ZZ2', NULL, NULL, 'ModalMaker', 'ICE', 0.9, 'https://example.test/vin', 'https://example.test/vin')
         """))
         db.session.commit()
         
@@ -143,7 +143,7 @@ def test_conflict_modal_in_html(app, client, conflict_e2e_cleanup):
             'diag_fuel': '전기',
             'diag_company': 'ModalMaker',
             'model': 'ModalModel',
-            'diag_car_id': 'ZZZ12345678901234'
+            'diag_car_id': 'ZZ212345678901234'
         }
         
         fake_steps = [{'command': 'ATZ', 'reply': 'OK', 'error': None}]
