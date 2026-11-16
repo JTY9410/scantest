@@ -52,49 +52,140 @@ def test_migration_from_empty_db(app):
 
 
 def test_migration_from_v228_head(app):
-    """Test that migration works from v2.2.8 head (b67b02dd9931)."""
+    """Test production upgrade path: v2.2.8 (bf7eda1, 20261116_120000) -> current head."""
     with app.app_context():
         from app.extensions import db
+        from datetime import datetime
         
-        # Skip - this test has migration ordering issues
-        # Production upgrades run all migrations in order from deployed head
-        pytest.skip("v2.2.8 head test has migration chain dependencies")
+        # Skip for SQLite - only test production path with PostgreSQL
+        if 'sqlite' in str(db.engine.url):
+            pytest.skip("Production upgrade test requires PostgreSQL")
         
-        # Drop all tables (with CASCADE for PostgreSQL foreign keys)
-        if db.engine.name == 'postgresql':
-            db.session.execute(text("DROP TABLE IF EXISTS alembic_version CASCADE"))
-            db.session.commit()
-            # Get all table names and drop with CASCADE
-            inspector = inspect(db.engine)
-            for table in inspector.get_table_names():
-                db.session.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
-            db.session.commit()
-        else:
-            db.drop_all()
-            db.session.execute(text("DROP TABLE IF EXISTS alembic_version"))
-            db.session.commit()
+        # Drop all tables
+        db.session.execute(text("DROP TABLE IF EXISTS alembic_version CASCADE"))
+        db.session.commit()
+        inspector = inspect(db.engine)
+        for table in inspector.get_table_names():
+            db.session.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+        db.session.commit()
         
-        # Stamp at v2.2.8 head (after command_stats migration)
-        stamp(revision='b67b02dd9931')
+        # Upgrade to v2.2.8 head (20261116_120000) via full migration chain
+        upgrade(revision='20261116_120000')
         
-        # Run upgrade to current head
+        # Insert representative data with v2.2.8 schema
+        # battery_reference_capacity had: id, manufacturer, model, year_from, year_to,
+        # pack_code, reference_energy_kwh, reference_definition, source_url, source_type,
+        # verified, notes, created_at
+        db.session.execute(text("""
+            INSERT INTO battery_reference_capacity 
+                (manufacturer, model, year_from, year_to, pack_code, reference_energy_kwh,
+                 reference_definition, source_url, source_type, verified, notes, created_at)
+            VALUES 
+                ('Tesla', 'Model 3', 2018, 2021, 'PK031', 75.0, 'Gross', 
+                 'https://example.com/source', 'Official', true, 'Test data', NOW())
+        """))
+        
+        # Insert test scan
+        db.session.execute(text("""
+            INSERT INTO scans 
+                (car_no, vin, timestamp, result_summary)
+            VALUES 
+                ('11가1111', 'TEST1234567890123', NOW(), '{"status": "ok"}')
+        """))
+        scan_id = db.session.execute(text("SELECT id FROM scans WHERE car_no = '11가1111'")).scalar()
+        
+        # Insert ml_scan_features
+        db.session.execute(text(f"""
+            INSERT INTO ml_scan_features 
+                (scan_id, feature_vector, decoded_values, signals_read, created_at)
+            VALUES 
+                ({scan_id}, '{{}}', '{{}}', '{{}}', NOW())
+        """))
+        
+        db.session.commit()
+        
+        # Count existing rows
+        battery_ref_count_before = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
+        scans_count_before = db.session.execute(text("SELECT COUNT(*) FROM scans")).scalar()
+        ml_features_count_before = db.session.execute(text("SELECT COUNT(*) FROM ml_scan_features")).scalar()
+        
+        # Now upgrade to current head (production path)
         upgrade()
         
-        # Verify all ML tables exist
+        # Verify all tables exist and match models
         inspector = inspect(db.engine)
         tables = inspector.get_table_names()
         
-        required_ml_tables = [
-            'ml_model_runs',
-            'ml_active_model',
-            'ml_consistency_scores',
+        required_tables = [
+            'ml_model_runs', 'ml_active_model', 'ml_consistency_scores',
+            'battery_reference_capacity', 'scans', 'ml_scan_features'
         ]
+        for table in required_tables:
+            assert table in tables, f"Table {table} missing after upgrade"
         
-        for table in required_ml_tables:
-            assert table in tables, f"Table {table} not created by migration from v2.2.8"
+        # Verify battery_reference_capacity has new columns
+        battery_cols = {col['name'] for col in inspector.get_columns('battery_reference_capacity')}
+        new_cols = {'maker', 'pack_id', 'gross_capacity_kwh', 'net_capacity_kwh', 
+                    'source_url_1', 'verification_level'}
+        assert new_cols.issubset(battery_cols), f"Missing battery columns: {new_cols - battery_cols}"
         
-        # Verify maker_aliases exists (should be there from earlier migration)
-        assert 'maker_aliases' in tables, "maker_aliases table missing after upgrade from v2.2.8"
+        # Verify data survived migration
+        battery_ref_count_after = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
+        scans_count_after = db.session.execute(text("SELECT COUNT(*) FROM scans")).scalar()
+        ml_features_count_after = db.session.execute(text("SELECT COUNT(*) FROM ml_scan_features")).scalar()
+        
+        # Battery reference should have more rows (seed data loaded)
+        assert battery_ref_count_after > battery_ref_count_before, \
+            "Battery reference seed did not load"
+        assert scans_count_after == scans_count_before, "Scans data lost"
+        assert ml_features_count_after == ml_features_count_before, "ML features data lost"
+
+
+def test_production_config_starts_no_threads():
+    """Verify production config does not start scheduler threads in web workers."""
+    import os
+    import threading
+    from app import create_app
+    
+    # Save original env
+    orig_env = os.environ.get('FLASK_ENV')
+    orig_sched = os.environ.get('ML_SCHEDULER_ENABLED')
+    orig_backfill = os.environ.get('ML_AUTO_BACKFILL')
+    
+    try:
+        # Set production config with scheduler disabled (default)
+        os.environ['FLASK_ENV'] = 'production'
+        os.environ.pop('ML_SCHEDULER_ENABLED', None)
+        os.environ.pop('ML_AUTO_BACKFILL', None)
+        
+        # Count threads before app creation
+        threads_before = set(t.name for t in threading.enumerate())
+        
+        # Create production app
+        app = create_app('production')
+        
+        with app.app_context():
+            # Count threads after app creation
+            threads_after = set(t.name for t in threading.enumerate())
+            new_threads = threads_after - threads_before
+            
+            # Filter out known test framework threads
+            scheduler_threads = [t for t in new_threads 
+                                if 'scheduler' in t.lower() or 'backfill' in t.lower()]
+            
+            assert len(scheduler_threads) == 0, \
+                f"Production app started scheduler threads: {scheduler_threads}"
+    
+    finally:
+        # Restore env
+        if orig_env:
+            os.environ['FLASK_ENV'] = orig_env
+        else:
+            os.environ.pop('FLASK_ENV', None)
+        if orig_sched:
+            os.environ['ML_SCHEDULER_ENABLED'] = orig_sched
+        if orig_backfill:
+            os.environ['ML_AUTO_BACKFILL'] = orig_backfill
 
 
 def test_single_migration_head(app):
