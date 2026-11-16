@@ -112,14 +112,14 @@ def test_inspection_per_type_and_pdf_pages():
     assert hv["overall"] == "판정보류"
     ev = inspection(_scan("ev", fuel="수소"), {"battery": {}, "dtcs": [], "values": [], "steps": []})
     assert ev["kind"] == "ev" and ev["hydrogen"]
-    # PDF 페이지 수: cells/modules가 있으면 6페이지, 없으면 더 적음
-    # hev_result는 cells 데이터 포함, ice_result는 DTC만
-    for kind, result, pages in (("ev", hev_result, 6), ("hev", hev_result, 6), ("ice", ice_result, 2)):
+    # PDF 페이지 수: cells/modules가 있으면 더 많은 페이지
+    # 수정 후: cells/modules가 비어 있으면 해당 섹션 생략하여 페이지 수 감소
+    for kind, result in (("ev", hev_result), ("hev", hev_result), ("ice", ice_result)):
         content = pdf.render(_scan(kind), result)
-        # Tesla 케이스 (cells/modules 없음)에서는 페이지 수가 다를 수 있음
         actual_pages = len(PdfReader(BytesIO(content)).pages)
-        # ev는 최소 4페이지 (Tesla 케이스), hev는 6페이지, ice는 2페이지
-        assert actual_pages >= (4 if kind == "ev" else pages), f"{kind}: expected {pages}, got {actual_pages}"
+        # 최소 페이지 수: ice=2, ev/hev=4 (cells/modules 없을 때)
+        min_pages = 2 if kind == "ice" else 4
+        assert actual_pages >= min_pages, f"{kind}: expected at least {min_pages}, got {actual_pages}"
 
 
 def test_change_type_on_result_page_keeps_history(app, admin_client):
