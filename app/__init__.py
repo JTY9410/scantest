@@ -132,6 +132,7 @@ def _import_models() -> None:
     from app.modules.battery import models as battery  # noqa: F401
     from app.modules.canlab import models as canlab  # noqa: F401
     from app.modules.definitions import models as definitions  # noqa: F401
+    from app.modules.definitions import audit_models  # noqa: F401
     from app.modules.knowledge import models as knowledge  # noqa: F401
     from app.modules.ml_learning import models as ml_learning  # noqa: F401
     from app.modules.obd import models as obd  # noqa: F401

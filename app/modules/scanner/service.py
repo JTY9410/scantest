@@ -652,31 +652,42 @@ def _update_verification_status(maker: str, model: str | None) -> None:
     Rule: >= 10 attempts with >= 80% success rate → verified
     """
     try:
-        from sqlalchemy import text
+        # Use ORM for SQLite/PostgreSQL portability (UPDATE...FROM not in SQLite)
+        from app.modules.scanner.learning_models import CommandStats
+        from app.modules.definitions.models import DiagnosticCommand
+        from datetime import datetime
         
-        # Find commands that meet verification criteria
-        result = db.session.execute(text("""
-            UPDATE diagnostic_commands dc
-            SET verification_status = 'verified',
-                verification_count = cs.attempts,
-                success_count = cs.successes,
-                updated_at = now()
-            FROM command_stats cs
-            WHERE dc.maker = :maker
-                AND (dc.model = :model OR :model IS NULL)
-                AND cs.maker = :maker
-                AND (cs.model = :model OR :model IS NULL)
-                AND dc.command_bytes = cs.command
-                AND cs.attempts >= 10
-                AND (cs.successes::float / cs.attempts) >= 0.8
-                AND dc.verification_status != 'verified'
-            RETURNING dc.id, dc.label, cs.attempts, cs.successes
-        """), {'maker': maker, 'model': model})
+        # Find command_stats with high success rate
+        stats_query = db.session.query(CommandStats).filter(
+            CommandStats.maker == maker,
+            CommandStats.attempts >= 10,
+            (CommandStats.successes * 1.0 / CommandStats.attempts) >= 0.8
+        )
+        if model:
+            stats_query = stats_query.filter(CommandStats.model == model)
         
-        updated = result.fetchall()
-        if updated:
+        updated_count = 0
+        for stat in stats_query.all():
+            # Find matching unverified commands
+            commands = DiagnosticCommand.query.filter(
+                DiagnosticCommand.maker == maker,
+                DiagnosticCommand.command_bytes == stat.command,
+                DiagnosticCommand.verification_status != 'verified'
+            )
+            if model:
+                commands = commands.filter(DiagnosticCommand.model == model)
+            
+            for cmd in commands.all():
+                cmd.verification_status = 'verified'
+                cmd.verification_count = stat.attempts
+                cmd.success_count = stat.successes
+                cmd.updated_at = datetime.utcnow()
+                updated_count += 1
+        
+        if updated_count > 0:
+            db.session.commit()
             current_app.logger.info(
-                f"Updated {len(updated)} commands to verified for {maker} {model or '(all models)'}"
+                f"Updated {updated_count} commands to verified for {maker} {model or '(all models)'}"
             )
         
     except Exception as exc:

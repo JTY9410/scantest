@@ -57,22 +57,20 @@ def save_powertrain_override(
             "powertrain": new_powertrain
         })
         
-        # Create audit record
-        audit_id = db.session.execute(text("""
-            INSERT INTO powertrain_override_audit 
-            (vehicle_definition_id, user_id, previous_powertrain, new_powertrain,
-             previous_source, new_source, reason, created_at)
-            VALUES (:vd_id, :user_id, :prev_pt, :new_pt, :prev_src, :new_src, :reason, NOW())
-            RETURNING id
-        """), {
-            "vd_id": vehicle_definition_id,
-            "user_id": user_id,
-            "prev_pt": previous_powertrain,
-            "new_pt": new_powertrain,
-            "prev_src": previous_source,
-            "new_src": "manual_override",
-            "reason": reason
-        }).scalar()
+        # Use ORM for SQLite/PostgreSQL portability
+        from app.modules.definitions.audit_models import PowertrainOverrideAudit
+        audit_entry = PowertrainOverrideAudit(
+            vehicle_definition_id=vehicle_definition_id,
+            user_id=user_id,
+            previous_powertrain=previous_powertrain,
+            new_powertrain=new_powertrain,
+            previous_source=previous_source,
+            new_source="manual_override",
+            reason=reason
+        )
+        db.session.add(audit_entry)
+        db.session.flush()
+        audit_id = audit_entry.id
         
         db.session.commit()
         
@@ -120,21 +118,20 @@ def save_powertrain_override(
             "type": scan_type
         })
         
-        audit_id = db.session.execute(text("""
-            INSERT INTO powertrain_override_audit 
-            (scan_id, user_id, previous_powertrain, new_powertrain,
-             previous_source, new_source, reason, created_at)
-            VALUES (:scan_id, :user_id, :prev_pt, :new_pt, :prev_src, :new_src, :reason, NOW())
-            RETURNING id
-        """), {
-            "scan_id": scan_id,
-            "user_id": user_id,
-            "prev_pt": previous_type,
-            "new_pt": new_powertrain,
-            "prev_src": previous_source,
-            "new_src": "manual_override",
-            "reason": reason
-        }).scalar()
+        # Use ORM for SQLite/PostgreSQL portability (NOW() → CURRENT_TIMESTAMP, RETURNING)
+        from app.modules.definitions.audit_models import PowertrainOverrideAudit
+        audit_entry = PowertrainOverrideAudit(
+            scan_id=scan_id,
+            user_id=user_id,
+            previous_powertrain=previous_type,
+            new_powertrain=new_powertrain,
+            previous_source=previous_source,
+            new_source="manual_override",
+            reason=reason
+        )
+        db.session.add(audit_entry)
+        db.session.flush()  # Get the ID
+        audit_id = audit_entry.id
         
         db.session.commit()
         

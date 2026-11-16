@@ -257,6 +257,9 @@ def test_override_saves_to_db(app, client, conflict_e2e_cleanup):
             content_type='application/json'
         )
         
+        if response.status_code != 200:
+            error_data = response.get_json()
+            print(f"Override API error ({response.status_code}): {error_data}")
         assert response.status_code == 200
         
         # Verify in DB (reuse app context from outer with block)
