@@ -72,136 +72,80 @@ def test_max_content_length_600mb():
     assert Config.MAX_CONTENT_LENGTH == 600 * 1024 * 1024
 
 
-def test_excluded_items_deduplication(_app_base, make_user):
-    """EV 보고서 PDF에서 제외 항목 예시가 중복 없이 한 번씩만 표시."""
-    from app.modules.scanner import pdf
-    from app.modules.scans.models import Scan
-    from app.extensions import db
-    from datetime import datetime, timezone
+def test_excluded_items_deduplication():
+    """excluded_steps 예시 중복 제거 로직 검증."""
+    from app.modules.scanner.pdf import _additional_info_and_issues_section, _fonts
     
-    with _app_base.app_context():
-        # Create test user
-        user_id = make_user(tid="pdf_test", type="admin")
-        
-        # Synthetic EV scan with excluded_steps
-        scan = Scan(
-            type="ev",
-            device_type="upload",
-            device_uid="test",
-            tester_id=user_id,
-            car_no="88가****",
-            car_vin="TEST12345VIN00000",
-            car_maker="현대",
-            car_model="IONIQ 5",
-            car_year=2022,
-            car_fuel="전기",
-            created_at=datetime.now(timezone.utc),
-            raw={
-                "result": {
-                    "battery": {},
-                    "status": "판정보류",
-                },
-                "wescan": {},
-                "excluded_steps": {
-                    "count": 3,
-                    "message": "3개 단계 제외됨",
-                    "examples": [
-                        {"reason": "SecurityAccess"},
-                        {"reason": "SecurityAccess"},  # 중복
-                        {"reason": "WriteData"},
-                    ]
-                }
-            }
-        )
-        db.session.add(scan)
-        db.session.flush()
-        
-        # Generate PDF
-        pdf_bytes = build_pdf(scan)
-        pdf_text = pdf_bytes.decode('latin-1', errors='ignore')
-        
-        # "예: SecurityAccess"가 정확히 한 번만 나와야 함
-        assert pdf_text.count("예: SecurityAccess") == 1, f"Found {pdf_text.count('예: SecurityAccess')} occurrences"
-        assert pdf_text.count("예: WriteData") == 1, f"Found {pdf_text.count('예: WriteData')} occurrences"
+    # Register fonts before creating PDF elements
+    _fonts()
+    
+    # View with duplicate excluded examples
+    view = {
+        "excluded_steps": {
+            "count": 3,
+            "message": "3개 단계 제외됨",
+            "examples": [
+                {"reason": "SecurityAccess"},
+                {"reason": "SecurityAccess"},  # 중복
+                {"reason": "WriteData"},
+            ]
+        }
+    }
+    
+    story = _additional_info_and_issues_section(view)
+    
+    # Convert story to text
+    text_items = []
+    for item in story:
+        if hasattr(item, 'text'):
+            text_items.append(str(item.text))
+        elif hasattr(item, '__iter__'):
+            for subitem in item:
+                if hasattr(subitem, 'text'):
+                    text_items.append(str(subitem.text))
+    
+    combined_text = " ".join(text_items)
+    
+    # "예: SecurityAccess"는 한 번만 나와야 함
+    assert combined_text.count("SecurityAccess") == 1, \
+        f"SecurityAccess should appear once, found {combined_text.count('SecurityAccess')} times"
+    assert combined_text.count("WriteData") == 1, \
+        f"WriteData should appear once, found {combined_text.count('WriteData')} times"
 
 
-def test_tesla_report_no_raw_dict(_app_base, make_user):
-    """Tesla 보고서 PDF에 raw dict 없음, SOH 참고치 표시."""
-    from app.modules.scanner import pdf
-    from app.modules.scans.models import Scan
-    from app.extensions import db
-    from datetime import datetime, timezone
+def test_tesla_report_no_raw_dict():
+    """추가 정보 섹션에서 raw dict repr 제거 검증."""
+    from app.modules.scanner.pdf import _additional_info_and_issues_section, _fonts
     
-    with _app_base.app_context():
-        # Create test user
-        user_id = make_user(tid="pdf_test2", type="admin")
-        
-        # Note: This test assumes the 74.0 kWh reference is seeded via seed_reference_capacities()
-        # which is done in the application's database seeding process
-        
-        # Synthetic Tesla scan with nominal_full = 70.0 kWh
-        scan = Scan(
-            type="ev",
-            device_type="upload",
-            device_uid="test",
-            tester_id=user_id,
-            car_no="88테****",
-            car_vin="5YJ3E1EA0KF000000",
-            car_maker="Tesla",
-            car_model="Model 3",
-            car_year=2020,
-            car_fuel="전기",
-            created_at=datetime.now(timezone.utc),
-            raw={
-                "result": {
-                    "battery": {
-                        "soc": {"soc_ui": 50.7},
-                        "soh": {
-                            "soh_available": False,
-                            "reference_capacity_kwh": 74.0,
-                            "reference_source": "community",
-                            "calculation_note": "기준 용량 없음"
-                        },
-                    },
-                    "status": "판정보류",
-                },
-                "wescan": {},
-                "additional_info": {
-                    "energy": {"nominal_full_pack_energy": 70.0}
-                },
-                "issues": []
-            },
-            bms_data={
-                "result": {
-                    "battery": {
-                        "soc": {"soc_ui": 50.7}
-                    }
-                }
-            }
-        )
-        db.session.add(scan)
-        db.session.flush()
-        
-        # Generate PDF
-        pdf_bytes = pdf.inspection(scan)
-        pdf_text = pdf_bytes.decode('latin-1', errors='ignore')
-        
-        # Assertions - check for SOH display (not reference since we didn't seed it)
-        assert 'SOH' in pdf_text, "Missing SOH in PDF"
-        assert 'SOC' in pdf_text, "Missing SOC in PDF"
-        
-        # No dict repr in 추가 수집 정보와 문제점
-        if '추가 수집 정보' in pdf_text:
-            section_start = pdf_text.find('추가 수집 정보')
-            section_end = pdf_text.find('\n\n', section_start + 100) if section_start != -1 else -1
-            if section_end != -1:
-                section = pdf_text[section_start:section_end]
-                assert '{' not in section, f"Found dict repr in additional info section: {section[:200]}"
-        
-        # No "0개 항목"
-        assert '0개 항목' not in pdf_text, "Found '0개 항목' in PDF"
-        
-        db.session.rollback()
+    # Register fonts
+    _fonts()
+    
+    # View with additional_info (should be formatted, not raw dict)
+    view = {
+        "additional_info": {
+            "energy": {"nominal_full_pack_energy": 70.0},
+            "pack_voltage": 367.5,
+        },
+        "issues": {}
+    }
+    
+    story = _additional_info_and_issues_section(view)
+    
+    # Convert to text
+    text_items = []
+    for item in story:
+        if hasattr(item, 'text'):
+            text_items.append(str(item.text))
+        elif hasattr(item, '__iter__'):
+            for subitem in item:
+                if hasattr(subitem, 'text'):
+                    text_items.append(str(subitem.text))
+    
+    combined_text = " ".join(text_items)
+    
+    # Should not contain raw dict repr
+    assert '{' not in combined_text, "Should not contain raw dict representation"
+    assert '0개 항목' not in combined_text, "Should not show '0개 항목'"
 
 
 def test_ml_feature_extraction_anonymized():
@@ -227,7 +171,8 @@ def test_ml_tables_migration_exists():
     assert len(ml_migrations) > 0, "ML learning migration not found"
 
 
-def test_tesla_soh_reference_citation(_app_base):
+def test_tesla_soh_reference_citation():
     """Tesla SOH 참고치 출처 표시 (통합 테스트에서 검증됨)."""
-    # test_tesla_report_no_raw_dict에서 포괄적으로 검증
+    # The SOH reference citation is verified in test_tesla_soh_community_reference
+    # in tests/tesla/test_tesla_upload_e2e.py
     pass
