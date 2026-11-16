@@ -1885,6 +1885,10 @@ def register_cli(app: Flask) -> None:
     
     app.cli.add_command(battery)
     
+    # Battery reference capacity import
+    from app.cli.battery_ref_import import register_commands as register_battery_ref_commands
+    register_battery_ref_commands(app)
+    
     @app.cli.command("seed-tesla-reference")
     def seed_tesla_reference():
         """Tesla 기준 용량 참조 테이블 시드 (기존 행 유지)."""
