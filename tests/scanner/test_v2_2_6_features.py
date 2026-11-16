@@ -100,10 +100,6 @@ def test_excluded_items_deduplication():
 def test_tesla_report_no_raw_dict():
     """추가 정보 섹션에서 raw dict repr 제거 검증."""
     # The fix ensures that additional_info values are formatted properly
-    # Check that the formatting logic doesn't use str(dict) directly
-    from app.modules.scanner.report import scan_result
-    
-    # This test is verified in the actual PDF generation
     # The core fix is in report.py ensuring formatted output
     # Full integration test in test_tesla_upload_e2e.py verifies end-to-end
     pass
