@@ -70,7 +70,7 @@ def seed_battery_references():
         return
     
     # Import each xlsx file
-    from app.cli.battery_ref_import import import_battery_reference
+    from app.modules.scans.battery_ref_import import import_battery_reference
     
     for xlsx_path in xlsx_files:
         try:
