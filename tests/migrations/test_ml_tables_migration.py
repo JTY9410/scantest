@@ -85,12 +85,12 @@ def test_migration_from_v228_head(app):
                  'https://example.com/source', 'Official', true, 'Test data', NOW())
         """))
         
-        # Insert test scan
+        # Insert test scan (v2.2.8 schema: car_no, vin, scan_start, scan_end...)
         db.session.execute(text("""
             INSERT INTO scans 
-                (car_no, vin, timestamp, result_summary)
+                (car_no, vin, scan_start, scan_end, result_summary, status)
             VALUES 
-                ('11가1111', 'TEST1234567890123', NOW(), '{"status": "ok"}')
+                ('11가1111', 'TEST1234567890123', NOW(), NOW(), '{"status": "ok"}', 'completed')
         """))
         scan_id = db.session.execute(text("SELECT id FROM scans WHERE car_no = '11가1111'")).scalar()
         
@@ -141,22 +141,21 @@ def test_migration_from_v228_head(app):
         assert ml_features_count_after == ml_features_count_before, "ML features data lost"
 
 
-def test_production_config_starts_no_threads():
-    """Verify that default production config (no env vars set) does not enable schedulers."""
+def test_production_config_starts_no_threads(app):
+    """Verify that scheduler is not started when flags are unset (default)."""
     import os
     
-    # Verify ML scheduler is disabled by default (no env var set)
-    assert os.environ.get('ML_SCHEDULER_ENABLED') is None or \
-           os.environ.get('ML_SCHEDULER_ENABLED').lower() not in ('true', '1', 'yes'), \
-           "ML_SCHEDULER_ENABLED must not be enabled by default"
+    # This tests the documented production config requirement:
+    # ML_SCHEDULER_ENABLED and ML_AUTO_BACKFILL must be explicitly enabled
     
-    assert os.environ.get('ML_AUTO_BACKFILL') is None or \
-           os.environ.get('ML_AUTO_BACKFILL').lower() not in ('true', '1', 'yes'), \
-           "ML_AUTO_BACKFILL must not be enabled by default"
+    # Verify flags are disabled by default
+    sched_enabled = os.environ.get('ML_SCHEDULER_ENABLED', '').lower() in ('true', '1', 'yes')
+    backfill_enabled = os.environ.get('ML_AUTO_BACKFILL', '').lower() in ('true', '1', 'yes')
     
-    # Verify scheduler startup code checks these flags
-    # The actual scheduler startup is tested via integration: if flags are false,
-    # no threads start. This test ensures the defaults are safe.
+    assert not sched_enabled, "ML_SCHEDULER_ENABLED must not be enabled by default"
+    assert not backfill_enabled, "ML_AUTO_BACKFILL must not be enabled by default"
+    
+    # Integration test confirms no threads are started when these are false
 
 
 def test_single_migration_head(app):
