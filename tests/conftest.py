@@ -38,7 +38,7 @@ def _app_base():
             # SQLite: use create_all (migrations don't work well with SQLite constraints)
             db.drop_all()
             db.create_all()
-            # Create maker_aliases table manually (from migration 023ea1858efa)
+            # Create migration-only tables manually for SQLite
             try:
                 db.session.execute(text("SELECT 1 FROM maker_aliases LIMIT 1"))
             except Exception:
@@ -52,13 +52,99 @@ def _app_base():
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
                 """))
-                # Seed essential data
                 db.session.execute(text("""
                     INSERT INTO maker_aliases (standard_key, english_name, korean_name, aliases) VALUES
                     ('hyundai', 'Hyundai', '현대', 'HYUNDAI,hyundai,현대,현대자동차'),
                     ('kia', 'Kia', '기아', 'KIA,kia,기아,기아자동차'),
                     ('nissan', 'Nissan', '닛산', 'NISSAN,nissan,닛산,Infiniti,INFINITI'),
                     ('tesla', 'Tesla', '테슬라', 'TESLA,tesla,테슬라')
+                """))
+                db.session.commit()
+            
+            try:
+                db.session.execute(text("SELECT 1 FROM command_stats LIMIT 1"))
+            except Exception:
+                db.session.execute(text("""
+                    CREATE TABLE command_stats (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        maker VARCHAR(50) NOT NULL,
+                        model VARCHAR(200),
+                        ecu VARCHAR(50) NOT NULL,
+                        command VARCHAR(100) NOT NULL,
+                        attempts INTEGER DEFAULT 0,
+                        successes INTEGER DEFAULT 0,
+                        timeouts INTEGER DEFAULT 0,
+                        nrcs INTEGER DEFAULT 0,
+                        min_response_ms INTEGER,
+                        max_response_ms INTEGER,
+                        avg_response_ms REAL,
+                        ucb_score REAL,
+                        thompson_alpha REAL DEFAULT 1.0,
+                        thompson_beta REAL DEFAULT 1.0,
+                        last_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        UNIQUE(maker, model, ecu, command)
+                    )
+                """))
+                db.session.commit()
+            
+            try:
+                db.session.execute(text("SELECT 1 FROM learning_runs LIMIT 1"))
+            except Exception:
+                db.session.execute(text("""
+                    CREATE TABLE learning_runs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        run_name VARCHAR(200) NOT NULL,
+                        description TEXT,
+                        started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        completed_at DATETIME,
+                        status VARCHAR(20) DEFAULT 'running',
+                        promoted BOOLEAN DEFAULT 0,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                db.session.commit()
+            
+            try:
+                db.session.execute(text("SELECT 1 FROM battery_reference_capacity LIMIT 1"))
+            except Exception:
+                db.session.execute(text("""
+                    CREATE TABLE battery_reference_capacity (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        manufacturer VARCHAR(50) NOT NULL,
+                        model VARCHAR(100) NOT NULL,
+                        year_from INTEGER,
+                        year_to INTEGER,
+                        pack_code VARCHAR(100),
+                        reference_energy_kwh REAL NOT NULL,
+                        reference_definition VARCHAR(200),
+                        source_url TEXT,
+                        source_type VARCHAR(50) NOT NULL,
+                        verified BOOLEAN DEFAULT 0,
+                        notes TEXT,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                db.session.commit()
+            
+            try:
+                db.session.execute(text("SELECT 1 FROM vin_decode_rules LIMIT 1"))
+            except Exception:
+                db.session.execute(text("""
+                    CREATE TABLE vin_decode_rules (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        wmi_pattern VARCHAR(10) NOT NULL,
+                        manufacturer VARCHAR(50) NOT NULL,
+                        vds_position INTEGER,
+                        vds_value_pattern VARCHAR(20),
+                        powertrain VARCHAR(20) NOT NULL,
+                        confidence REAL DEFAULT 0.9,
+                        description TEXT,
+                        source_url VARCHAR(500) NOT NULL,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
                 """))
                 db.session.commit()
     yield app
