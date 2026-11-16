@@ -21,6 +21,7 @@ class VinDecodeRule(db.Model):
     confidence: Mapped[float] = mapped_column(Float, nullable=False, server_default='0.9', comment='Rule confidence 0.0-1.0')
     description: Mapped[str | None] = mapped_column(Text, comment='Human-readable rule description')
     source_url: Mapped[str] = mapped_column(String(500), nullable=False, comment='Citation: manufacturer doc, NHTSA vPIC, or other reference')
+    citation_url: Mapped[str] = mapped_column(Text, nullable=False, comment='Stable citation URL for this rule')
     created_at: Mapped[datetime] = mapped_column(nullable=False, server_default=db.text('CURRENT_TIMESTAMP'))
     updated_at: Mapped[datetime] = mapped_column(nullable=False, server_default=db.text('CURRENT_TIMESTAMP'))
     
