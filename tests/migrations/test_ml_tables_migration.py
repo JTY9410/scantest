@@ -153,10 +153,24 @@ def test_migration_from_v228_head(app):
         
         # Run battery reference seed (simulates entrypoint)
         from app.modules.scans.battery_ref_seed import seed_battery_references
+        from pathlib import Path
+        
+        # Debug: check if data files exist
+        data_dir = Path(__file__).parent.parent.parent / 'data' / 'battery_reference'
+        print(f"DEBUG: data_dir exists: {data_dir.exists()}, path: {data_dir}")
+        if data_dir.exists():
+            xlsx_files = list(data_dir.glob('*.xlsx'))
+            print(f"DEBUG: found {len(xlsx_files)} xlsx files: {[f.name for f in xlsx_files]}")
+        
+        # Check count before seed
+        count_before = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
+        print(f"DEBUG: battery_reference_capacity count before seed: {count_before}")
+        
         seed_battery_references()
         
         # Verify seed loaded correct data
         battery_ref_count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
+        print(f"DEBUG: battery_reference_capacity count after seed: {battery_ref_count}")
         assert battery_ref_count == 593, \
             f"Battery reference count mismatch: expected 593 (65+528), got {battery_ref_count}"
         
