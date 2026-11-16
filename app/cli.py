@@ -1950,8 +1950,12 @@ def register_cli(app: Flask) -> None:
     cli_dir = Path(__file__).parent / 'cli'
     if str(cli_dir) not in sys.path:
         sys.path.insert(0, str(cli_dir))
-    from battery_ref_import import register_commands as register_battery_ref_commands
-    register_battery_ref_commands(app)
+    # Lazy import to avoid openpyxl dependency at app startup
+    try:
+        from app.cli.battery_ref_import import register_commands as register_battery_ref_commands
+        register_battery_ref_commands(app)
+    except ImportError:
+        pass  # openpyxl not installed, battery-ref commands unavailable
     
     @app.cli.command("seed-tesla-reference")
     def seed_tesla_reference():
