@@ -84,10 +84,17 @@ def test_migration_from_v228_head(app):
 def test_single_migration_head(app):
     """Verify there is only one migration head."""
     with app.app_context():
-        from flask_migrate import current, heads
+        from flask_migrate import current
+        from alembic import command
+        from app.extensions import migrate
         
-        head_list = heads()
-        assert len(head_list) == 1, f"Expected 1 head, found {len(head_list)}: {head_list}"
+        # Get migration context
+        config = migrate.get_config()
+        script = command.ScriptDirectory.from_config(config)
+        
+        # Get all heads
+        heads = list(script.get_heads())
+        assert len(heads) == 1, f"Expected 1 head, found {len(heads)}: {heads}"
 
 
 def test_ml_tables_have_correct_columns(app):
