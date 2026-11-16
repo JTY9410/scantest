@@ -600,11 +600,11 @@ def _process_tesla_upload(
             bol_energy=bol_energy
         )
         
-        # 교차 검증
-        soc_ave = decoded.get('soc', {}).get('soc_ave')
+        # 교차 검증 (UI SOC 사용 - 사용자가 보는 표시 SOC)
+        soc_ui = decoded.get('soc', {}).get('soc_ui')
         nom_rem = decoded.get('energy', {}).get('nominal_energy_remaining')
-        if soc_ave and nom_rem:
-            soh_result = tesla_soh.cross_check_soh(soh_result, soc_ave, nom_rem)
+        if soc_ui and nom_rem:
+            soh_result = tesla_soh.cross_check_soh(soh_result, soc_ui, nom_rem)
     
     # 4. Scan 생성 (run_scan 패턴과 동일하게)
     tesla_data = {
@@ -664,18 +664,29 @@ def process_multi_upload(actor: User, files: list, car_no: str = None, car: dict
     if not files:
         raise UploadError("파일이 없습니다.")
     
-    # 파일 검증 및 읽기
+    # 파일 검증 및 읽기 (스트림으로 처리하여 메모리 사용 최소화)
     file_data = []
     total_size = 0
     for file in files:
         validate_upload(file)
+        # 파일 크기 먼저 확인 (seek를 사용하여 크기 측정)
+        file.seek(0, 2)  # EOF로 이동
+        size = file.tell()
+        file.seek(0)  # 처음으로 되돌림
+        
+        total_size += size
+        
+        # 개별 파일 크기 확인
+        if size > MAX_UPLOAD_SIZE:
+            raise UploadError(f"{file.filename}: 파일 크기가 너무 큽니다. 최대 {MAX_UPLOAD_SIZE // 1024 // 1024}MB까지 업로드 가능합니다.")
+        
+        # 전체 크기 확인
+        if total_size > MAX_UPLOAD_SIZE:
+            raise UploadError(f"전체 파일 크기가 너무 큽니다. 최대 {MAX_UPLOAD_SIZE // 1024 // 1024}MB까지 업로드 가능합니다.")
+        
+        # 내용 읽기
         content = file.read()
-        total_size += len(content)
         file_data.append((file.filename, content))
-    
-    # 전체 크기 확인
-    if total_size > MAX_UPLOAD_SIZE:
-        raise UploadError(f"전체 파일 크기가 너무 큽니다. 최대 {MAX_UPLOAD_SIZE // 1024 // 1024}MB까지 업로드 가능합니다.")
     
     # 파일 병합
     try:

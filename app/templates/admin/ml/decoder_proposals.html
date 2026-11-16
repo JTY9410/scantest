@@ -1,0 +1,40 @@
+{% extends "admin/layout.html" %}
+{% block title %}디코더 제안{% endblock %}
+{% block content %}
+<div class="container mx-auto py-6 px-4">
+  <h1 class="text-2xl font-bold mb-6">디코더 제안</h1>
+  
+  <p class="mb-4 text-gray-600">ML이 학습한 CAN ID/신호 후보입니다. 승인 후 공식 디코더에 추가할 수 있습니다.</p>
+  
+  <table class="w-full border-collapse border">
+    <thead>
+      <tr class="bg-gray-100">
+        <th class="border p-2">ID</th>
+        <th class="border p-2">제조사/모델</th>
+        <th class="border p-2">CAN ID</th>
+        <th class="border p-2">신호명</th>
+        <th class="border p-2">신뢰도</th>
+        <th class="border p-2">샘플 수</th>
+        <th class="border p-2">액션</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for prop in proposals %}
+      <tr>
+        <td class="border p-2">{{ prop.id }}</td>
+        <td class="border p-2">{{ prop.maker }} {{ prop.model }}</td>
+        <td class="border p-2">{{ prop.can_id }}</td>
+        <td class="border p-2">{{ prop.signal_name or '(unknown)' }}</td>
+        <td class="border p-2">{{ (prop.confidence_score * 100)|round(1) }}%</td>
+        <td class="border p-2">{{ prop.sample_count }}</td>
+        <td class="border p-2">
+          <form method="post" action="{{ url_for('ml_admin.approve_proposal', proposal_id=prop.id) }}" style="display:inline;">
+            <button type="submit" class="bg-green-500 hover:bg-green-700 text-white px-2 py-1 rounded text-sm">승인</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

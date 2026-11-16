@@ -66,8 +66,6 @@ jobs:
           file: Dockerfile
           target: prod
           platforms: linux/amd64,linux/arm64
-          build-args: |
-            APP_VERSION=2.2.3+${{ github.sha }}
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

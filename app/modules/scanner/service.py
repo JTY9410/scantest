@@ -544,6 +544,14 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
                           "errors": result["counts"]["errors"], "dtcs": len(result["dtcs"]),
                           "report": report.id, "dataset": dataset.id, "pdf": document.size if document else None})
     db.session.commit()
+    
+    # ML 특징 추출 (백그라운드, 실패해도 스캔은 정상)
+    try:
+        from app.modules.ml_learning.feature_extractor import extract_and_store_features
+        extract_and_store_features(scan)
+    except Exception as exc:
+        current_app.logger.warning(f"ML feature extraction failed for scan {scan.id}: {exc}")
+    
     return scan
 
 

@@ -86,7 +86,7 @@ def calculate_soh(current_nominal_full: float,
 
 
 def cross_check_soh(soh_result: Dict[str, Any],
-                   soc_ave: float | None,
+                   soc_ui: float | None,
                    nominal_remaining: float | None) -> Dict[str, Any]:
     """
     SOH 교차 검증.
@@ -95,21 +95,21 @@ def cross_check_soh(soh_result: Dict[str, Any],
     
     Args:
         soh_result: calculate_soh 결과
-        soc_ave: 평균 SOC (%)
+        soc_ui: UI/displayed SOC (%) - 사용자가 보는 표시 SOC
         nominal_remaining: 공칭 잔여 에너지 (kWh)
     
     Returns:
         교차 검증 결과 추가된 dict
     """
-    if not soc_ave or not nominal_remaining or soc_ave <= 0:
+    if not soc_ui or not nominal_remaining or soc_ui <= 0:
         return soh_result
     
     # 잔여 에너지 ÷ SOC로 만충 추정
-    estimated_full = (nominal_remaining / soc_ave) * 100
+    estimated_full = (nominal_remaining / soc_ui) * 100
     
     soh_result['cross_check'] = {
         'estimated_full_from_soc': round(estimated_full, 2),
-        'method': f'{nominal_remaining:.2f} kWh ÷ {soc_ave:.1f}% × 100',
+        'method': f'{nominal_remaining:.2f} kWh ÷ {soc_ui:.1f}% × 100',
     }
     
     current_full = soh_result['current_nominal_full']

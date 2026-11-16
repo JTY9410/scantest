@@ -70,8 +70,11 @@ class Config:
     from app.__version__ import __version__
     APP_VERSION = __version__
     
-    # 업로드 크기 제한 (Tesla 실제 로그 134~256MB 대응)
-    MAX_CONTENT_LENGTH = 300 * 1024 * 1024  # 300 MB
+    # 업로드 크기 제한 (Tesla 다중 파일: 134MB + 268MB = 402MB까지 대응)
+    MAX_CONTENT_LENGTH = 600 * 1024 * 1024  # 600 MB
+    # Werkzeug form limits: 파일은 디스크로 스트림되므로 메모리 제한에서 제외
+    MAX_FORM_MEMORY_SIZE = 25 * 1024 * 1024  # 25 MB for form fields (not files)
+    MAX_FORM_PARTS = 1000  # Werkzeug 3.0+ DOS protection
 
     SECRET_KEY = os.environ.get("SECRET_KEY")
     SQLALCHEMY_DATABASE_URI = database_url()
@@ -140,8 +143,6 @@ class Config:
     AI_TEST_TIMEOUT_SECONDS = 10
     # 결과지 이미지 판독은 오래 걸린다. gunicorn 요청 제한 시간보다 짧게 둔다.
     AI_REQUEST_TIMEOUT_SECONDS = _int("AI_REQUEST_TIMEOUT_SECONDS", 50)
-    # 도커(gunicorn) 기준 업로드 한도. Tesla 다중 파일 합본 약 305MB 대응으로 600MB.
-    MAX_CONTENT_LENGTH = 600 * 1024 * 1024
     CANLAB_MAX_UPLOAD_BYTES = _int("CANLAB_MAX_UPLOAD_BYTES", 600 * 1024 * 1024)
     # 완료 데이터 대조 허용오차·필수 명령 덮어쓰기(JSON). 예: {"soh": {"abs": 0.2}} / {"ice": [["7E0", "1902"]]}
     # 기본값과 산출 근거: canlab/engine/reconcile.py DEFAULT_TOLERANCES·DEFAULT_REQUIRED, docs/flows/reconcile_tolerances.md
