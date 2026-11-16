@@ -38,6 +38,29 @@ def _app_base():
             # SQLite: use create_all (migrations don't work well with SQLite constraints)
             db.drop_all()
             db.create_all()
+            # Create maker_aliases table manually (from migration 023ea1858efa)
+            try:
+                db.session.execute(text("SELECT 1 FROM maker_aliases LIMIT 1"))
+            except Exception:
+                db.session.execute(text("""
+                    CREATE TABLE maker_aliases (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        standard_key VARCHAR(50) NOT NULL UNIQUE,
+                        english_name VARCHAR(100) NOT NULL,
+                        korean_name VARCHAR(100) NOT NULL,
+                        aliases TEXT NOT NULL,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                # Seed essential data
+                db.session.execute(text("""
+                    INSERT INTO maker_aliases (standard_key, english_name, korean_name, aliases) VALUES
+                    ('hyundai', 'Hyundai', '현대', 'HYUNDAI,hyundai,현대,현대자동차'),
+                    ('kia', 'Kia', '기아', 'KIA,kia,기아,기아자동차'),
+                    ('nissan', 'Nissan', '닛산', 'NISSAN,nissan,닛산,Infiniti,INFINITI'),
+                    ('tesla', 'Tesla', '테슬라', 'TESLA,tesla,테슬라')
+                """))
+                db.session.commit()
     yield app
     with app.app_context():
         engine_name = db.engine.name

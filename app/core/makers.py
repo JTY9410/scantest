@@ -450,19 +450,23 @@ def get_maker_info(maker: str | None) -> dict | None:
     from app.extensions import db
     from sqlalchemy import text
     
-    result = db.session.execute(text("""
-        SELECT standard_key, english_name, korean_name, aliases
-        FROM maker_aliases
-        WHERE standard_key = :key
-    """), {'key': resolved}).fetchone()
-    
-    if result:
-        return {
-            'standard_key': result[0],
-            'english_name': result[1],
-            'korean_name': result[2],
-            'aliases': result[3]
-        }
+    try:
+        result = db.session.execute(text("""
+            SELECT standard_key, english_name, korean_name, aliases
+            FROM maker_aliases
+            WHERE standard_key = :key
+        """), {'key': resolved}).fetchone()
+        
+        if result:
+            return {
+                'standard_key': result[0],
+                'english_name': result[1],
+                'korean_name': result[2],
+                'aliases': result[3]
+            }
+    except Exception:
+        # maker_aliases table doesn't exist yet (graceful degradation)
+        pass
     
     # Fallback
     return {

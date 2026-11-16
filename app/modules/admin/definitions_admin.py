@@ -280,9 +280,17 @@ def classification_list():
     results = db.session.execute(query, params).fetchall()
     
     # 제조사 정보 추가 (한글/영문)
+    from datetime import datetime
     classifications = []
     for row in results:
         maker_info = get_maker_info(row[0])
+        # Parse last_updated if it's a string (SQLite)
+        last_updated = row[7]
+        if isinstance(last_updated, str):
+            try:
+                last_updated = datetime.fromisoformat(last_updated.replace('Z', '+00:00'))
+            except Exception:
+                last_updated = None
         classifications.append({
             'maker': row[0],
             'maker_kr': maker_info.get('korean_name', row[0]) if maker_info else row[0],
@@ -293,7 +301,7 @@ def classification_list():
             'verified_count': row[4],
             'needs_verification_count': row[5],
             'failed_count': row[6],
-            'last_updated': row[7]
+            'last_updated': last_updated
         })
     
     # 전체 통계
