@@ -91,6 +91,11 @@ def extract_and_store_features(scan: Scan) -> MLScanFeature | None:
 
 def _determine_fuel_type(scan: Scan) -> str:
     """차량 연료 타입 결정."""
+    # Tesla upload는 항상 EV
+    if hasattr(scan, 'bms_data') and isinstance(scan.bms_data, dict):
+        if scan.bms_data.get('source') == 'tesla_upload':
+            return "ev"
+    
     fuel = (scan.car_fuel or "").lower()
     if "전기" in fuel or "electric" in fuel:
         return "ev"
