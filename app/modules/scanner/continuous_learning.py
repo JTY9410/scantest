@@ -371,8 +371,8 @@ class LearningStats:
                                 successes = command_stats.successes + EXCLUDED.successes,
                                 timeouts = command_stats.timeouts + EXCLUDED.timeouts,
                                 nrcs = command_stats.nrcs + EXCLUDED.nrcs,
-                                min_response_ms = MIN(command_stats.min_response_ms, EXCLUDED.min_response_ms),
-                                max_response_ms = MAX(command_stats.max_response_ms, EXCLUDED.max_response_ms),
+                                min_response_ms = LEAST(command_stats.min_response_ms, EXCLUDED.min_response_ms),
+                                max_response_ms = GREATEST(command_stats.max_response_ms, EXCLUDED.max_response_ms),
                                 avg_response_ms = (command_stats.avg_response_ms * command_stats.attempts + 
                                                   EXCLUDED.avg_response_ms * EXCLUDED.attempts) / 
                                                  (command_stats.attempts + EXCLUDED.attempts),

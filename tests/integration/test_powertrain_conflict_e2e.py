@@ -42,13 +42,13 @@ def test_conflict_detection_and_storage(app, conflict_e2e_cleanup):
         )
         db.session.add(test_user)
         
-        # Add VIN rule for ICE with source_url
+        # Add VIN rule for ICE with citation_url (NOT NULL)
         # vds_position and vds_value_pattern must be NULL for simple WMI-only matching
         db.session.execute(text("""
             INSERT INTO vin_decode_rules 
-                (wmi_pattern, vds_position, vds_value_pattern, manufacturer, powertrain, confidence, source_url)
+                (wmi_pattern, vds_position, vds_value_pattern, manufacturer, powertrain, confidence, source_url, citation_url)
             VALUES 
-                ('ZZZ', NULL, NULL, 'ConflictMaker', 'ICE', 0.9, 'https://example.test/vin')
+                ('ZZZ', NULL, NULL, 'ConflictMaker', 'ICE', 0.9, 'https://example.test/vin', 'https://example.test/vin')
         """))
         db.session.commit()
         
@@ -131,9 +131,9 @@ def test_conflict_modal_in_html(app, client, conflict_e2e_cleanup):
         # Add VIN rule
         db.session.execute(text("""
             INSERT INTO vin_decode_rules 
-                (wmi_pattern, vds_position, vds_value_pattern, manufacturer, powertrain, confidence, source_url)
+                (wmi_pattern, vds_position, vds_value_pattern, manufacturer, powertrain, confidence, source_url, citation_url)
             VALUES 
-                ('ZZZ', NULL, NULL, 'ModalMaker', 'ICE', 0.9, 'https://example.test/vin')
+                ('ZZZ', NULL, NULL, 'ModalMaker', 'ICE', 0.9, 'https://example.test/vin', 'https://example.test/vin')
         """))
         db.session.commit()
         
