@@ -6,9 +6,6 @@ on:
     workflows: ["Test Suite"]
     types:
       - completed
-    branches:
-      - main
-      - master
   workflow_dispatch:
 
 env:
@@ -18,63 +15,9 @@ env:
 jobs:
   build-and-push:
     # Only run if Test Suite workflow succeeded
-    if: github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Need tags
-      
-      - name: Determine if this is a tag build
-        id: check
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const sha = context.sha;
-            console.log(`Checking Test Suite for SHA: ${sha}`);
-            
-            // Get workflow runs for Test Suite on this exact SHA
-            const {data: runs} = await github.rest.actions.listWorkflowRunsForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              workflow_id: 'test.yml',
-              head_sha: sha,
-              per_page: 1
-            });
-            
-            if (runs.total_count === 0) {
-              core.setFailed(`No Test Suite run found for SHA ${sha}. Tag pushes require passing tests.`);
-              return;
-            }
-            
-            const testRun = runs.workflow_runs[0];
-            console.log(`Test Suite status: ${testRun.status}, conclusion: ${testRun.conclusion}`);
-            
-            if (testRun.status !== 'completed') {
-              core.setFailed(`Test Suite is still ${testRun.status} for SHA ${sha}. Wait for completion.`);
-              return;
-            }
-            
-            if (testRun.conclusion !== 'success') {
-              core.setFailed(`Test Suite failed (${testRun.conclusion}) for SHA ${sha}. Cannot publish image.`);
-              return;
-            }
-            
-            core.setOutput('passed', 'true');
-            console.log(`✅ Test Suite passed for SHA ${sha}`);
-  
-  build-and-push:
-    # Skip if workflow_run triggered but Test Suite failed
-    # For tag pushes, require check-tests job to pass
-    needs: [check-tests]
     if: |
-      always() &&
-      (
-        github.event_name == 'workflow_dispatch' ||
-        (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success') ||
-        (github.event_name == 'push' && needs.check-tests.result == 'success')
-      )
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -89,7 +32,31 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          fetch-depth: 0  # Need full history for tags
 
+      - name: Determine tags for this SHA
+        id: tags
+        run: |
+          SHA="${{ github.event.workflow_run.head_sha || github.sha }}"
+          echo "SHA=${SHA}" >> $GITHUB_OUTPUT
+          
+          # Find all tags pointing to this SHA
+          TAGS=$(git tag --points-at ${SHA} | grep '^v' || true)
+          echo "Git tags at ${SHA}: ${TAGS}"
+          
+          if [ -n "$TAGS" ]; then
+            echo "is_tag_build=true" >> $GITHUB_OUTPUT
+            # Take first version tag
+            VERSION_TAG=$(echo "$TAGS" | head -1)
+            echo "version_tag=${VERSION_TAG}" >> $GITHUB_OUTPUT
+            echo "Building version ${VERSION_TAG} for SHA ${SHA}"
+          else
+            echo "is_tag_build=false" >> $GITHUB_OUTPUT
+            echo "Building commit SHA ${SHA} (no version tag)"
+          fi
+      
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -107,7 +74,7 @@ jobs:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN != '' && secrets.DOCKERHUB_TOKEN || secrets.WECARMOBILITY }}
 
-      - name: Extract metadata
+      - name: Build metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -115,9 +82,11 @@ jobs:
             ${{ env.GHCR_IMAGE }}
             ${{ env.DOCKERHUB_READY == 'yes' && env.IMAGE_NAME || '' }}
           tags: |
-            type=ref,event=tag
+            type=raw,value=${{ steps.tags.outputs.version_tag }},enable=${{ steps.tags.outputs.is_tag_build == 'true' }}
+            type=raw,value=latest,enable=${{ steps.tags.outputs.is_tag_build == 'true' }}
             type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
+          labels: |
+            org.opencontainers.image.version=${{ steps.tags.outputs.version_tag || steps.tags.outputs.SHA }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
