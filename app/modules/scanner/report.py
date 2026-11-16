@@ -843,6 +843,8 @@ def tesla_inspection(scan) -> dict:
     
     scan.bms_data에서 Tesla 디코딩 데이터를 읽어 WESCAN EV 진단서 형식으로 변환.
     """
+    from app import __version__
+    
     when = _local(getattr(scan, "created_at", None))
     tesla_data = scan.bms_data or {}
     decoded = tesla_data.get('decoded', {})
@@ -958,6 +960,7 @@ def tesla_inspection(scan) -> dict:
         "code": code,
         "issued_on": when.strftime("%Y.%m.%d") if when else "-",
         "diagnosed_at": when.strftime("%Y. %m. %d.") if when else "-",
+        "app_version": __version__,
         "vehicle": {
             "manufacturer": manufacturer,
             "model": model,
