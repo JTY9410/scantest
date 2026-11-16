@@ -266,9 +266,52 @@ def import_tesla_vin_decode(ws, sheet_name, filename):
 
 
 def import_tesla_model_year_list(ws, sheet_name, filename):
-    """Import Tesla model year list (Sheet 5)"""
-    # This sheet contains model-year specific data, process similarly to pack DB
-    return 0
+    """Import Tesla model year list (연식별_전체목록)"""
+    imported = 0
+    
+    # Find header row (look for '모델연도' or '차종' columns)
+    header_row = None
+    for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=10), start=1):
+        if row[0].value and ('모델연도' in str(row[0].value) or '차종' in str(row[1].value if len(row) > 1 else '')):
+            header_row = row_idx
+            break
+    
+    if not header_row:
+        return 0
+    
+    # Header: 모델연도,차종,트림,VIN WMI,공장,팩ID,명목/추정 kWh,사용가능 후보 kWh,셀 제조사,화학계
+    for row in ws.iter_rows(min_row=header_row + 1):
+        year = row[0].value
+        if not year or not str(year).strip().isdigit():
+            continue
+        
+        pack_id = row[5].value if len(row) > 5 else None
+        
+        try:
+            record = BatteryReferenceCapacity(
+                source_file='tesla',
+                sheet_name=sheet_name,
+                maker='Tesla',
+                model=str(row[1].value or '').strip() if len(row) > 1 else '',
+                trim=str(row[2].value or '').strip() if len(row) > 2 and row[2].value else None,
+                year_from=parse_int(year),
+                vin_wmi=str(row[3].value or '').strip() if len(row) > 3 and row[3].value else None,
+                vin_factory=str(row[4].value or '').strip() if len(row) > 4 and row[4].value else None,
+                pack_id=str(pack_id).strip() if pack_id else None,
+                gross_capacity_kwh=parse_float(row[6].value) if len(row) > 6 else None,
+                net_capacity_kwh=parse_float(row[7].value) if len(row) > 7 else None,
+                cell_manufacturer=str(row[8].value or '').strip() if len(row) > 8 and row[8].value else None,
+                chemistry=str(row[9].value or '').strip() if len(row) > 9 and row[9].value else None,
+            )
+            
+            db.session.add(record)
+            imported += 1
+            
+        except Exception as e:
+            click.echo(f"    Warning: Failed to import row for year {year}: {e}")
+            continue
+    
+    return imported
 
 
 def import_tesla_official_domestic(ws, sheet_name, filename):
