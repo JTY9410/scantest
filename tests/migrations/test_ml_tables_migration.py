@@ -14,10 +14,20 @@ def test_migration_from_empty_db(app):
         if 'sqlite' in str(db.engine.url):
             pytest.skip("Empty DB migration test requires PostgreSQL")
         
-        # Drop all tables
-        db.drop_all()
-        db.session.execute(text("DROP TABLE IF EXISTS alembic_version CASCADE"))
-        db.session.commit()
+        # Drop all tables (with CASCADE for PostgreSQL foreign keys)
+        if db.engine.name == 'postgresql':
+            # Drop alembic_version first, then use drop_all with CASCADE via raw SQL
+            db.session.execute(text("DROP TABLE IF EXISTS alembic_version CASCADE"))
+            db.session.commit()
+            # Get all table names and drop with CASCADE
+            inspector = inspect(db.engine)
+            for table in inspector.get_table_names():
+                db.session.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+            db.session.commit()
+        else:
+            db.drop_all()
+            db.session.execute(text("DROP TABLE IF EXISTS alembic_version"))
+            db.session.commit()
         
         # Run migrations
         upgrade()
@@ -50,13 +60,19 @@ def test_migration_from_v228_head(app):
         if 'sqlite' in str(db.engine.url):
             pytest.skip("v2.2.8 head test requires PostgreSQL")
         
-        # Drop all tables
-        db.drop_all()
+        # Drop all tables (with CASCADE for PostgreSQL foreign keys)
         if db.engine.name == 'postgresql':
             db.session.execute(text("DROP TABLE IF EXISTS alembic_version CASCADE"))
+            db.session.commit()
+            # Get all table names and drop with CASCADE
+            inspector = inspect(db.engine)
+            for table in inspector.get_table_names():
+                db.session.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+            db.session.commit()
         else:
+            db.drop_all()
             db.session.execute(text("DROP TABLE IF EXISTS alembic_version"))
-        db.session.commit()
+            db.session.commit()
         
         # Stamp at v2.2.8 head (after command_stats migration)
         stamp(revision='b67b02dd9931')
@@ -107,12 +123,18 @@ def test_ml_tables_have_correct_columns(app):
             pytest.skip("ML tables test requires PostgreSQL migrations")
         
         # Drop and recreate via migrations to ensure schema is correct
-        db.drop_all()
         if db.engine.name == 'postgresql':
             db.session.execute(text("DROP TABLE IF EXISTS alembic_version CASCADE"))
+            db.session.commit()
+            # Get all table names and drop with CASCADE
+            inspector_pre = inspect(db.engine)
+            for table in inspector_pre.get_table_names():
+                db.session.execute(text(f"DROP TABLE IF EXISTS {table} CASCADE"))
+            db.session.commit()
         else:
+            db.drop_all()
             db.session.execute(text("DROP TABLE IF EXISTS alembic_version"))
-        db.session.commit()
+            db.session.commit()
         
         # Run migrations to create tables
         upgrade()

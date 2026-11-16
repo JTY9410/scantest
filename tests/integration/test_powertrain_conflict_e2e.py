@@ -214,9 +214,9 @@ def test_override_saves_to_db(app, client, conflict_e2e_cleanup):
         # Add VIN rule
         db.session.execute(text("""
             INSERT INTO vin_decode_rules 
-                (wmi_pattern, vds_position, vds_value_pattern, manufacturer, powertrain, confidence, source_url)
+                (wmi_pattern, vds_position, vds_value_pattern, manufacturer, powertrain, confidence, source_url, citation_url)
             VALUES 
-                ('ZZZ', NULL, NULL, 'OverrideMaker', 'ICE', 0.9, 'https://example.test/vin')
+                ('ZZZ', NULL, NULL, 'OverrideMaker', 'ICE', 0.9, 'https://example.test/vin', 'https://example.test/vin')
         """))
         db.session.commit()
         
