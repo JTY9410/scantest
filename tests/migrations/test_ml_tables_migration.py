@@ -85,9 +85,10 @@ def test_migration_from_v228_head(app):
         """))
         
         # Insert test scans and ml_scan_features to verify they survive
+        # (scans.type is NOT NULL at v2.2.8)
         db.session.execute(text("""
-            INSERT INTO scans (car_no, vin)
-            VALUES ('11가1111', 'TEST1234567890123')
+            INSERT INTO scans (car_no, vin, type)
+            VALUES ('11가1111', 'TEST1234567890123', 'ev')
         """))
         scan_id = db.session.execute(text("SELECT id FROM scans WHERE car_no = '11가1111'")).scalar()
         
