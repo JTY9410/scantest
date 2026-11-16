@@ -190,9 +190,10 @@ def _clean_database(app):
                 for table_name in tables:
                     try:
                         db.session.execute(text(f"TRUNCATE TABLE {table_name} RESTART IDENTITY CASCADE"))
+                        db.session.commit()
                     except Exception:
                         # Table doesn't exist (e.g., new models without migration)
-                        pass
+                        db.session.rollback()
             else:
                 # SQLite fallback (skip tables that don't exist)
                 for table in reversed(db.metadata.sorted_tables):
