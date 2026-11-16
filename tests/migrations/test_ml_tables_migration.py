@@ -102,7 +102,19 @@ def test_ml_tables_have_correct_columns(app):
     with app.app_context():
         from app.extensions import db
         
-        # Ensure tables exist
+        # Skip for SQLite - migrations have PostgreSQL-specific features
+        if 'sqlite' in str(db.engine.url):
+            pytest.skip("ML tables test requires PostgreSQL migrations")
+        
+        # Drop and recreate via migrations to ensure schema is correct
+        db.drop_all()
+        if db.engine.name == 'postgresql':
+            db.session.execute(text("DROP TABLE IF EXISTS alembic_version CASCADE"))
+        else:
+            db.session.execute(text("DROP TABLE IF EXISTS alembic_version"))
+        db.session.commit()
+        
+        # Run migrations to create tables
         upgrade()
         
         inspector = inspect(db.engine)
