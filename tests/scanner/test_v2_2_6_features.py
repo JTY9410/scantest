@@ -105,15 +105,6 @@ def test_tesla_report_no_raw_dict():
     # 실제 스캔 데이터 필요 - 통합 테스트로 이동
     # 단위 테스트로는 복잡하므로 skip
     pass
-    
-    view = tesla_view(scan, decoded, tesla_data)
-    
-    # additional_info는 리스트여야 하고, dict가 아니어야 함
-    assert isinstance(view.get('additional_info'), list)
-    
-    # 각 항목이 문자열이어야 함
-    for item in view.get('additional_info', []):
-        assert isinstance(item, str), f"Expected string, got {type(item)}: {item}"
 
 
 def test_ml_feature_extraction_anonymized():
