@@ -9,6 +9,7 @@ services:
       target: prod
     environment:
       APP_ENV: production
+      FLASK_DEBUG: ${FLASK_DEBUG:-0}
       SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
       PREFERRED_URL_SCHEME: ${PREFERRED_URL_SCHEME:-http}
       AUTO_DB_UPGRADE: ${AUTO_DB_UPGRADE:-1}

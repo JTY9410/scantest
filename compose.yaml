@@ -17,6 +17,7 @@ services:
         required: false
     environment:
       APP_ENV: development
+      FLASK_DEBUG: ${FLASK_DEBUG:-1}
       PROXY_FIX_HOPS: ${PROXY_FIX_HOPS:-1}
       TRUST_PROXY: ${TRUST_PROXY:-1}
       # 큰 CSV(예: 방송 CAN이 많은 28.7MB 기록)도 받는다. 앱 기본값과 같은 64MB.
