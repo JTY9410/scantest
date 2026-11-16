@@ -85,10 +85,10 @@ def test_migration_from_v228_head(app):
         """))
         
         # Create test user for foreign key (scans.tester_id references users.id)
-        # (users table at v2.2.8 has minimal columns: id, tid, name, is_active, created_at, updated_at)
+        # (users table at v2.2.8 has: id, tid, name, created_at, updated_at - no is_active, no user_type)
         db.session.execute(text("""
-            INSERT INTO users (tid, name, is_active, created_at, updated_at)
-            VALUES ('test_tester', 'Test Tester', true, NOW(), NOW())
+            INSERT INTO users (tid, name, created_at, updated_at)
+            VALUES ('test_tester', 'Test Tester', NOW(), NOW())
         """))
         tester_id = db.session.execute(text("SELECT id FROM users WHERE tid = 'test_tester'")).scalar()
         
