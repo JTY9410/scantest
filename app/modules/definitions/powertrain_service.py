@@ -69,10 +69,8 @@ def save_powertrain_override(
             reason=reason
         )
         db.session.add(audit_entry)
-        db.session.flush()
-        audit_id = audit_entry.id
-        
         db.session.commit()
+        audit_id = audit_entry.id
         
         return {
             "success": True,
@@ -130,10 +128,8 @@ def save_powertrain_override(
             reason=reason
         )
         db.session.add(audit_entry)
-        db.session.flush()  # Get the ID
-        audit_id = audit_entry.id
-        
         db.session.commit()
+        audit_id = audit_entry.id
         
         return {
             "success": True,

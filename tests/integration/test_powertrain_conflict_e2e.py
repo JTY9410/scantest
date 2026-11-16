@@ -272,7 +272,8 @@ def test_override_saves_to_db(app, client, conflict_e2e_cleanup):
         assert scan_data is not None
         assert scan_data[0] in ('ice', 'ICE'), f"type should be ice, got {scan_data[0]}"
         assert scan_data[1] == 'manual_override', f"type_source should be manual_override, got {scan_data[1]}"
-        assert scan_data[2] is False, f"conflict should be resolved, got {scan_data[2]}"
+        # SQLite stores False as 0
+        assert scan_data[2] in (False, 0), f"conflict should be resolved, got {scan_data[2]}"
     finally:
         # Restore CSRF setting
         if original_csrf is None:

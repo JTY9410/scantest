@@ -22,7 +22,8 @@ class PowertrainOverrideAudit(db.Model):
         ),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    # Use Integer for SQLite compatibility with autoincrement
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     vehicle_definition_id: Mapped[Optional[int]] = mapped_column(
         BigInteger,
         ForeignKey('vehicle_definitions.id', ondelete='CASCADE'),
