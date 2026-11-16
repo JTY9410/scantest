@@ -249,3 +249,20 @@ class ScanObservation(db.Model):
         Index("ix_scan_observations_definition", "definition_type", "definition_id"),
         Index("ix_scan_observations_success", "success"),
     )
+
+
+class LabelChangeHistory(db.Model):
+    """Track label changes for revert capability."""
+    
+    __tablename__ = 'label_change_history'
+    
+    id: Mapped[int] = mapped_column(primary_key=True)
+    command_id: Mapped[int] = mapped_column(db.ForeignKey('diagnostic_commands.id', ondelete='CASCADE'), nullable=False, index=True)
+    old_label: Mapped[str] = mapped_column(Text, nullable=False)
+    new_label: Mapped[str] = mapped_column(Text, nullable=False)
+    operation: Mapped[str] = mapped_column(String(50), nullable=False, index=True)  # 'canze_reimport', etc.
+    changed_at: Mapped[datetime] = mapped_column(default=func.now(), nullable=False, server_default=db.text('CURRENT_TIMESTAMP'))
+    reverted_at: Mapped[datetime | None] = mapped_column(index=True)
+    
+    def __repr__(self):
+        return f'<LabelChangeHistory {self.id} cmd={self.command_id} op={self.operation}>'
