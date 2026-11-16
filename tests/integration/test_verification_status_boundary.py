@@ -51,7 +51,7 @@ def test_9_attempts_not_verified(app, boundary_cleanup):
                 (source_id, source_type, maker, model, ecu_address, service, pid, 
                  command_bytes, label, verification_status, verification_count, success_count, failure_count, created_at, updated_at)
             VALUES 
-                (:sid, 'canze', :maker, :model, 'BMS', '22', '0101', '220101', 'Test1', 'needs_verification', 0, 0, 0, now(), now())
+                (:sid, 'canze', :maker, :model, 'BMS', '22', '0101', '220101', 'Test1', 'needs_verification', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id, 'maker': maker, 'model': model})
         db.session.commit()
         
@@ -98,7 +98,7 @@ def test_10_attempts_70_percent_not_verified(app, boundary_cleanup):
                 (source_id, source_type, maker, model, ecu_address, service, pid, 
                  command_bytes, label, verification_status, verification_count, success_count, failure_count, created_at, updated_at)
             VALUES 
-                (:sid, 'canze', :maker, :model, 'BMS', '22', '0102', '220102', 'Test2', 'needs_verification', 0, 0, 0, now(), now())
+                (:sid, 'canze', :maker, :model, 'BMS', '22', '0102', '220102', 'Test2', 'needs_verification', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id, 'maker': maker, 'model': model})
         db.session.commit()
         
@@ -147,7 +147,7 @@ def test_10_attempts_80_percent_verified(app, boundary_cleanup):
                 (source_id, source_type, maker, model, ecu_address, service, pid, 
                  command_bytes, label, verification_status, verification_count, success_count, failure_count, created_at, updated_at)
             VALUES 
-                (:sid, 'canze', :maker, :model, 'BMS', '22', '0103', '220103', 'Test3', 'needs_verification', 0, 0, 0, now(), now())
+                (:sid, 'canze', :maker, :model, 'BMS', '22', '0103', '220103', 'Test3', 'needs_verification', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id, 'maker': maker, 'model': model})
         db.session.commit()
         

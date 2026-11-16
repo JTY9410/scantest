@@ -364,23 +364,23 @@ class LearningStats:
                              min_response_ms, max_response_ms, avg_response_ms,
                              ucb_score, thompson_alpha, thompson_beta, last_seen, updated_at)
                             VALUES (:maker, :model, :ecu, :command, :attempts, :successes, :timeouts, :nrcs,
-                                    :min_ms, :max_ms, :avg_ms, :ucb_score, :alpha, :beta, now(), now())
+                                    :min_ms, :max_ms, :avg_ms, :ucb_score, :alpha, :beta, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                             ON CONFLICT (maker, model, ecu, command) 
                             DO UPDATE SET
                                 attempts = command_stats.attempts + EXCLUDED.attempts,
                                 successes = command_stats.successes + EXCLUDED.successes,
                                 timeouts = command_stats.timeouts + EXCLUDED.timeouts,
                                 nrcs = command_stats.nrcs + EXCLUDED.nrcs,
-                                min_response_ms = LEAST(command_stats.min_response_ms, EXCLUDED.min_response_ms),
-                                max_response_ms = GREATEST(command_stats.max_response_ms, EXCLUDED.max_response_ms),
+                                min_response_ms = MIN(command_stats.min_response_ms, EXCLUDED.min_response_ms),
+                                max_response_ms = MAX(command_stats.max_response_ms, EXCLUDED.max_response_ms),
                                 avg_response_ms = (command_stats.avg_response_ms * command_stats.attempts + 
                                                   EXCLUDED.avg_response_ms * EXCLUDED.attempts) / 
                                                  (command_stats.attempts + EXCLUDED.attempts),
                                 ucb_score = EXCLUDED.ucb_score,
                                 thompson_alpha = EXCLUDED.thompson_alpha,
                                 thompson_beta = EXCLUDED.thompson_beta,
-                                last_seen = now(),
-                                updated_at = now()
+                                last_seen = CURRENT_TIMESTAMP,
+                                updated_at = CURRENT_TIMESTAMP
                         """), {
                             'maker': maker, 'model': model, 'ecu': ecu, 'command': command,
                             'attempts': total, 'successes': success, 'timeouts': timeout, 'nrcs': nrc,

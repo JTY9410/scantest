@@ -97,11 +97,14 @@ def _app_base():
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
                         run_name VARCHAR(200) NOT NULL,
                         description TEXT,
-                        started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                        completed_at DATETIME,
-                        status VARCHAR(20) DEFAULT 'running',
-                        promoted BOOLEAN DEFAULT 0,
-                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                        params TEXT,
+                        metrics TEXT,
+                        status VARCHAR(20) DEFAULT 'candidate',
+                        promoted_at DATETIME,
+                        rolled_back_at DATETIME,
+                        rollback_reason TEXT,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
                     )
                 """))
                 db.session.commit()
@@ -144,6 +147,61 @@ def _app_base():
                         source_url VARCHAR(500) NOT NULL,
                         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+                    )
+                """))
+                db.session.commit()
+            
+            # ML tables from migration 20261116_120000
+            try:
+                db.session.execute(text("SELECT 1 FROM ml_model_runs LIMIT 1"))
+            except Exception:
+                db.session.execute(text("""
+                    CREATE TABLE ml_model_runs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        run_type VARCHAR(50) NOT NULL,
+                        trigger_reason VARCHAR(200),
+                        training_samples INTEGER NOT NULL,
+                        validation_samples INTEGER NOT NULL,
+                        test_samples INTEGER NOT NULL,
+                        model_type VARCHAR(50) NOT NULL,
+                        model_path VARCHAR(500),
+                        metrics TEXT,
+                        status VARCHAR(20) NOT NULL,
+                        error_message VARCHAR(500),
+                        started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        completed_at DATETIME
+                    )
+                """))
+                db.session.commit()
+            
+            try:
+                db.session.execute(text("SELECT 1 FROM ml_active_model LIMIT 1"))
+            except Exception:
+                db.session.execute(text("""
+                    CREATE TABLE ml_active_model (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        model_run_id INTEGER NOT NULL,
+                        activated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        activated_by VARCHAR(100),
+                        model_path VARCHAR(500) NOT NULL,
+                        FOREIGN KEY (model_run_id) REFERENCES ml_model_runs(id) ON DELETE CASCADE
+                    )
+                """))
+                db.session.commit()
+            
+            try:
+                db.session.execute(text("SELECT 1 FROM ml_consistency_scores LIMIT 1"))
+            except Exception:
+                db.session.execute(text("""
+                    CREATE TABLE ml_consistency_scores (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        scan_id INTEGER NOT NULL UNIQUE,
+                        score INTEGER NOT NULL,
+                        distribution_match REAL,
+                        physical_plausibility REAL,
+                        issues_detected TEXT,
+                        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                        FOREIGN KEY (scan_id) REFERENCES scans(id) ON DELETE CASCADE
                     )
                 """))
                 db.session.commit()

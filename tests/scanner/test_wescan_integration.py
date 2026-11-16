@@ -34,11 +34,11 @@ def wescan_test_commands(app):
                  formula, unit, verification_status, verification_count, success_count, failure_count,
                  created_at, updated_at)
             VALUES 
-                (:sid, 'canze', '현대', 'Ioniq 5', '7E4', '22', '1050', '221050', 'SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now()),
-                (:sid, 'canze', '현대', 'Ioniq 5', '7E4', '22', '1051', '221051', 'Battery Voltage', 'A*0.1', 'V', 'verified', 0, 0, 0, now(), now()),
-                (:sid, 'canze', '현대', 'Ioniq 6', '7E4', '22', '1050', '221050', 'SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now()),
-                (:sid, 'canze', '기아', 'EV6', '7E4', '22', '1050', '221050', 'SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now()),
-                (:sid, 'canze', '기아', 'EV6', '7E2', '22', '1060', '221060', 'Speed', 'A', 'km/h', 'verified', 0, 0, 0, now(), now())
+                (:sid, 'canze', '현대', 'Ioniq 5', '7E4', '22', '1050', '221050', 'SOC', 'A/2', '%', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (:sid, 'canze', '현대', 'Ioniq 5', '7E4', '22', '1051', '221051', 'Battery Voltage', 'A*0.1', 'V', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (:sid, 'canze', '현대', 'Ioniq 6', '7E4', '22', '1050', '221050', 'SOC', 'A/2', '%', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (:sid, 'canze', '기아', 'EV6', '7E4', '22', '1050', '221050', 'SOC', 'A/2', '%', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (:sid, 'canze', '기아', 'EV6', '7E2', '22', '1060', '221060', 'Speed', 'A', 'km/h', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id})
         db.session.commit()
         
@@ -271,7 +271,7 @@ def test_canze_vehicle_definitions_join(app):
                  created_at, updated_at)
             VALUES 
                 (:sid, 'canze', NULL, NULL, '7BB', '22', '2002', '222002', 
-                 'Battery SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now())
+                 'Battery SOC', 'A/2', '%', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id})
         db.session.commit()
         
@@ -317,7 +317,7 @@ def test_wican_null_ecu_address(app):
                  created_at, updated_at)
             VALUES 
                 (:sid, 'wican', 'Renault_ Kangoo Z.E', 'Renault: Kangoo Z.E.', NULL, 
-                 '22', '1234', '221234', 'Test Field', 'A', '', 'verified', 0, 0, 0, now(), now())
+                 '22', '1234', '221234', 'Test Field', 'A', '', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id})
         db.session.commit()
         
@@ -363,7 +363,7 @@ def test_common_pid_separation(app):
                  created_at, updated_at)
             VALUES 
                 (:sid, 'obdb', '공통규격', NULL, '7E0', '01', '0C', '010C', 
-                 'Engine RPM', '((A*256)+B)/4', 'rpm', 'verified', 0, 0, 0, now(), now())
+                 'Engine RPM', '((A*256)+B)/4', 'rpm', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id})
         db.session.commit()
         
@@ -424,7 +424,7 @@ def test_nissan_infiniti_alias(app):
                  created_at, updated_at)
             VALUES 
                 (:sid, 'obdb', 'NissanInfiniti', 'Leaf', '79B', '22', '1001', '221001', 
-                 'Battery Temp', 'A-40', 'C', 'verified', 0, 0, 0, now(), now())
+                 'Battery Temp', 'A-40', 'C', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id})
         db.session.commit()
         
@@ -474,7 +474,7 @@ def test_nfd_common_marker(app):
                  created_at, updated_at)
             VALUES 
                 (:sid, 'obdb', :maker, NULL, '7E0', '01', '05', '0105', 
-                 'Coolant Temp', 'A-40', 'C', 'verified', 0, 0, 0, now(), now())
+                 'Coolant Temp', 'A-40', 'C', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id, 'maker': maker_nfd})
         db.session.commit()
         
@@ -533,7 +533,7 @@ def test_nissaninfiniti_with_maker_aliases_db(app):
                  created_at, updated_at)
             VALUES 
                 (:sid, 'obdb', 'NissanInfiniti', 'Leaf', '79B', '22', '1002', '221002', 
-                 'SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now())
+                 'SOC', 'A/2', '%', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id})
         db.session.commit()
         
@@ -577,7 +577,7 @@ def test_aaa_generic_common_classification(app):
                  created_at, updated_at)
             VALUES 
                 (:sid, 'obdb', 'AAA_ Generic', NULL, '7E0', '01', '0D', '010D', 
-                 'Vehicle Speed', 'A', 'km/h', 'verified', 0, 0, 0, now(), now())
+                 'Vehicle Speed', 'A', 'km/h', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id})
         db.session.commit()
         
@@ -634,7 +634,7 @@ def test_opel_alias_normalization(app):
                  created_at, updated_at)
             VALUES 
                 (:sid, 'obdb', 'Opel', 'Ampera-e', '7E4', '22', '1100', '221100', 
-                 'Battery SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now())
+                 'Battery SOC', 'A/2', '%', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id})
         db.session.commit()
         
@@ -692,9 +692,9 @@ def test_canze_multirow_1to1_matching(app, tmp_path):
                  created_at, updated_at)
             VALUES 
                 (:sid, 'canze', 'renault', 'ZOE Phase 2', '7BB', '22', '2002',
-                 '222002', 4, 0, 'ff', '%', 'verified', 0, 0, 0, now(), now()),
+                 '222002', 4, 0, 'ff', '%', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
                 (:sid, 'canze', 'renault', 'ZOE Phase 2', '7BB', '22', '2002',
-                 '222002', 5, 0, 'ff', '%', 'verified', 0, 0, 0, now(), now())
+                 '222002', 5, 0, 'ff', '%', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id})
         db.session.commit()
         

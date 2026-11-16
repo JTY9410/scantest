@@ -29,7 +29,7 @@ def canze_multifield_data(app, tmp_path):
         sha_hash = '0' * 64
         db.session.execute(text("""
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
-            VALUES ('canze', :path, :sha, 100, now())
+            VALUES ('canze', :path, :sha, 100, CURRENT_TIMESTAMP)
         """), {'path': str(csv_file), 'sha': sha_hash})
         db.session.commit()
         
@@ -46,12 +46,12 @@ def canze_multifield_data(app, tmp_path):
                  verification_status, verification_count, success_count, failure_count,
                  created_at, updated_at)
             VALUES 
-                (:sid, 'canze', '7DF', '19', '020F', '19020F', 'ff', 2, 0, 'needs_verification', 0, 0, 0, now(), now()),
-                (:sid, 'canze', '7DF', '19', '020F', '19020F', '2ff', 2, 2, 'needs_verification', 0, 0, 0, now(), now()),
-                (:sid, 'canze', '7DF', '19', '020F', '19020F', '4ff', 2, 4, 'needs_verification', 0, 0, 0, now(), now()),
-                (:sid, 'canze', '7DF', '19', '020F', '19020F', '1ff', 3, 0, 'needs_verification', 0, 0, 0, now(), now()),
-                (:sid, 'canze', '7E4', '21', '01', '2101', 'ff', 0, 0, 'needs_verification', 0, 0, 0, now(), now()),
-                (:sid, 'canze', '7E4', '21', '01', '2101', '4ff', 1, 0, 'needs_verification', 0, 0, 0, now(), now())
+                (:sid, 'canze', '7DF', '19', '020F', '19020F', 'ff', 2, 0, 'needs_verification', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (:sid, 'canze', '7DF', '19', '020F', '19020F', '2ff', 2, 2, 'needs_verification', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (:sid, 'canze', '7DF', '19', '020F', '19020F', '4ff', 2, 4, 'needs_verification', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (:sid, 'canze', '7DF', '19', '020F', '19020F', '1ff', 3, 0, 'needs_verification', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (:sid, 'canze', '7E4', '21', '01', '2101', 'ff', 0, 0, 'needs_verification', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (:sid, 'canze', '7E4', '21', '01', '2101', '4ff', 1, 0, 'needs_verification', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id})
         db.session.commit()
         

@@ -52,8 +52,8 @@ def test_plan_orders_commands_by_ucb(app, plan_ucb_cleanup):
                 (source_id, source_type, maker, model, ecu_address, service, pid, 
                  command_bytes, label, verification_status, verification_count, success_count, failure_count, created_at, updated_at)
             VALUES 
-                (:sid, 'canze', :maker, :model, :ecu, '22', '0107', '220107', 'HighSuccess', 'verified', 0, 0, 0, now(), now()),
-                (:sid, 'canze', :maker, :model, :ecu, '22', '0108', '220108', 'LowSuccess', 'verified', 0, 0, 0, now(), now())
+                (:sid, 'canze', :maker, :model, :ecu, '22', '0107', '220107', 'HighSuccess', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+                (:sid, 'canze', :maker, :model, :ecu, '22', '0108', '220108', 'LowSuccess', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id, 'maker': maker, 'model': model, 'ecu': ecu})
         db.session.commit()
         

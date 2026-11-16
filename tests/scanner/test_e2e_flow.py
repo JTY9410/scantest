@@ -38,29 +38,29 @@ def e2e_test_data(app):
             VALUES 
                 -- OBD2 Standard (Mode 01)
                 (:sid, 'canze', 'renault', 'ZOE', '7DF', '01', '00', '0100', 
-                 'PIDs Supported', 'A', '', 'verified', 0, 0, 0, now(), now()),
+                 'PIDs Supported', 'A', '', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
                 (:sid, 'canze', 'renault', 'ZOE', '7DF', '01', '0C', '010C', 
-                 'Engine RPM', 'A*256+B/4', 'rpm', 'verified', 0, 0, 0, now(), now()),
+                 'Engine RPM', 'A*256+B/4', 'rpm', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
                 
                 -- DTC Commands (Mode 03, 07, 0A)
                 (:sid, 'canze', 'renault', 'ZOE', '7E4', '03', '', '03', 
-                 'Request DTC', '', '', 'verified', 0, 0, 0, now(), now()),
+                 'Request DTC', '', '', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
                 (:sid, 'canze', 'renault', 'ZOE', '7E4', '07', '', '07', 
-                 'Request Pending DTC', '', '', 'verified', 0, 0, 0, now(), now()),
+                 'Request Pending DTC', '', '', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
                 (:sid, 'canze', 'renault', 'ZOE', '7E4', '0A', '', '0A', 
-                 'Request Permanent DTC', '', '', 'verified', 0, 0, 0, now(), now()),
+                 'Request Permanent DTC', '', '', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
                 
                 -- BMS Commands (Mode 22)
                 (:sid, 'canze', 'renault', 'ZOE', '7BB', '22', '2002', '222002', 
-                 'Battery SOC', 'A/2', '%', 'verified', 0, 0, 0, now(), now()),
+                 'Battery SOC', 'A/2', '%', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
                 (:sid, 'canze', 'renault', 'ZOE', '7BB', '22', '2003', '222003', 
-                 'Battery Voltage', 'A*256+B/10', 'V', 'verified', 0, 0, 0, now(), now()),
+                 'Battery Voltage', 'A*256+B/10', 'V', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
                 (:sid, 'canze', 'renault', 'ZOE', '7BB', '22', '2004', '222004', 
-                 'Battery Current', '(A*256+B-32768)/10', 'A', 'verified', 0, 0, 0, now(), now()),
+                 'Battery Current', '(A*256+B-32768)/10', 'A', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
                 
                 -- Additional ECUs
                 (:sid, 'canze', 'renault', 'ZOE', '7E2', '22', '1001', '221001', 
-                 'Motor Speed', 'A*256+B', 'rpm', 'verified', 0, 0, 0, now(), now())
+                 'Motor Speed', 'A*256+B', 'rpm', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id})
         db.session.commit()
         
@@ -227,7 +227,7 @@ def test_e2e_null_ecu_handling(app):
                  created_at, updated_at)
             VALUES 
                 (:sid, 'wican', 'tesla', 'Model 3', NULL, '01', '00', '0100', 
-                 'PIDs Supported', 'verified', 0, 0, 0, now(), now())
+                 'PIDs Supported', 'verified', 0, 0, 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         """), {'sid': source_id})
         db.session.commit()
         
