@@ -72,22 +72,29 @@ def test_max_content_length_600mb():
     assert Config.MAX_CONTENT_LENGTH == 600 * 1024 * 1024
 
 
-def test_excluded_items_deduplication(_app_base):
+def test_excluded_items_deduplication(_app_base, make_user):
     """EV 보고서 PDF에서 제외 항목 예시가 중복 없이 한 번씩만 표시."""
     from app.modules.scanner import pdf
     from app.modules.scans.models import Scan
+    from app.extensions import db
     from datetime import datetime, timezone
     
     with _app_base.app_context():
+        # Create test user
+        user_id = make_user(tid="pdf_test", type="admin")
+        
         # Synthetic EV scan with excluded_steps
         scan = Scan(
             type="ev",
+            device_type="upload",
+            device_uid="test",
+            tester_id=user_id,
             car_no="88가****",
+            car_vin="TEST12345VIN00000",
             car_maker="현대",
             car_model="IONIQ 5",
             car_year=2022,
             car_fuel="전기",
-            verdict="판정보류",
             created_at=datetime.now(timezone.utc),
             raw={
                 "result": {
@@ -106,6 +113,8 @@ def test_excluded_items_deduplication(_app_base):
                 }
             }
         )
+        db.session.add(scan)
+        db.session.flush()
         
         # Generate PDF
         pdf_bytes = build_pdf(scan)
@@ -125,6 +134,9 @@ def test_tesla_report_no_raw_dict(_app_base, make_user):
     from datetime import datetime, timezone
     
     with _app_base.app_context():
+        # Create test user
+        user_id = make_user(tid="pdf_test2", type="admin")
+        
         # Seed 74.0 kWh community reference for Tesla Model 3
         ref = BatteryReferenceCapacity(
             manufacturer="Tesla",
@@ -142,12 +154,15 @@ def test_tesla_report_no_raw_dict(_app_base, make_user):
         # Synthetic Tesla scan with nominal_full = 70.0 kWh
         scan = Scan(
             type="ev",
+            device_type="upload",
+            device_uid="test",
+            tester_id=user_id,
             car_no="88테****",
+            car_vin="5YJ3E1EA0KF000000",
             car_maker="Tesla",
             car_model="Model 3",
             car_year=2020,
             car_fuel="전기",
-            verdict="판정보류",
             created_at=datetime.now(timezone.utc),
             raw={
                 "result": {
@@ -176,6 +191,8 @@ def test_tesla_report_no_raw_dict(_app_base, make_user):
                 }
             }
         )
+        db.session.add(scan)
+        db.session.flush()
         
         # Generate PDF
         pdf_bytes = build_pdf(scan)
