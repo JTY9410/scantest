@@ -5,7 +5,7 @@ from flask.cli import with_appcontext
 from pathlib import Path
 import openpyxl
 from app.extensions import db
-from app.models.battery_reference import BatteryReferenceCapacity
+from app.modules.scans.battery_capacity import BatteryReferenceCapacity
 
 
 def parse_float(value):
