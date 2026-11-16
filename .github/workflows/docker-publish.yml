@@ -1,10 +1,15 @@
 name: Build and Push Docker Image
 
 on:
-  push:
+  # Only run on tags (always) or on main/master after Test Suite passes
+  workflow_run:
+    workflows: ["Test Suite"]
+    types:
+      - completed
     branches:
       - main
       - master
+  push:
     tags:
       - 'v*'
   workflow_dispatch:
@@ -15,6 +20,11 @@ env:
 
 jobs:
   build-and-push:
+    # Skip if workflow_run triggered but Test Suite failed
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success')
     runs-on: ubuntu-latest
     permissions:
       contents: read
