@@ -35,7 +35,7 @@ def upgrade():
     
     # Add missing columns idempotently
     columns_to_add = [
-        ('source_file', sa.String(100), False, 'manual'),
+        ('source_file', sa.String(100), True, None),  # Nullable, no default
         ('sheet_name', sa.String(100), True, None),
         ('row_number', sa.Integer(), True, None),
         ('trim', sa.String(200), True, None),
@@ -60,7 +60,7 @@ def upgrade():
         ('source_url_2', sa.Text(), True, None),
         ('source_id', sa.String(100), True, None),
         ('warnings', sa.Text(), True, None),
-        ('updated_at', sa.DateTime(), False, sa.text('CURRENT_TIMESTAMP')),
+        ('updated_at', sa.DateTime(), True, None),  # Nullable, app sets it
     ]
     
     for col_name, col_type, nullable, server_default in columns_to_add:
