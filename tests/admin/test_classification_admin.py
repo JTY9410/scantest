@@ -18,6 +18,8 @@ def classification_test_data(app):
             INSERT INTO definition_sources (source_type, file_path, sha256, file_size, imported_at)
             VALUES ('canze', :path, :sha, 100, :now)
         """), {'path': file_path, 'sha': sha_hash, 'now': datetime.utcnow()})
+        
+        now = datetime.utcnow()
         db.session.commit()
         
         source_id = db.session.execute(text("""
@@ -25,6 +27,7 @@ def classification_test_data(app):
         """), {'path': file_path}).scalar()
         
         # 현대, Hyundai, 기아 명령어 추가
+        now = datetime.utcnow()
         db.session.execute(text("""
             INSERT INTO diagnostic_commands 
                 (source_id, source_type, maker, model, ecu_address, service, pid, command_bytes, 
@@ -32,12 +35,12 @@ def classification_test_data(app):
                  created_at, updated_at)
             VALUES 
                 (:sid, 'canze', '현대', 'IONIQ 5', '7E4', '22', '1050', '221050', 
-                 'SOC', 'verified', 0, 0, 0, now(), now()),
+                 'SOC', 'verified', 0, 0, 0, :now, :now),
                 (:sid, 'canze', 'Hyundai', 'Kona', '7E4', '22', '1051', '221051', 
-                 'Voltage', 'needs_verification', 0, 0, 0, now(), now()),
+                 'Voltage', 'needs_verification', 0, 0, 0, :now, :now),
                 (:sid, 'canze', '기아', 'EV6', '7E4', '22', '1052', '221052', 
-                 'Current', 'failed', 0, 0, 0, now(), now())
-        """), {'sid': source_id})
+                 'Current', 'failed', 0, 0, 0, :now, :now)
+        """), {'sid': source_id, 'now': now})
         db.session.commit()
         
         # vehicle_definitions에 동력원 정보 추가
@@ -45,10 +48,10 @@ def classification_test_data(app):
             INSERT INTO vehicle_definitions 
                 (source_id, maker, model, powertrain, year_from, year_to, created_at)
             VALUES 
-                (:sid, '현대', 'IONIQ 5', 'BEV', 2021, 2024, now()),
-                (:sid, 'Hyundai', 'Kona', 'BEV', 2019, 2024, now()),
-                (:sid, '기아', 'EV6', 'BEV', 2021, 2024, now())
-        """), {'sid': source_id})
+                (:sid, '현대', 'IONIQ 5', 'BEV', 2021, 2024, :now),
+                (:sid, 'Hyundai', 'Kona', 'BEV', 2019, 2024, :now),
+                (:sid, '기아', 'EV6', 'BEV', 2021, 2024, :now)
+        """), {'sid': source_id, 'now': now})
         db.session.commit()
         
         yield {'source_id': source_id, 'file_path': file_path}
