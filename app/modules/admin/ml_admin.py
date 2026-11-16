@@ -5,7 +5,9 @@ from flask_login import login_required
 
 from app.modules.auth.access import admin_required
 from app.extensions import db
-from app.modules.ml_learning.models import MLAnomalyDetection, MLDecoderProposal, MLFeedback, MLModel
+from app.modules.ml_learning.models import (
+    MLModelRun, MLActiveModel, MLDecoderProposal, MLConsistencyScore
+)
 
 bp = Blueprint("ml_admin", __name__, url_prefix="/admin/ml")
 
