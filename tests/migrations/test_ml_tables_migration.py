@@ -141,60 +141,36 @@ def test_migration_from_v228_head(app):
         assert ml_features_count_after == ml_features_count_before, "ML features data lost"
 
 
-def test_production_config_starts_no_threads(app):
+def test_production_config_starts_no_threads(monkeypatch):
     """Verify production config does not start scheduler threads in web workers."""
-    import os
     import threading
     from app import create_app
     
-    # Use test app's database URI (already valid)
-    db_uri = app.config['SQLALCHEMY_DATABASE_URI']
+    # Set all required production env vars via monkeypatch (applied before config load)
+    monkeypatch.setenv('SQLALCHEMY_DATABASE_URI', 'sqlite:///:memory:')
+    monkeypatch.setenv('SECRET_KEY', 'test-secret-key-for-thread-test')
+    monkeypatch.setenv('JWT_SECRET', 'test-jwt-secret-for-thread-test')
+    # Ensure scheduler is disabled (defaults)
+    monkeypatch.delenv('ML_SCHEDULER_ENABLED', raising=False)
+    monkeypatch.delenv('ML_AUTO_BACKFILL', raising=False)
     
-    # Save original env
-    orig_sched = os.environ.get('ML_SCHEDULER_ENABLED')
-    orig_backfill = os.environ.get('ML_AUTO_BACKFILL')
-    orig_db = os.environ.get('SQLALCHEMY_DATABASE_URI')
-    orig_secret = os.environ.get('SECRET_KEY')
+    # Count threads before app creation
+    threads_before = set(t.name for t in threading.enumerate())
     
-    try:
-        # Set production-like config with scheduler disabled (default)
-        os.environ['SQLALCHEMY_DATABASE_URI'] = db_uri
-        os.environ['SECRET_KEY'] = 'test-key-for-thread-test'
-        os.environ.pop('ML_SCHEDULER_ENABLED', None)
-        os.environ.pop('ML_AUTO_BACKFILL', None)
-        
-        # Count threads before app creation
-        threads_before = set(t.name for t in threading.enumerate())
-        
-        # Create production app (config_name='production' but TESTING will be False)
-        prod_app = create_app('production')
-        
-        with prod_app.app_context():
-            # Count threads after app creation
-            threads_after = set(t.name for t in threading.enumerate())
-            new_threads = threads_after - threads_before
-            
-            # Filter scheduler/backfill threads
-            scheduler_threads = [t for t in new_threads 
-                                if 'scheduler' in t.lower() or 'backfill' in t.lower()]
-            
-            assert len(scheduler_threads) == 0, \
-                f"Production app started scheduler threads: {scheduler_threads}"
+    # Create production app
+    app = create_app('production')
     
-    finally:
-        # Restore env
-        if orig_db:
-            os.environ['SQLALCHEMY_DATABASE_URI'] = orig_db
-        else:
-            os.environ.pop('SQLALCHEMY_DATABASE_URI', None)
-        if orig_secret:
-            os.environ['SECRET_KEY'] = orig_secret
-        else:
-            os.environ.pop('SECRET_KEY', None)
-        if orig_sched:
-            os.environ['ML_SCHEDULER_ENABLED'] = orig_sched
-        if orig_backfill:
-            os.environ['ML_AUTO_BACKFILL'] = orig_backfill
+    with app.app_context():
+        # Count threads after app creation
+        threads_after = set(t.name for t in threading.enumerate())
+        new_threads = threads_after - threads_before
+        
+        # Filter scheduler/backfill threads
+        scheduler_threads = [t for t in new_threads 
+                            if 'scheduler' in t.lower() or 'backfill' in t.lower()]
+        
+        assert len(scheduler_threads) == 0, \
+            f"Production app started scheduler threads: {scheduler_threads}"
 
 
 def test_single_migration_head(app):
