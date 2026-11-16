@@ -77,12 +77,20 @@ def decode_0x292_soc(frames: List[Tuple[float, bytes]]) -> Dict[str, Any]:
     Max: bits[29:20] * 0.1 %
     Ave: bits[39:30] * 0.1 %
     BOL: bits[49:40] * 0.1 kWh
+    
+    Note: DLC 6일 때는 BOL 없이 5바이트까지만 디코딩 (UI까지는 3바이트면 충분)
     """
     soc_vals = []
     
     for ts, data in frames:
-        if len(data) < 8:
+        dlc = len(data)
+        if dlc < 3:
             continue
+        
+        # 최소 3바이트는 있어야 UI SOC까지 디코딩 가능
+        # 8바이트 미만일 경우 부족한 바이트를 0으로 패딩
+        if dlc < 8:
+            data = data + b'\x00' * (8 - dlc)
         
         # 8바이트를 64bit little-endian으로
         val = struct.unpack('<Q', data)[0]
@@ -91,7 +99,9 @@ def decode_0x292_soc(frames: List[Tuple[float, bytes]]) -> Dict[str, Any]:
         soc_ui = ((val >> 10) & 0x3FF) * 0.1
         soc_max = ((val >> 20) & 0x3FF) * 0.1
         soc_ave = ((val >> 30) & 0x3FF) * 0.1
-        bol = ((val >> 40) & 0x3FF) * 0.1
+        
+        # BOL은 5바이트 이상 있을 때만
+        bol = ((val >> 40) & 0x3FF) * 0.1 if dlc >= 6 else None
         
         soc_vals.append({
             'min': soc_min,
@@ -104,12 +114,14 @@ def decode_0x292_soc(frames: List[Tuple[float, bytes]]) -> Dict[str, Any]:
     if not soc_vals:
         return {}
     
+    bol_vals = [s['bol'] for s in soc_vals if s['bol'] is not None]
+    
     return {
         'soc_min': statistics.median([s['min'] for s in soc_vals]),
         'soc_ui': statistics.median([s['ui'] for s in soc_vals]),
         'soc_max': statistics.median([s['max'] for s in soc_vals]),
         'soc_ave': statistics.median([s['ave'] for s in soc_vals]),
-        'bol_energy': statistics.median([s['bol'] for s in soc_vals]),
+        'bol_energy': statistics.median(bol_vals) if bol_vals else None,
     }
 
 
@@ -177,22 +189,25 @@ def decode_0x332_summary(frames: List[Tuple[float, bytes]]) -> Dict[str, Any]:
     """
     0x332 BMS 셀 온도/전압 요약 디코딩.
     
-    Mux 0: 온도 (최고/최저/평균, 센서 번호)
-    Mux 1: 전압 (최고/최저, 브릭 번호)
+    Mux 0: 온도 (최고/최저/평균, 센서 번호) - 최소 5바이트 필요
+    Mux 1: 전압 (최고/최저, 브릭 번호) - 최소 6바이트 필요
     
     Source: dalathegreat/Battery-Emulator TESLA-BATTERY.cpp (newer firmware layout)
+    Note: DLC 6 프레임도 처리 (온도는 5바이트, 전압은 6바이트 필요)
     """
     temps = []
     volts = []
     
     for ts, data in frames:
-        if len(data) < 8:
+        dlc = len(data)
+        if dlc < 3:
             continue
         
         mux = data[0] & 0x03
         
-        if mux == 0:
+        if mux == 0 and dlc >= 5:
             # 신형 펌웨어: byte[3] <= byte[4] <= byte[2]
+            # 최소 5바이트 필요 (data[0]~data[4])
             t_max = data[2] * 0.5 - 40
             t_min = data[3] * 0.5 - 40
             t_avg = data[4] * 0.5 - 40
@@ -213,8 +228,9 @@ def decode_0x332_summary(frames: List[Tuple[float, bytes]]) -> Dict[str, Any]:
                 'min_num': t_min_num,
             })
         
-        elif mux == 1:
+        elif mux == 1 and dlc >= 6:
             # Voltage: bits
+            # 최소 6바이트 필요 (data[0]~data[5])
             v_max = (((data[1] & 0x3F) << 6) | ((data[0] >> 2) & 0x3F)) * 0.002
             v_min = (((data[3] & 0x0F) << 8) | data[2]) * 0.002
             v_max_num = 1 + (data[4] & 0x7F)
@@ -252,31 +268,41 @@ def decode_0x132_pack_vi(frames: List[Tuple[float, bytes]]) -> Dict[str, Any]:
     """
     0x132 HV 배터리 전압/전류 디코딩.
     
-    Voltage: bytes[1:0] * 0.01 V
-    Current: bytes[3:2] (signed) * -0.1 A
+    Voltage: bytes[1:0] * 0.01 V (최소 2바이트)
+    Current: bytes[3:2] (signed) * -0.1 A (최소 4바이트)
+    
+    Note: DLC 6일 때도 전압/전류 모두 디코딩 가능
     """
     voltages = []
     currents = []
     
     for ts, data in frames:
-        if len(data) < 8:
+        dlc = len(data)
+        if dlc < 2:
             continue
         
+        # Voltage는 2바이트만 있으면 됨
         voltage = struct.unpack('<H', data[0:2])[0] * 0.01
-        current = struct.unpack('<h', data[2:4])[0] * -0.1
-        
         voltages.append(voltage)
-        currents.append(current)
+        
+        # Current는 4바이트 필요
+        if dlc >= 4:
+            current = struct.unpack('<h', data[2:4])[0] * -0.1
+            currents.append(current)
     
     if not voltages:
         return {}
     
-    return {
+    result = {
         'pack_voltage': statistics.median(voltages),
         'pack_voltage_min': min(voltages),
         'pack_voltage_max': max(voltages),
-        'pack_current': statistics.median(currents),
     }
+    
+    if currents:
+        result['pack_current'] = statistics.median(currents)
+    
+    return result
 
 
 def decode_0x2B4_lv_dcdc(frames: List[Tuple[float, bytes]]) -> Dict[str, Any]:

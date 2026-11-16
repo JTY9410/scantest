@@ -600,11 +600,11 @@ def _process_tesla_upload(
             bol_energy=bol_energy
         )
         
-        # 교차 검증
-        soc_ave = decoded.get('soc', {}).get('soc_ave')
+        # 교차 검증 (UI SOC 사용 - 사용자가 보는 표시 SOC)
+        soc_ui = decoded.get('soc', {}).get('soc_ui')
         nom_rem = decoded.get('energy', {}).get('nominal_energy_remaining')
-        if soc_ave and nom_rem:
-            soh_result = tesla_soh.cross_check_soh(soh_result, soc_ave, nom_rem)
+        if soc_ui and nom_rem:
+            soh_result = tesla_soh.cross_check_soh(soh_result, soc_ui, nom_rem)
     
     # 4. Scan 생성 (run_scan 패턴과 동일하게)
     tesla_data = {

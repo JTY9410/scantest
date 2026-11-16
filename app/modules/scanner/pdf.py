@@ -338,10 +338,17 @@ def _additional_info_and_issues_section(view: dict) -> list:
     if additional_info:
         # Tesla 측정불가 항목 (list 형식)
         if isinstance(additional_info, list):
+            # 빈 리스트가 아닐 때만 표시
             if additional_info:
                 story.append(_p("【추가 정보】", _SMALL))
                 for info in additional_info:
-                    story.append(_p(f"• {info}", _SMALL))
+                    # info가 문자열이면 그대로, dict면 포맷팅
+                    if isinstance(info, str):
+                        story.append(_p(f"• {info}", _SMALL))
+                    elif isinstance(info, dict):
+                        item = info.get('item', '')
+                        reason = info.get('reason', '')
+                        story.append(_p(f"• {item}: {reason}", _SMALL))
         # 기존 dict 형식
         elif isinstance(additional_info, dict):
             has_content = False
@@ -389,14 +396,20 @@ def _additional_info_and_issues_section(view: dict) -> list:
     
     # === 문제점 ===
     if issues:
-        story.append(_p("【문제점】", _SMALL))
+        # 빈 리스트/dict가 아닐 때만 표시
+        has_content = False
         
         # Tesla 추가 정보 (list 형식)
-        if isinstance(issues, list):
+        if isinstance(issues, list) and issues:
+            has_content = True
+            story.append(_p("【문제점】", _SMALL))
             for issue in issues:
                 story.append(_p(f"• {issue}", _SMALL))
         # 기존 dict 형식
-        elif isinstance(issues, dict):
+        elif isinstance(issues, dict) and issues:
+            if not has_content:
+                story.append(_p("【문제점】", _SMALL))
+            has_content = True
             has_issues = False
             if issues.get("errors"):
                 has_issues = True
@@ -421,12 +434,21 @@ def _additional_info_and_issues_section(view: dict) -> list:
                 excluded = issues["excluded_steps"]
                 story.append(_p(f"· {excluded['message']}", _SMALL))
                 if excluded.get('examples'):
-                    for example in excluded['examples'][:2]:
+                    # 중복 제거: 같은 reason은 한 번만 표시
+                    seen_reasons = set()
+                    unique_examples = []
+                    for example in excluded['examples']:
                         reason = example.get('reason', '')
+                        if reason and reason not in seen_reasons:
+                            seen_reasons.add(reason)
+                            unique_examples.append(reason)
+                    # 처음 2개 고유 예시만 표시
+                    for reason in unique_examples[:2]:
                         story.append(_p(f"  예: {reason}", _SMALL))
             
+            # 내용이 없을 때만 "없음" 표시 (has_issues가 False)
             if not has_issues:
-                story.append(_p("문제점 없음", _SMALL))
+                pass  # 이미 빈 dict는 위에서 걸러짐, 여기는 도달하지 않음
     
     return story
 

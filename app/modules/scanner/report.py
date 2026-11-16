@@ -861,7 +861,7 @@ def tesla_inspection(scan) -> dict:
     
     # SOC (0x292)
     soc_data = decoded.get('soc', {})
-    soc = soc_data.get('soc_ave')  # %
+    soc = soc_data.get('soc_ui')  # % (UI/displayed SOC, 최신 유효값)
     
     # 브릭 전압 (0x401)
     bricks_data = decoded.get('bricks', {})
@@ -892,18 +892,29 @@ def tesla_inspection(scan) -> dict:
     judgment = tesla_data.get('judgment', '판정보류')
     judgment_reason = tesla_data.get('judgment_reason', '커뮤니티 기준 / 측정불가')
     
-    # 측정불가 항목
+    # Tesla 배터리 참고 정보 구성
+    tesla_reference_info = None
+    if reference_kwh and reference_source == 'community':
+        tesla_reference_info = {
+            "full_kwh": current_full,
+            "remaining_kwh": remaining,
+            "rated_kwh": reference_kwh,
+            "soh_reference_note": f"{soh_pct:.1f}% (기준: {reference_kwh:.1f} kWh, 출처: 커뮤니티 DBC - 공식 미확인)" if soh_pct else f"기준: {reference_kwh:.1f} kWh (출처: 커뮤니티 DBC - 공식 미확인)",
+            "source_note": "커뮤니티 DBC (opendbc tesla_model3_party.dbc PACK_74_KWH), 공식 미확인",
+        }
+    
+    # 측정불가 항목 (사람이 읽을 수 있는 문자열 형식)
     unmeasurable_items = []
     if not current_full:
-        unmeasurable_items.append({"item": "만충 에너지", "reason": "0x352 데이터 미수신"})
+        unmeasurable_items.append("만충 에너지: 0x352 데이터 미수신")
     if not soc:
-        unmeasurable_items.append({"item": "SOC", "reason": "0x292 데이터 미수신"})
+        unmeasurable_items.append("SOC: 0x292 데이터 미수신")
     if not brick_min_v or not brick_max_v:
-        unmeasurable_items.append({"item": "브릭 전압", "reason": "0x401 데이터 미수신"})
+        unmeasurable_items.append("브릭 전압: 0x401 데이터 미수신")
     if not temp_max or not temp_min:
-        unmeasurable_items.append({"item": "배터리 온도", "reason": "0x332 데이터 미수신"})
+        unmeasurable_items.append("배터리 온도: 0x332 데이터 미수신")
     if not pack_voltage:
-        unmeasurable_items.append({"item": "팩 전압", "reason": "0x132 데이터 미수신"})
+        unmeasurable_items.append("팩 전압: 0x132 데이터 미수신")
     
     # 추가 수집 정보 및 문제점
     additional_issues = []
@@ -985,4 +996,5 @@ def tesla_inspection(scan) -> dict:
         "additional_info": unmeasurable_items,
         "issues": additional_issues,
         "tesla_specific": True,  # Flag for PDF rendering
+        "tesla": tesla_reference_info,  # Tesla 배터리 참고 정보
     }
