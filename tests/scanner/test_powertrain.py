@@ -113,12 +113,12 @@ def test_inspection_per_type_and_pdf_pages():
     ev = inspection(_scan("ev", fuel="수소"), {"battery": {}, "dtcs": [], "values": [], "steps": []})
     assert ev["kind"] == "ev" and ev["hydrogen"]
     # PDF 페이지 수: cells/modules가 있으면 더 많은 페이지
-    # 수정 후: cells/modules가 비어 있으면 해당 섹션 생략하여 페이지 수 감소
+    # v2.2.8: cells/modules가 비어 있으면 해당 섹션 생략하여 페이지 수 감소
     for kind, result in (("ev", hev_result), ("hev", hev_result), ("ice", ice_result)):
         content = pdf.render(_scan(kind), result)
         actual_pages = len(PdfReader(BytesIO(content)).pages)
-        # 최소 페이지 수: ice=2, ev/hev=4 (cells/modules 없을 때)
-        min_pages = 2 if kind == "ice" else 4
+        # 최소 페이지 수: ice=2, ev/hev=3 (cells/modules 섹션 생략 시)
+        min_pages = 2 if kind == "ice" else 3
         assert actual_pages >= min_pages, f"{kind}: expected at least {min_pages}, got {actual_pages}"
 
 
