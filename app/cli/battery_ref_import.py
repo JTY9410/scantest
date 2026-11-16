@@ -28,6 +28,47 @@ def parse_int(value):
         return None
 
 
+def import_battery_reference(xlsx_path: str, clear: bool = False) -> int:
+    """Core import function (can be used by CLI or auto-seed).
+    
+    Returns number of rows imported.
+    """
+    xlsx_path = Path(xlsx_path)
+    
+    if not xlsx_path.exists():
+        raise FileNotFoundError(f"File not found: {xlsx_path}")
+    
+    # Determine file type from filename
+    filename = xlsx_path.name.lower()
+    if 'import7' in filename or 'brands' in filename:
+        file_type = 'import7'
+    elif 'tesla' in filename:
+        file_type = 'tesla'
+    else:
+        raise ValueError(f"Cannot determine file type from filename: {filename}. Expected 'import7' or 'tesla' in filename")
+    
+    if clear:
+        try:
+            count = BatteryReferenceCapacity.query.filter_by(source_file=file_type).delete()
+            db.session.commit()
+            current_app.logger.info(f"Cleared {count} existing {file_type} records")
+        except Exception as e:
+            # Table might not exist yet
+            db.session.rollback()
+            current_app.logger.warning(f"Could not clear (table may not exist yet): {e}")
+    
+    wb = openpyxl.load_workbook(xlsx_path, data_only=True)
+    total_imported = 0
+    
+    if file_type == 'import7':
+        total_imported = import_import7_file(wb, xlsx_path.name)
+    elif file_type == 'tesla':
+        total_imported = import_tesla_file(wb, xlsx_path.name)
+    
+    db.session.commit()
+    return total_imported
+
+
 @click.command('battery-ref-import')
 @click.argument('xlsx_path', type=click.Path(exists=True))
 @click.option('--clear', is_flag=True, help='Clear existing data before import')
@@ -39,44 +80,13 @@ def battery_ref_import_command(xlsx_path, clear):
         flask battery-ref-import data/battery_reference/import7_brands_capacity_master.xlsx
         flask battery-ref-import data/battery_reference/tesla_vin_pack_db.xlsx
     """
-    xlsx_path = Path(xlsx_path)
-    
-    if not xlsx_path.exists():
-        click.echo(f"Error: File not found: {xlsx_path}", err=True)
+    try:
+        total = import_battery_reference(xlsx_path, clear=clear)
+        click.echo(f"Successfully imported {total} records from {Path(xlsx_path).name}")
+        return 0
+    except Exception as e:
+        click.echo(f"Error: {e}", err=True)
         return 1
-    
-    # Determine file type from filename
-    filename = xlsx_path.name.lower()
-    if 'import7' in filename or 'brands' in filename:
-        file_type = 'import7'
-    elif 'tesla' in filename:
-        file_type = 'tesla'
-    else:
-        click.echo(f"Error: Cannot determine file type from filename: {filename}", err=True)
-        click.echo("Expected 'import7' or 'tesla' in filename", err=True)
-        return 1
-    
-    if clear:
-        try:
-            count = BatteryReferenceCapacity.query.filter_by(source_file=file_type).delete()
-            db.session.commit()
-            click.echo(f"Cleared {count} existing {file_type} records")
-        except Exception as e:
-            # Table might not exist yet
-            db.session.rollback()
-            click.echo(f"Note: Could not clear (table may not exist yet): {e}")
-    
-    wb = openpyxl.load_workbook(xlsx_path, data_only=True)
-    total_imported = 0
-    
-    if file_type == 'import7':
-        total_imported = import_import7_file(wb, xlsx_path.name)
-    elif file_type == 'tesla':
-        total_imported = import_tesla_file(wb, xlsx_path.name)
-    
-    db.session.commit()
-    click.echo(f"Successfully imported {total_imported} records from {xlsx_path.name}")
-    return 0
 
 
 def import_import7_file(wb, filename):

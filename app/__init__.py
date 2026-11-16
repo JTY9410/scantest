@@ -69,28 +69,33 @@ def create_app(config_name: str | None = None) -> Flask:
     from app.modules.ml_learning import cli as ml_cli
     ml_cli.init_app(app)
     
-    # ML scheduler and auto-backfill: DEFAULT OFF (opt-in via env vars)
-    # ML_SCHEDULER_ENABLED=true enables retraining scheduler (with DB advisory lock for single host)
-    # ML_AUTO_BACKFILL=true enables auto-backfill on startup
+    # Auto-seed battery reference data and ML automation on startup
     # Never runs in TESTING mode
     if not app.config.get("TESTING"):
-        scheduler_enabled = os.getenv('ML_SCHEDULER_ENABLED', 'false').lower() == 'true'
-        backfill_enabled = os.getenv('ML_AUTO_BACKFILL', 'false').lower() == 'true'
-        
-        if scheduler_enabled or backfill_enabled:
-            @app.before_request
-            def _start_ml_automation():
-                """Start ML automation on first request (if enabled)."""
-                from app.modules.ml_learning.scheduler import start_scheduler
-                from app.modules.ml_learning.models import MLScanFeature
-                from flask import current_app
-                
-                # Remove this handler after first execution
-                app.before_request_funcs[None].remove(_start_ml_automation)
-                
+        @app.before_request
+        def _startup_automation():
+            """Run startup automation on first request."""
+            from flask import current_app
+            
+            # Remove this handler after first execution
+            app.before_request_funcs[None].remove(_startup_automation)
+            
+            try:
+                # Auto-seed battery reference data (idempotent)
+                from app.modules.scans.battery_ref_seed import seed_battery_references
+                seed_battery_references()
+            except Exception as exc:
+                current_app.logger.error(f"Battery reference seeding failed: {exc}", exc_info=True)
+            
+            # ML scheduler and auto-backfill: DEFAULT OFF (opt-in via env vars)
+            scheduler_enabled = os.getenv('ML_SCHEDULER_ENABLED', 'false').lower() == 'true'
+            backfill_enabled = os.getenv('ML_AUTO_BACKFILL', 'false').lower() == 'true'
+            
+            if scheduler_enabled or backfill_enabled:
                 try:
                     # Auto-backfill if enabled and features table is empty
                     if backfill_enabled:
+                        from app.modules.ml_learning.models import MLScanFeature
                         feature_count = db.session.query(MLScanFeature).count()
                         if feature_count == 0:
                             current_app.logger.info("ML auto-backfill enabled: running in background...")
@@ -103,6 +108,7 @@ def create_app(config_name: str | None = None) -> Flask:
                     
                     # Start scheduler if enabled
                     if scheduler_enabled:
+                        from app.modules.ml_learning.scheduler import start_scheduler
                         start_scheduler()
                         current_app.logger.info("ML scheduler enabled and started")
                 except Exception as exc:
