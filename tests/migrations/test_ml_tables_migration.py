@@ -72,8 +72,38 @@ def test_migration_from_v228_head(app):
         # Upgrade to v2.2.8 head (20261116_120000) via full migration chain
         upgrade(revision='20261116_120000')
         
-        # v2.2.8 has tables but schema details vary - just verify migration runs
-        # without inserting test data to avoid schema mismatch issues
+        # Insert test data with v2.2.8 battery_reference_capacity schema
+        # (old format: manufacturer, model, year_from, year_to, pack_code, 
+        #  reference_energy_kwh, reference_definition, source_url, source_type, verified)
+        db.session.execute(text("""
+            INSERT INTO battery_reference_capacity 
+                (manufacturer, model, year_from, year_to, pack_code, reference_energy_kwh,
+                 reference_definition, source_url, source_type, verified, created_at)
+            VALUES 
+                ('Tesla', 'Model 3 Old', 2018, 2021, 'PK999', 75.0, 'Gross', 
+                 'https://example.com/old', 'Official', true, NOW())
+        """))
+        
+        # Insert test scans and ml_scan_features to verify they survive
+        db.session.execute(text("""
+            INSERT INTO scans (car_no, vin)
+            VALUES ('11가1111', 'TEST1234567890123')
+        """))
+        scan_id = db.session.execute(text("SELECT id FROM scans WHERE car_no = '11가1111'")).scalar()
+        
+        db.session.execute(text(f"""
+            INSERT INTO ml_scan_features 
+                (scan_id, feature_vector, decoded_values, signals_read, created_at)
+            VALUES 
+                ({scan_id}, '{{}}', '{{}}', '{{}}', NOW())
+        """))
+        
+        db.session.commit()
+        
+        # Count rows before upgrade
+        battery_ref_count_before = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
+        scans_count_before = db.session.execute(text("SELECT COUNT(*) FROM scans")).scalar()
+        ml_features_count_before = db.session.execute(text("SELECT COUNT(*) FROM ml_scan_features")).scalar()
         
         # Now upgrade to current head (production path)
         upgrade()
@@ -92,12 +122,42 @@ def test_migration_from_v228_head(app):
         # Verify battery_reference_capacity has new columns
         battery_cols = {col['name'] for col in inspector.get_columns('battery_reference_capacity')}
         new_cols = {'maker', 'pack_id', 'gross_capacity_kwh', 'net_capacity_kwh', 
-                    'source_url_1', 'verification_level'}
+                    'source_url_1', 'verification_level', 'source_file'}
         assert new_cols.issubset(battery_cols), f"Missing battery columns: {new_cols - battery_cols}"
         
-        # Production upgrade path verified: v2.2.8 (20261116_120000) -> current head completes
-        # Migration adds new tables (ml_model_runs, ml_active_model, ml_consistency_scores)
-        # and extends battery_reference_capacity with new columns
+        # Verify scans and ml_scan_features survived
+        scans_count_after = db.session.execute(text("SELECT COUNT(*) FROM scans")).scalar()
+        ml_features_count_after = db.session.execute(text("SELECT COUNT(*) FROM ml_scan_features")).scalar()
+        assert scans_count_after == scans_count_before, \
+            f"Scans lost: {scans_count_before} -> {scans_count_after}"
+        assert ml_features_count_after == ml_features_count_before, \
+            f"ML features lost: {ml_features_count_before} -> {ml_features_count_after}"
+        
+        # Run battery reference seed (simulates entrypoint)
+        from app.modules.scans.battery_ref_seed import seed_battery_references
+        seed_battery_references()
+        
+        # Verify seed loaded correct data
+        battery_ref_count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
+        assert battery_ref_count == 593, \
+            f"Battery reference count mismatch: expected 593 (65+528), got {battery_ref_count}"
+        
+        # Verify specific Tesla pack IDs are present
+        pk045_exists = db.session.execute(text(
+            "SELECT COUNT(*) FROM battery_reference_capacity WHERE pack_id = 'PK045'"
+        )).scalar()
+        pk044_exists = db.session.execute(text(
+            "SELECT COUNT(*) FROM battery_reference_capacity WHERE pack_id = 'PK044'"
+        )).scalar()
+        
+        assert pk045_exists > 0, "PK045 (Model Y LR AWD) not found in seed data"
+        assert pk044_exists > 0, "PK044 (Model Y LR China) not found in seed data"
+        
+        # Verify old-format test row was replaced
+        old_row_exists = db.session.execute(text(
+            "SELECT COUNT(*) FROM battery_reference_capacity WHERE model = 'Model 3 Old'"
+        )).scalar()
+        assert old_row_exists == 0, "Old-format test row should have been replaced by seed"
 
 
 def test_production_config_starts_no_threads(app):

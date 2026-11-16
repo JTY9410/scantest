@@ -318,3 +318,4 @@ def import_tesla_official_domestic(ws, sheet_name, filename):
 def register_commands(app):
     """Register battery reference import commands"""
     app.cli.add_command(battery_ref_import_command)
+    app.cli.add_command(battery_ref_seed_command)
