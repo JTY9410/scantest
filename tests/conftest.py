@@ -39,6 +39,9 @@ def _app_base():
             # SQLite: use create_all (migrations don't work well with SQLite constraints)
             db.drop_all()
             db.create_all()
+            # Seed maker_aliases for SQLite (migrations seed it for Postgres)
+            from app.core.maker_aliases_model import seed_maker_aliases
+            seed_maker_aliases()
     yield app
     with app.app_context():
         engine_name = db.engine.name
@@ -70,9 +73,9 @@ def _clean_database(app):
         db.session.rollback()
         db.session.remove()
         
-        # Get all table names except alembic_version
+        # Get all table names except alembic_version and maker_aliases (seed data)
         tables = [table.name for table in db.metadata.sorted_tables 
-                  if table.name != 'alembic_version']
+                  if table.name not in ('alembic_version', 'maker_aliases')]
         
         if tables:
             # Use TRUNCATE CASCADE for PostgreSQL (faster and handles FKs)
@@ -82,7 +85,7 @@ def _clean_database(app):
             else:
                 # SQLite fallback (skip tables that don't exist)
                 for table in reversed(db.metadata.sorted_tables):
-                    if table.name != 'alembic_version':
+                    if table.name not in ('alembic_version', 'maker_aliases'):
                         try:
                             db.session.execute(text(f"DELETE FROM {table.name}"))
                         except Exception:

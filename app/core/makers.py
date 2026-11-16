@@ -130,6 +130,14 @@ def _load_aliases_from_db():
         for row in result:
             standard_key, english_name, korean_name, aliases = row
             
+            # Handle JSON-serialized aliases (SQLite with text())
+            if isinstance(aliases, str):
+                import json
+                try:
+                    aliases = json.loads(aliases)
+                except (json.JSONDecodeError, TypeError):
+                    aliases = []
+            
             # Map each alias to standard_key (case-insensitive)
             for alias in aliases:
                 aliases_map[alias.lower()] = standard_key

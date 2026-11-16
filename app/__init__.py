@@ -139,6 +139,7 @@ def _import_models() -> None:
     from app.modules.scans import models as scans  # noqa: F401
     from app.modules.scanner import learning_models  # noqa: F401
     from app.modules.vin import models as vin  # noqa: F401
+    from app.core import maker_aliases_model  # noqa: F401
 
 
 def _register_blueprints(app: Flask) -> None:
