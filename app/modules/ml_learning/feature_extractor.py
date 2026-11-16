@@ -24,11 +24,18 @@ def extract_and_store_features(scan: Scan) -> MLScanFeature | None:
         year = scan.car_year
         fuel_type = _determine_fuel_type(scan)
         
-        # 스캔 결과 추출 (업로드 스캔은 raw가 list일 수 있음 → bms_data로 대체)
+        # 스캔 결과 추출 (업로드 레이아웃 처리)
         raw = scan.raw or {}
-        if not isinstance(raw, dict):
-            raw = scan.bms_data or {}
-        result = raw.get("result", {})
+        bms_data = scan.bms_data or {}
+        
+        # Upload layout: bms_data에 decoded/soh가 있으면 그것 사용
+        if isinstance(bms_data, dict) and ("decoded" in bms_data or "soh" in bms_data):
+            result = bms_data
+        elif not isinstance(raw, dict):
+            # raw가 list인 경우 bms_data 사용
+            result = bms_data
+        else:
+            result = raw.get("result", {})
         
         overall_judgment = _extract_judgment(scan, result)
         dtc_count = _count_dtcs(result)
@@ -123,7 +130,23 @@ def _count_significant_dtcs(result: dict) -> int:
 
 
 def _extract_signal_coverage(result: dict) -> dict[str, bool]:
-    """어떤 신호가 읽혔는지 기록."""
+    """어떤 신호가 읽혔는지 기록 (Tesla upload 레이아웃 포함)."""
+    # Tesla upload layout: decoded dict at top level
+    if "decoded" in result and isinstance(result["decoded"], dict):
+        decoded = result["decoded"]
+        coverage = {
+            "soc": "soc" in decoded or "SOC" in decoded,
+            "soh": "soh" in decoded or "SOH" in decoded,
+            "pack_voltage": any(k in decoded for k in ["pack_voltage", "PackVoltage", "배터리전압"]),
+            "pack_current": any(k in decoded for k in ["pack_current", "PackCurrent", "배터리전류"]),
+            "max_cell_v": any(k in decoded for k in ["max_cell_v", "MaxCellV"]),
+            "min_cell_v": any(k in decoded for k in ["min_cell_v", "MinCellV"]),
+            "max_temp": any(k in decoded for k in ["max_temp", "MaxTemp"]),
+            "min_temp": any(k in decoded for k in ["min_temp", "MinTemp"]),
+        }
+        return coverage
+    
+    # 일반 UDS layout
     battery = result.get("battery", {})
     coverage = {}
     
@@ -136,9 +159,21 @@ def _extract_signal_coverage(result: dict) -> dict[str, bool]:
 
 
 def _extract_decoded_values(result: dict) -> dict[str, Any]:
-    """디코딩된 주요 값 추출."""
-    battery = result.get("battery", {})
+    """디코딩된 주요 값 추출 (Tesla upload 레이아웃 포함, 익명화)."""
     values = {}
+    
+    # Tesla upload layout: decoded dict at top level
+    if "decoded" in result and isinstance(result["decoded"], dict):
+        decoded = result["decoded"]
+        for sig_name, sig_val in decoded.items():
+            # 익명화: VIN / 차량번호 제외
+            if "vin" not in sig_name.lower() and "plate" not in sig_name.lower():
+                if isinstance(sig_val, (str, int, float, bool)):
+                    values[sig_name] = sig_val
+        return values
+    
+    # 일반 UDS layout
+    battery = result.get("battery", {})
     
     # 주요 신호만 (이상치 탐지용)
     for signal in ["soc", "soh", "pack_voltage", "max_cell_v", "min_cell_v", "max_temp", "min_temp"]:
