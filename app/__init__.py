@@ -100,6 +100,7 @@ def _import_models() -> None:
     from app.modules.obd import models as obd  # noqa: F401
     from app.modules.reports import models as reports  # noqa: F401
     from app.modules.scans import models as scans  # noqa: F401
+    from app.modules.scans import battery_capacity  # noqa: F401
     from app.modules.scanner import learning_models  # noqa: F401
     from app.modules.vin import models as vin  # noqa: F401
     from app.core import maker_aliases_model  # noqa: F401
