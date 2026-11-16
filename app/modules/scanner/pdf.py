@@ -182,6 +182,10 @@ _CLOSING = ("본 보고서의 수치는 진단 시점의 차량 상태를 기록
 
 
 def _judgment_page(view: dict) -> list:
+    # 판정 항목이 없으면 페이지 생략 (Tesla upload 등)
+    if not view.get("judgments"):
+        return []
+    
     story = [_p(f"주요 진단 데이터 · {len(view['judgments'])}개 항목", _H2)]
     story.append(_table([["항목", "진단 기준", "진단 결과", "판정"]] + [
         [row["item"], row["standard"],
@@ -246,22 +250,23 @@ def _battery_pages(view: dict) -> list:
         rows = [cells[i:i + 4] for i in range(0, len(cells), 4)]
         rows[-1] += [""] * (4 - len(rows[-1]))
         story.append(_table(rows, [42.5] * 4, header=False))
-    story += [
-        PageBreak(),
-        _p(f"모듈 별 온도 분포 · 총 {len(view['modules'])}개 모듈", _H2),
-        _pairs([
-            ("최저 온도", f"{view['module_min']:.1f} ℃" if view["module_min"] is not None else "-"),
-            ("최고 온도", f"{view['module_max']:.1f} ℃" if view["module_max"] is not None else "-"),
-            ("편차 (Max−Min)", f"{view['module_spread']:.1f} ℃" if view["module_spread"] is not None else "-"),
-        ]),
-    ]
-    if view["modules"]:
+    
+    # 모듈 온도 (데이터가 있을 때만 표시)
+    if view.get("modules") and len(view["modules"]) > 0:
+        story += [
+            PageBreak(),
+            _p(f"모듈 별 온도 분포 · 총 {len(view['modules'])}개 모듈", _H2),
+            _pairs([
+                ("최저 온도", f"{view['module_min']:.1f} ℃" if view["module_min"] is not None else "-"),
+                ("최고 온도", f"{view['module_max']:.1f} ℃" if view["module_max"] is not None else "-"),
+                ("편차 (Max−Min)", f"{view['module_spread']:.1f} ℃" if view["module_spread"] is not None else "-"),
+            ]),
+        ]
         temps = [f"모듈 {row['no']}  {row['value']:.1f} ℃" for row in view["modules"]]
         rows = [temps[i:i + 3] for i in range(0, len(temps), 3)]
         rows[-1] += [""] * (3 - len(rows[-1]))
         story.append(_table(rows, [56.6] * 3, header=False))
-    else:
-        story.append(_p("모듈 온도를 읽지 못했습니다."))
+    
     return story
 
 
