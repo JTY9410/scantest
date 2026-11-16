@@ -71,48 +71,10 @@ def create_app(config_name: str | None = None) -> Flask:
     
     # Auto-seed battery reference data and ML automation on startup
     # Never runs in TESTING mode
-    if not app.config.get("TESTING"):
-        @app.before_request
-        def _startup_automation():
-            """Run startup automation on first request."""
-            from flask import current_app
-            
-            # Remove this handler after first execution
-            app.before_request_funcs[None].remove(_startup_automation)
-            
-            try:
-                # Auto-seed battery reference data (idempotent)
-                from app.modules.scans.battery_ref_seed import seed_battery_references
-                seed_battery_references()
-            except Exception as exc:
-                current_app.logger.error(f"Battery reference seeding failed: {exc}", exc_info=True)
-            
-            # ML scheduler and auto-backfill: DEFAULT OFF (opt-in via env vars)
-            scheduler_enabled = os.getenv('ML_SCHEDULER_ENABLED', 'false').lower() == 'true'
-            backfill_enabled = os.getenv('ML_AUTO_BACKFILL', 'false').lower() == 'true'
-            
-            if scheduler_enabled or backfill_enabled:
-                try:
-                    # Auto-backfill if enabled and features table is empty
-                    if backfill_enabled:
-                        from app.modules.ml_learning.models import MLScanFeature
-                        feature_count = db.session.query(MLScanFeature).count()
-                        if feature_count == 0:
-                            current_app.logger.info("ML auto-backfill enabled: running in background...")
-                            import threading
-                            def _backfill():
-                                with app.app_context():
-                                    from app.modules.ml_learning.cli import backfill_features_batched
-                                    backfill_features_batched()
-                            threading.Thread(target=_backfill, daemon=True).start()
-                    
-                    # Start scheduler if enabled
-                    if scheduler_enabled:
-                        from app.modules.ml_learning.scheduler import start_scheduler
-                        start_scheduler()
-                        current_app.logger.info("ML scheduler enabled and started")
-                except Exception as exc:
-                    current_app.logger.error(f"ML automation startup failed: {exc}", exc_info=True)
+    # NO AUTO-START IN PRODUCTION WEB PROCESS
+    # Battery seed moved to migration 20261116_140000 as data step
+    # ML scheduler/backfill: use CLI commands (flask ml-backfill, flask ml-retrain)
+    # Or set ML_SCHEDULER_ENABLED=true / ML_AUTO_BACKFILL=true in a separate scheduler service
     
     return app
 
