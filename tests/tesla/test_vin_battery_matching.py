@@ -93,10 +93,17 @@ def test_tesla_real_pack_matching(app, vin, expected_model, expected_year, expec
         print(f"SOH Status: {soh.get('soh_status', 'OK')}")
         print(f"SOH: {soh.get('soh_percent')}")
         
-        # Multiple candidates → 팩 후보 다수
-        if len(candidates) > 1:
-            assert '팩 후보 다수' in soh.get('soh_status', ''), "Multiple packs → 팩 후보 다수"
+        # Multiple candidates with different capacities → 팩 후보 다수
+        capacities = sorted(set(expected_kwhs))
+        if len(candidates) > 1 and len(capacities) > 1:
+            # Different capacities
+            assert '팩 후보 다수' in soh.get('soh_status', ''), "Different capacities → 팩 후보 다수"
             assert soh.get('soh_percent') is None, "SOH 미산정"
         else:
-            assert soh.get('soh_percent') is not None, "Single pack → SOH computed"
+            # Single candidate or same capacity
+            assert soh.get('soh_percent') is not None, "SOH computed"
             assert '2차 자료 기준(참고)' in soh.get('reference_source', ''), "2차 label"
+            if len(candidates) > 1:
+                # Same capacity → list pack IDs
+                assert 'candidate_pack_ids' in soh, "Same-capacity candidates list pack IDs"
+                assert set(soh['candidate_pack_ids']) == set(expected_pack_ids), f"Pack IDs {soh.get('candidate_pack_ids')} != {expected_pack_ids}"

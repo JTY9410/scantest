@@ -49,7 +49,8 @@ def decode_tesla_vin(vin: str) -> dict:
         return {}
     
     wmi = vin[0:3]  # Pos 1-3
-    if wmi != '5YJ':
+    # Tesla WMIs: 5YJ (USA/Fremont), LRW (China/Shanghai), XP7 (Germany/Berlin)
+    if wmi not in ('5YJ', 'LRW', 'XP7'):
         return {}  # Not a Tesla VIN
     
     model_code = vin[3]  # Pos 4

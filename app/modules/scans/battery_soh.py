@@ -25,16 +25,16 @@ def find_matching_references(
         List of matching references (may be multiple candidates)
     """
     # Tesla VIN decoding FIRST: override model and year before building query
+    decoded = None
     if vin and maker.lower() == 'tesla':
         from app.modules.tesla.vin_decoder import decode_tesla_vin
         decoded = decode_tesla_vin(vin)
         
-        if decoded.get('valid'):
-            # Override model and year from VIN decode
-            if decoded.get('model'):
-                model = decoded['model']
-            if decoded.get('year'):
-                year = decoded['year']
+        # Override model and year from VIN decode (even if not fully 'valid')
+        if decoded.get('model'):
+            model = decoded['model']
+        if decoded.get('year'):
+            year = decoded['year']
     
     # Start query with maker and model
     query = db.session.query(BatteryReferenceCapacity).filter_by(maker=maker, model=model)
@@ -50,19 +50,25 @@ def find_matching_references(
     if trim:
         query = query.filter_by(trim=trim)
     
-    # WMI filter for Tesla
-    if vin and maker.lower() == 'tesla':
-        wmi = vin[:3] if len(vin) >= 3 else None
-        if wmi:
-            query = query.filter(
-                (BatteryReferenceCapacity.vin_wmi.is_(None)) | 
-                (BatteryReferenceCapacity.vin_wmi == wmi)
-            )
+    # WMI filter for Tesla (critical for distinguishing 5YJ vs LRW)
+    if decoded and decoded.get('wmi'):
+        query = query.filter(
+            (BatteryReferenceCapacity.vin_wmi.is_(None)) | 
+            (BatteryReferenceCapacity.vin_wmi == decoded['wmi'])
+        )
     
     # Order by verification level (official first)
     results = query.order_by(
         BatteryReferenceCapacity.verification_level.desc()
     ).all()
+    
+    # Check if all candidates have the same gross capacity
+    if len(results) > 1:
+        capacities = {r.gross_capacity_kwh for r in results if r.gross_capacity_kwh}
+        if len(capacities) == 1:
+            # All same capacity → SOH can be computed, list all candidate IDs
+            pass  # return all
+        # Otherwise → multiple different capacities, '팩 후보 다수'
     
     return results
 
@@ -136,31 +142,39 @@ def prepare_soh_report_data(
         }
     
     if len(matches) > 1:
-        # Multiple candidates - don't auto-select
-        candidates_data = []
-        for m in matches:
-            cap = m.gross_capacity_kwh or m.net_capacity_kwh or m.official_capacity_kwh
-            candidates_data.append({
-                'pack_id': m.pack_id,
-                'trim': m.trim,
-                'capacity_kwh': cap,
-                'verification_level': m.verification_level,
-                'year_range': f"{m.year_from or '?'}-{m.year_to or '?'}"
-            })
+        # Check if all candidates have the same gross capacity
+        capacities = {m.gross_capacity_kwh for m in matches if m.gross_capacity_kwh}
         
-        return {
-            'reference_capacity_kwh': None,
-            'reference_capacity_type': None,
-            'reference_source': None,
-            'reference_verification_level': None,
-            'soh_percent': None,
-            'soh_status': '팩 후보 다수 — 팩ID 확인 필요',
-            'candidates': candidates_data
-        }
+        if len(capacities) > 1:
+            # Different capacities - don't auto-select, SOH 미산정
+            candidates_data = []
+            for m in matches:
+                cap = m.gross_capacity_kwh or m.net_capacity_kwh or m.official_capacity_kwh
+                candidates_data.append({
+                    'pack_id': m.pack_id,
+                    'trim': m.trim,
+                    'capacity_kwh': cap,
+                    'verification_level': m.verification_level,
+                    'year_range': f"{m.year_from or '?'}-{m.year_to or '?'}"
+                })
+            
+            return {
+                'reference_capacity_kwh': None,
+                'reference_capacity_type': None,
+                'reference_source': None,
+                'reference_verification_level': None,
+                'soh_percent': None,
+                'soh_status': '팩 후보 다수 — 팩ID 확인 필요',
+                'candidates': candidates_data
+            }
+        # else: same capacity across all → compute SOH below, list candidate pack IDs
     
-    # Single match - calculate SOH
+    # Single match or multiple with same capacity - calculate SOH
     reference = matches[0]
     soh_percent, error_reason = calculate_soh(current_capacity_kwh, current_capacity_type, reference)
+    
+    # Collect all candidate pack IDs (for same-capacity multi-candidate case)
+    candidate_pack_ids = [m.pack_id for m in matches if m.pack_id]
     
     # Determine reference capacity and type
     if current_capacity_type == 'gross' and reference.gross_capacity_kwh:
@@ -191,4 +205,8 @@ def prepare_soh_report_data(
         'reference_warnings': reference.warnings
     }
     
+    # If multiple matches with same capacity, list candidate pack IDs
+    if len(candidate_pack_ids) > 1:
+        result['candidate_pack_ids'] = candidate_pack_ids
+
     return result
