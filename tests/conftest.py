@@ -42,6 +42,10 @@ def _app_base():
             # Seed maker_aliases for SQLite (migrations seed it for Postgres)
             from app.core.maker_aliases_model import seed_maker_aliases
             seed_maker_aliases()
+            # Clear any cached aliases so tests see the seeded data
+            from app.core import makers as makers_module
+            makers_module._ALIASES_CACHE = None
+            makers_module._REVERSE_LOOKUP_CACHE = None
     yield app
     with app.app_context():
         engine_name = db.engine.name
@@ -72,6 +76,11 @@ def _clean_database(app):
         # Rollback any pending transactions
         db.session.rollback()
         db.session.remove()
+        
+        # Clear maker aliases cache to pick up any test-specific changes
+        from app.core import makers as makers_module
+        makers_module._ALIASES_CACHE = None
+        makers_module._REVERSE_LOOKUP_CACHE = None
         
         # Get all table names except alembic_version and maker_aliases (seed data)
         tables = [table.name for table in db.metadata.sorted_tables 

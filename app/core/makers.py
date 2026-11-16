@@ -136,7 +136,8 @@ def _load_aliases_from_db():
                 try:
                     aliases = json.loads(aliases)
                 except (json.JSONDecodeError, TypeError):
-                    aliases = []
+                    # Fallback: comma-separated string (legacy or raw SQL)
+                    aliases = [a.strip() for a in aliases.split(',') if a.strip()]
             
             # Map each alias to standard_key (case-insensitive)
             for alias in aliases:

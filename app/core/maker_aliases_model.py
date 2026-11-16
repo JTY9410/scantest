@@ -35,11 +35,14 @@ class StringList(TypeDecorator):
         if dialect.name == 'postgresql':
             return value if isinstance(value, list) else []
         else:
-            # SQLite: parse JSON
-            try:
-                return json.loads(value) if isinstance(value, str) else []
-            except (json.JSONDecodeError, TypeError):
+            # SQLite: parse JSON or fallback to comma-separated
+            if not isinstance(value, str):
                 return []
+            try:
+                return json.loads(value)
+            except (json.JSONDecodeError, TypeError):
+                # Fallback: comma-separated string (for legacy data or raw SQL)
+                return [a.strip() for a in value.split(',') if a.strip()]
 
 
 class MakerAlias(db.Model):
