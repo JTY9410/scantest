@@ -8,7 +8,7 @@ from app.extensions import db
 from app.modules.soh_inference.models import (
     SOHInferenceModel, InferenceModelAudit, InferenceModelStatus
 )
-from app.modules.admin.decorators import admin_required
+from app.modules.auth.access import admin_required
 
 
 bp = Blueprint('soh_inference', __name__, url_prefix='/admin/soh/inference')
