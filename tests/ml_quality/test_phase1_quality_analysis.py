@@ -19,7 +19,7 @@ class TestQualitySignalCollection:
         """Collect quality signals from scan result."""
         with app.app_context():
             from app.modules.scans.models import Scan
-            from app.modules.auth.models import User
+            from app.modules.accounts.models import User
             
             # Create test scan
             user = db.session.query(User).filter_by(type='admin').first()
@@ -89,7 +89,7 @@ class TestImprovementProposals:
     def test_approve_proposal_creates_config(self, app):
         """Approving a proposal creates versioned config."""
         with app.app_context():
-            from app.modules.auth.models import User
+            from app.modules.accounts.models import User
             
             user = db.session.query(User).filter_by(type='admin').first()
             
@@ -135,7 +135,7 @@ class TestImprovementProposals:
     def test_rollback_deactivates_config(self, app):
         """Rolling back a proposal deactivates its configs."""
         with app.app_context():
-            from app.modules.auth.models import User
+            from app.modules.accounts.models import User
             
             user = db.session.query(User).filter_by(type='admin').first()
             

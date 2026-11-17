@@ -22,7 +22,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
 from app.modules.scans.models import Scan
-from app.modules.auth.models import User
+from app.modules.accounts.models import User
 
 
 class ScanQualitySignal(db.Model):
