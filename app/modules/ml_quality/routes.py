@@ -5,7 +5,7 @@ from flask_login import current_user
 from sqlalchemy import select, desc
 
 from app.extensions import db
-from app.modules.auth.decorators import admin_required
+from app.modules.auth.access import admin_required
 from app.modules.ml_quality.models import ImprovementProposal, ProposalAuditLog, VersionedConfig
 from app.modules.ml_quality.proposal_generator import generate_proposals
 
