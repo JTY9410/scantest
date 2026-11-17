@@ -264,7 +264,7 @@ def test_recalculate_soh_datetime_import(admin_client, app):
     assert data['pack_id'] == 'PK031'
 
 
-def test_ml_decoder_proposals_route(client_authed_admin, app):
+def test_ml_decoder_proposals_route(admin_client, app):
     """Defect 4: /admin/ml/decoder-proposals schema (did_hex column).
     
     Tests that the route doesn't crash with UndefinedColumn.

@@ -215,9 +215,11 @@ def import_tesla_file(wb, filename):
             click.echo(f"  Warning: Sheet '{sheet_name}' not found, skipping")
     
     # Deduplicate EXACT duplicates from session.new
+    # Must include ALL significant fields to avoid collapsing legitimate distinct rows
     pending = [obj for obj in db.session.new if isinstance(obj, BatteryReferenceCapacity) and obj.source_file == 'tesla']
     
-    # Build unique key: (maker, model, trim, year_from, pack_id)
+    # Build unique key: include ALL fields that define a row's identity
+    # Different sheets have different fields, so include capacity values too
     seen_keys = set()
     deduped = []
     
@@ -227,7 +229,11 @@ def import_tesla_file(wb, filename):
             row.model or '',
             row.trim or '',
             row.year_from or 0,
-            row.pack_id or ''
+            row.year_to or 0,
+            row.pack_id or '',
+            row.gross_capacity_kwh or 0.0,
+            row.net_capacity_kwh or 0.0,
+            row.official_capacity_kwh or 0.0
         )
         
         if key not in seen_keys:
