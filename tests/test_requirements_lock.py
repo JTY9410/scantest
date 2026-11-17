@@ -1,6 +1,6 @@
 """Test that requirements.lock matches pyproject.toml dependencies."""
 
-import tomli
+import tomllib
 from pathlib import Path
 
 
@@ -59,7 +59,7 @@ def test_requirements_dev_lock_matches_pyproject():
     
     # Read pyproject.toml
     with open(repo_root / 'pyproject.toml', 'rb') as f:
-        pyproject = tomli.load(f)
+        pyproject = tomllib.load(f)
     
     # Get all dependencies (main + dev)
     dependencies = pyproject['project']['dependencies']
