@@ -893,6 +893,17 @@ def tesla_inspection(scan) -> dict:
     reference_source = soh_result.get('reference_source', '')
     soh_available = soh_result.get('soh_available', False)
     
+    # Check for admin-recalculated SOH (overrides automatic calculation)
+    soh_recalculated = None
+    if scan.bms_data and isinstance(scan.bms_data, dict):
+        soh_recalculated = scan.bms_data.get('soh_recalculated')
+        if soh_recalculated and isinstance(soh_recalculated, dict):
+            soh_pct = soh_recalculated.get('soh_percent')
+            reference_kwh = soh_recalculated.get('reference_capacity_kwh')
+            reference_source = soh_recalculated.get('reference_source', '2차 자료')
+            soh_available = True
+            soh_note = f"관리자 재계산 (팩ID: {soh_recalculated.get('pack_id')}, {soh_recalculated.get('recalculated_at', '')[:10]})"
+    
     # 판정
     judgment = tesla_data.get('judgment', '판정보류')
     judgment_reason = tesla_data.get('judgment_reason', '커뮤니티 기준 / 측정불가')
@@ -999,7 +1010,9 @@ def tesla_inspection(scan) -> dict:
             _measure("만충 에너지", current_full, "kWh", 1),
             _measure("잔여 에너지", remaining, "kWh", 1),
             _measure("SOC", soc, "%", 1),
-            {"label": "SOH 참고치", "value": f"{soh_pct:.1f}% (커뮤니티 {reference_kwh:.2f}kWh 미검증)", "unit": ""}
+            {"label": "SOH 참고치" if not soh_recalculated else "SOH (재계산)", 
+             "value": f"{soh_pct:.1f}% ({'2차 자료/참고' if not soh_recalculated else '팩ID ' + soh_recalculated.get('pack_id', '')} {reference_kwh:.2f}kWh 미검증)" if soh_pct and reference_kwh else "-", 
+             "unit": ""}
              if soh_pct and reference_kwh else _measure("SOH 참고치", None, ""),
             _measure("팩 전압", pack_voltage, "V", 1),
             _measure("팩 전류", pack_current, "A", 1),
