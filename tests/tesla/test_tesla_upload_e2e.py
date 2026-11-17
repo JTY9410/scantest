@@ -130,25 +130,23 @@ def test_tesla_96_brick_voltage_decode():
 
 
 def test_tesla_soh_community_reference(_app_base):
-    """Community 출처 → 'SOH 참고치(미검증)' 표시."""
+    """No reference data → 'SOH 미산정' status."""
     from app.modules.tesla.soh import calculate_soh
-    from app.modules.tesla.reference_data import seed_tesla_reference_data
     
     with _app_base.app_context():
-        # Tesla 기준 데이터 시드
-        seed_tesla_reference_data()
+        # seed_tesla_reference_data is now a no-op (deprecated)
+        # Test the case where no reference exists
         
-        # Mock data: community 출처는 soh_available=False
         result = calculate_soh(
             current_nominal_full=60.0,
             manufacturer="Tesla",
             model="Model 3",
             year=2020,
-            pack_code="Long Range"
+            pack_code="NonExistent"
         )
-        # community 출처이므로 soh_available=False
+        # No reference → soh_available=False with '미산정' status
         assert result["soh_available"] is False
-        assert "참고" in result["calculation_note"] or "미검증" in result["calculation_note"]
+        assert "미산정" in result["calculation_note"]
 
 
 def test_tesla_pdf_generation(_app_base, make_user):
