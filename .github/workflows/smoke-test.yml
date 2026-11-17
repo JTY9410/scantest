@@ -127,8 +127,9 @@ jobs:
           print("\n✓ All database smoke tests passed")
           EOF
       
-      - name: Test admin battery-references page (Defect 1)
+      - name: Test admin pages (Defects 1, 2, 3)
         run: |
+          # Test battery-references page (Defect 1 & 2: template fix + NULL verification_level)
           response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/admin/battery-references || echo "000")
           echo "Admin battery-references status: $response"
           if [ "$response" != "200" ] && [ "$response" != "302" ]; then
@@ -137,6 +138,17 @@ jobs:
             exit 1
           fi
           echo "✓ Battery-references page accessible"
+          
+          # Test ML admin routes (Defect 3: NameError/AttributeError fixes)
+          for route in "/admin/ml/models" "/admin/ml/anomalies" "/admin/ml/feedback" "/admin/ml/decoder-proposals"; do
+            response=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:8000${route}" || echo "000")
+            echo "Admin ${route} status: $response"
+            if [ "$response" != "200" ] && [ "$response" != "302" ]; then
+              echo "ERROR: ${route} returned $response"
+              exit 1
+            fi
+          done
+          echo "✓ All ML admin pages accessible"
       
       - name: Show container logs on failure
         if: failure()
