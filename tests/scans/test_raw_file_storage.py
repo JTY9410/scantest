@@ -11,11 +11,11 @@ def test_store_and_retrieve_raw_file(app, make_user):
     
     with app.app_context():
         # Create user for tester_id
-        user_id = make_user(tid="test_raw_user1", type="user")
+        user_id = make_user(tid="test_raw_user1", type="tester")
         
         # Create fake scan
         from app.modules.scans.models import Scan
-        scan = Scan(type='manual', device_type='file', device_uid='test', tester_id=user_id, car_no='88가8888', car_vin='ZZZ12345678901234')
+        scan = Scan(type='ev', device_type='file', device_uid='test', tester_id=user_id, car_no='88가8888', car_vin='ZZZ12345678901234')
         db.session.add(scan)
         db.session.flush()
         
@@ -40,8 +40,8 @@ def test_raw_viewer_admin_only(admin_client, client, app, make_user):
     from app import db
     
     with app.app_context():
-        user_id = make_user(tid="test_raw_user2", type="user")
-        scan = Scan(type='manual', device_type='file', device_uid='test', tester_id=user_id, car_no='88가8888')
+        user_id = make_user(tid="test_raw_user2", type="tester")
+        scan = Scan(type='ev', device_type='file', device_uid='test', tester_id=user_id, car_no='88가8888')
         db.session.add(scan)
         db.session.commit()
         scan_id = scan.id
@@ -62,8 +62,8 @@ def test_raw_viewer_shows_unmasked_content(admin_client, app, make_user):
     from app import db
     
     with app.app_context():
-        user_id = make_user(tid="test_raw_user3", type="user")
-        scan = Scan(type='manual', device_type='file', device_uid='test', tester_id=user_id, car_no='12가3456', car_vin='5YJ3E1EB1KF123456')
+        user_id = make_user(tid="test_raw_user3", type="tester")
+        scan = Scan(type='ev', device_type='file', device_uid='test', tester_id=user_id, car_no='12가3456', car_vin='5YJ3E1EB1KF123456')
         db.session.add(scan)
         db.session.flush()
         
@@ -90,8 +90,8 @@ def test_download_creates_audit_log(admin_client, app, make_user):
     from app import db
     
     with app.app_context():
-        user_id = make_user(tid="test_raw_user4", type="user")
-        scan = Scan(type='manual', device_type='file', device_uid='test', tester_id=user_id, car_no='88가8888')
+        user_id = make_user(tid="test_raw_user4", type="tester")
+        scan = Scan(type='ev', device_type='file', device_uid='test', tester_id=user_id, car_no='88가8888')
         db.session.add(scan)
         db.session.flush()
         
@@ -123,8 +123,8 @@ def test_old_scan_shows_no_raw_files(admin_client, app, make_user):
     from app import db
     
     with app.app_context():
-        user_id = make_user(tid="test_raw_user5", type="user")
-        scan = Scan(type='manual', device_type='file', device_uid='test', tester_id=user_id, car_no='88가8888')
+        user_id = make_user(tid="test_raw_user5", type="tester")
+        scan = Scan(type='ev', device_type='file', device_uid='test', tester_id=user_id, car_no='88가8888')
         db.session.add(scan)
         db.session.commit()
         scan_id = scan.id

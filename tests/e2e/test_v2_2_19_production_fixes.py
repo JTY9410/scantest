@@ -217,7 +217,7 @@ def test_recalculate_soh_datetime_import(admin_client, make_user, app):
         
         # Create a fake Tesla scan with BMS data
         scan = Scan(
-            type='manual',  # Required field
+            type='ev',  # Required field
             device_type='file',  # Required field
             device_uid='test',  # Required field
             tester_id=admin_id,  # Required field
