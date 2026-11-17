@@ -31,6 +31,8 @@ services:
       # Optional: 호스트의 정의파일 폴더를 읽기전용으로 마운트
       # 예: DEFINITIONS_HOST_DIR=~/Desktop/차량측정용_정의파일 docker compose up
       - ${DEFINITIONS_HOST_DIR:-./uploads/차량측정용_정의파일}:/definitions:ro
+      # Raw uploaded files storage (v2.2.19+)
+      - raw_uploads:/srv/data/raw_uploads
     depends_on:
       db:
         condition: service_healthy
@@ -68,3 +70,5 @@ volumes:
     name: wecarscan_dh_pgdata
   node_modules:
     name: scantest_node_modules
+  raw_uploads:
+    name: scantest_raw_uploads

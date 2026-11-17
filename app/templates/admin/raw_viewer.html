@@ -1,0 +1,39 @@
+{% extends "admin/base.html" %}
+
+{% block title %}원본 파일 - Scan #{{ scan.id }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>원본 업로드 파일 - Scan #{{ scan.id }}</h2>
+    
+    {% if not raw_files %}
+    <p class="text-muted">원본 없음 (v2.2.19 이전 업로드)</p>
+    {% else %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>파일명 (원본)</th>
+                <th>크기</th>
+                <th>업로드 시각</th>
+                <th>액션</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for file in raw_files %}
+            <tr>
+                <td><code>{{ file.original_filename }}</code></td>
+                <td>{{ "{:,}".format(file.size_bytes) }} bytes</td>
+                <td>{{ file.uploaded_at|kst }}</td>
+                <td>
+                    <a href="{{ url_for('raw_viewer.preview_raw_file', scan_id=scan.id, file_id=file.id) }}" class="btn btn-sm btn-info">미리보기</a>
+                    <a href="{{ url_for('raw_viewer.download_raw_file', scan_id=scan.id, file_id=file.id) }}" class="btn btn-sm btn-primary">다운로드</a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% endif %}
+    
+    <a href="{{ url_for('admin.scan_detail', scan_id=scan.id) }}" class="btn btn-secondary">← 스캔 상세</a>
+</div>
+{% endblock %}

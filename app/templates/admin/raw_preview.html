@@ -1,0 +1,33 @@
+{% extends "admin/base.html" %}
+
+{% block title %}파일 미리보기 - {{ raw_file.original_filename }}{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>파일 미리보기 (UNMASKED)</h2>
+    <p><strong>파일:</strong> <code>{{ raw_file.original_filename }}</code></p>
+    <p><strong>크기:</strong> {{ "{:,}".format(raw_file.size_bytes) }} bytes</p>
+    
+    {% if preview_type == 'text' %}
+    <pre class="bg-light p-3" style="max-height: 600px; overflow-y: scroll;"><code>{{ preview_content }}</code></pre>
+    {% if total_pages > 1 %}
+    <nav>
+        <ul class="pagination">
+            {% if page > 1 %}
+            <li class="page-item"><a class="page-link" href="?page={{ page - 1 }}">이전</a></li>
+            {% endif %}
+            <li class="page-item active"><span class="page-link">{{ page }} / {{ total_pages }}</span></li>
+            {% if page < total_pages %}
+            <li class="page-item"><a class="page-link" href="?page={{ page + 1 }}">다음</a></li>
+            {% endif %}
+        </ul>
+    </nav>
+    {% endif %}
+    {% elif preview_type == 'hex' %}
+    <p class="text-muted">바이너리 파일 (첫 4KB hex)</p>
+    <pre class="bg-light p-3" style="max-height: 400px; overflow-y: scroll; font-family: monospace;"><code>{{ preview_content }}</code></pre>
+    {% endif %}
+    
+    <a href="{{ url_for('raw_viewer.raw_viewer', scan_id=scan_id) }}" class="btn btn-secondary">← 파일 목록</a>
+</div>
+{% endblock %}

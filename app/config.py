@@ -86,6 +86,9 @@ class Config:
     from app.__version__ import __version__
     APP_VERSION = __version__
     
+    # Raw file storage directory (v2.2.19+)
+    RAW_STORAGE_DIR = os.environ.get("RAW_STORAGE_DIR", "/srv/data/raw_uploads")
+    
     # 업로드 크기 제한 (Tesla 다중 파일: 134MB + 268MB = 402MB까지 대응)
     MAX_CONTENT_LENGTH = 600 * 1024 * 1024  # 600 MB
     # Werkzeug form limits: 파일은 디스크로 스트림되므로 메모리 제한에서 제외
