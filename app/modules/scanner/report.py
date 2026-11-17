@@ -707,6 +707,20 @@ def inspection(scan, result: dict) -> dict:
     additional_info = _collect_additional_info(result, is_ev_kind)
     issues = _collect_issues(result, car, pt)
     
+    # Add ML consistency score if available (Defect 6)
+    from app.modules.ml_learning.models import MLConsistencyScore
+    consistency = db.session.query(MLConsistencyScore).filter_by(scan_id=scan.id).first()
+    if consistency:
+        score_text = f"데이터 정합성 점수: {consistency.score:.1f}%"
+        if not consistency.sufficient_data:
+            min_required = consistency.min_samples_required or 10
+            actual = consistency.actual_samples or 0
+            score_text += f" (데이터 부족: {actual}/{min_required} 샘플)"
+        if isinstance(issues, list):
+            issues.append(score_text)
+        elif isinstance(issues, dict):
+            issues.setdefault('additional', []).append(score_text)
+    
     # 업로드 파일에서 제외된 단계 정보 추가
     bms_data = getattr(scan, 'bms_data', None) or {}
     upload_metadata = bms_data.get('upload_metadata') if isinstance(bms_data, dict) else None
@@ -939,6 +953,17 @@ def tesla_inspection(scan) -> dict:
     if not soh_available:
         additional_issues.append(f"SOH 계산 불가: {soh_note}")
     additional_issues.append("일부 항목(셀별 전압, 급속/완속 충전 횟수 등)은 Tesla CAN 메시지에서 제공되지 않습니다.")
+    
+    # Add ML consistency score if available (Defect 6)
+    from app.modules.ml_learning.models import MLConsistencyScore
+    consistency = db.session.query(MLConsistencyScore).filter_by(scan_id=scan.id).first()
+    if consistency:
+        score_text = f"데이터 정합성 점수: {consistency.score:.1f}%"
+        if not consistency.sufficient_data:
+            min_required = consistency.min_samples_required or 10
+            actual = consistency.actual_samples or 0
+            score_text += f" (데이터 부족: {actual}/{min_required} 샘플)"
+        additional_issues.append(score_text)
     
     code = f"WeSCAN-{(when or datetime.now(ZoneInfo('Asia/Seoul'))):%Y%m%d}-{int(getattr(scan, 'id', 0) or 0):08d}"
     

@@ -158,9 +158,14 @@ def _extract_signal_coverage(result: dict) -> dict[str, bool]:
         has_max_cell = "max_voltage" in bricks or "max_cell_v" in decoded
         has_min_cell = "min_voltage" in bricks or "min_cell_v" in decoded
         
+        # SOH signal: check if SOH data exists (even if 미산정/multiple candidates)
+        soh_result = result.get("soh", {}) if "soh" in result and isinstance(result["soh"], dict) else {}
+        has_soh = bool(soh_result.get('soh_percent') or soh_result.get('soh_percent_reference') 
+                      or soh_result.get('reference_capacity') or soh_result.get('soh_status'))
+        
         coverage = {
             "soc": has_soc,
-            "soh": "soh" in result or "soh_percent_reference" in (result.get("soh", {}) if "soh" in result and isinstance(result["soh"], dict) else {}),
+            "soh": has_soh,
             "pack_voltage": has_pack_v,
             "pack_current": has_pack_i,
             "max_cell_v": has_max_cell,
@@ -248,9 +253,10 @@ def _extract_decoded_values(result: dict) -> dict[str, Any]:
 def _extract_unmeasurable(result: dict) -> tuple[dict, int]:
     """측정불가 항목과 개수.
     
-    DEFECT 4 FIX: Tesla scans store data in decoded not battery,
+    DEFECT 4 & 7 FIX: Tesla scans store data in decoded not battery,
     so check both locations before marking signals as '미수신'.
     Also check soh field in the result root for Tesla reference SOH.
+    When SOH is 미산정 (multiple pack candidates), mark as 미산정 not 미수신.
     """
     battery = result.get("battery", {})
     decoded = result.get("decoded", {})  # Tesla data
@@ -266,9 +272,18 @@ def _extract_unmeasurable(result: dict) -> tuple[dict, int]:
             if signal == "soc" and decoded.get('soc', {}).get('soc_ui'):
                 value = True  # Signal present
             elif signal == "soh":
-                # Check if Tesla has SOH reference value (from catalog or BOL)
-                if soh_result and (soh_result.get('soh_percent') or soh_result.get('reference_capacity')):
-                    value = True  # SOH reference available
+                # Check if Tesla has SOH reference value or status
+                if soh_result:
+                    # If SOH was calculated successfully
+                    if soh_result.get('soh_percent') or soh_result.get('reference_capacity'):
+                        value = True  # SOH reference available
+                    # If SOH is 미산정 (e.g. multiple pack candidates), mark as such
+                    elif soh_result.get('soh_status'):
+                        status = soh_result['soh_status']
+                        if '팩 후보 다수' in status or '미산정' in status:
+                            unmeasurable[signal] = "미산정 (팩 후보 다수)"
+                            count += 1
+                            continue  # Skip the rest of the loop for this signal
             elif signal == "pack_voltage" and decoded.get('pack_vi', {}).get('pack_voltage'):
                 value = True
             elif signal in ["max_cell_v", "min_cell_v"] and decoded.get('bricks'):
