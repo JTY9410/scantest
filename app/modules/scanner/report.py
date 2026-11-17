@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any
 from zoneinfo import ZoneInfo
 
+from app.extensions import db
 from app.modules.scanner.powertrain import LABELS, classify
 
 

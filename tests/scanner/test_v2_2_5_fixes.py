@@ -127,9 +127,9 @@ def test_report_bms_soc_key_exists():
 
 
 def test_version_is_2_2_5():
-    """__version__ = 2.2.17 (updated from 2.2.5 → ... → 2.2.8 → 2.2.9 → 2.2.14 → 2.2.17)"""
+    """__version__ = 2.2.18 (updated from 2.2.5 → ... → 2.2.8 → 2.2.9 → 2.2.14 → 2.2.18)"""
     from app import __version__
-    assert __version__.__version__ == "2.2.17"
+    assert __version__.__version__ == "2.2.18"
 
 
 def test_max_upload_size_600mb():

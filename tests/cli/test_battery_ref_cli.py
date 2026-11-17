@@ -122,6 +122,6 @@ def test_seed_replaces_null_capacity_rows(app):
 
 
 def test_version_is_correct(app):
-    """Test that app version is 2.2.17."""
+    """Test that app version is 2.2.18."""
     from app.__version__ import __version__
-    assert __version__ == "2.2.17", f"Expected version 2.2.17, got {__version__}"
+    assert __version__ == "2.2.18", f"Expected version 2.2.18, got {__version__}"
