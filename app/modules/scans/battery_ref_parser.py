@@ -286,15 +286,7 @@ def parse_reference_rows(xlsx_paths: List[Path]) -> List[Dict[str, Any]]:
         
         all_rows.extend(rows)
     
-    # Deduplicate: remove exact duplicates (same source, sheet, and ALL column values)
-    # Convert dict to tuple of sorted items for hashing
-    seen = set()
-    deduped_rows = []
-    for row in all_rows:
-        # Create hashable key from ALL fields including source_file and sheet_name
-        key = tuple(sorted(row.items()))
-        if key not in seen:
-            seen.add(key)
-            deduped_rows.append(row)
-    
-    return deduped_rows
+    # Return all parsed rows without deduplication
+    # Idempotency comes from DELETE (all source_file IN ('tesla','import7')) + INSERT (all parsed)
+    # If xlsx has legitimate duplicates within same sheet, they will all be inserted
+    return all_rows
