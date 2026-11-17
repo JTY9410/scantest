@@ -16,11 +16,14 @@ bp = Blueprint('raw_viewer', __name__, url_prefix='/admin/scan')
 @admin_required
 def raw_viewer(scan_id):
     """View list of raw files for a scan (admin-only, UNMASKED)."""
+    from app.modules.scans.raw_files import ScanRawFile
+    
     scan = db.session.get(Scan, scan_id)
     if not scan:
         abort(404)
     
-    raw_files = scan.raw_files.all()
+    # Query raw files directly instead of using backref
+    raw_files = db.session.query(ScanRawFile).filter_by(scan_id=scan_id).order_by(ScanRawFile.uploaded_at.desc()).all()
     
     # Log the view
     log = RawFileAccessLog(
