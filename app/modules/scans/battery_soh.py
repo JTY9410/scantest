@@ -57,7 +57,7 @@ def find_matching_references(
             (BatteryReferenceCapacity.vin_wmi == decoded['wmi'])
         )
     
-    # Exclude manual rows explicitly, but allow NULL (tests/legacy) and .xlsx files
+    # Exclude manual rows explicitly, but allow NULL (tests/legacy) and other sources
     # SQL: NULL != 'manual' evaluates to NULL (falsy), so use explicit OR with is_(None)
     from sqlalchemy import and_, or_
     query = query.filter(
@@ -67,8 +67,7 @@ def find_matching_references(
         )
     )
     
-    # Filter out rows with ALL capacity columns NULL or obviously implausible values
-    # Exclude rows where all three capacity columns are NULL
+    # Only exclude rows with ALL three capacity columns NULL (completely unusable)
     query = query.filter(
         or_(
             BatteryReferenceCapacity.gross_capacity_kwh.isnot(None),
@@ -76,18 +75,6 @@ def find_matching_references(
             BatteryReferenceCapacity.official_capacity_kwh.isnot(None)
         )
     )
-    
-    # Exclude rows with obviously wrong capacity values (>300 kWh is likely km range, not kWh)
-    # Don't be too strict here - just exclude clearly wrong data
-    for col in [BatteryReferenceCapacity.gross_capacity_kwh, 
-                BatteryReferenceCapacity.net_capacity_kwh,
-                BatteryReferenceCapacity.official_capacity_kwh]:
-        query = query.filter(
-            or_(
-                col.is_(None),
-                and_(col >= 5, col <= 300)  # Very permissive range
-            )
-        )
     
     # Order by verification level (official first)
     results = query.order_by(

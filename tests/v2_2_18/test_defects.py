@@ -248,7 +248,7 @@ class TestDefect5RecalculateSOH:
     
     def test_recalculate_soh_with_pack_id(self, client, admin_user, app):
         """Test recalculate-soh endpoint works and persists result."""
-        from app.modules.users.models import User
+        from app.modules.accounts.models import User
         
         # Create Tesla reference
         ref = BatteryReferenceCapacity(
@@ -316,7 +316,7 @@ class TestDefect6MLConsistencyScore:
     def test_consistency_score_in_report(self, app):
         """Test ML consistency score appears in report additional_issues."""
         from app.modules.scanner.report import tesla_inspection
-        from app.modules.users.models import User
+        from app.modules.accounts.models import User
         
         # Create scan
         tester = db.session.query(User).first()
