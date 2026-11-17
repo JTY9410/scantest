@@ -10,7 +10,7 @@ def test_requirements_lock_matches_pyproject():
     
     # Read pyproject.toml
     with open(repo_root / 'pyproject.toml', 'rb') as f:
-        pyproject = tomli.load(f)
+        pyproject = tomllib.load(f)
     
     # Get dependencies from pyproject
     dependencies = pyproject['project']['dependencies']
