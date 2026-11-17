@@ -39,28 +39,26 @@ jobs:
             exit 0
           fi
           
+          echo "Waiting for both workflows to complete..."
+          sleep 5
+          
           # Get status of both required workflows for this SHA
-          TEST_SUITE=$(gh api /repos/${{ github.repository }}/actions/runs \
-            -f head_sha="${SHA}" \
-            -f event=push \
-            -f status=completed \
+          # Query without event filter to catch all runs
+          TEST_SUITE=$(gh api "/repos/${{ github.repository }}/actions/runs?head_sha=${SHA}&status=completed" \
             --jq '.workflow_runs[] | select(.name == "Test Suite") | .conclusion' | head -1)
           
-          SMOKE_TEST=$(gh api /repos/${{ github.repository }}/actions/runs \
-            -f head_sha="${SHA}" \
-            -f event=push \
-            -f status=completed \
+          SMOKE_TEST=$(gh api "/repos/${{ github.repository }}/actions/runs?head_sha=${SHA}&status=completed" \
             --jq '.workflow_runs[] | select(.name == "Smoke Test") | .conclusion' | head -1)
           
           echo "SHA: ${SHA}"
-          echo "Test Suite: ${TEST_SUITE}"
-          echo "Smoke Test: ${SMOKE_TEST}"
+          echo "Test Suite: '${TEST_SUITE}'"
+          echo "Smoke Test: '${SMOKE_TEST}'"
           
           if [[ "${TEST_SUITE}" == "success" && "${SMOKE_TEST}" == "success" ]]; then
             echo "✓ Both workflows passed"
             echo "should_build=true" >> $GITHUB_OUTPUT
           else
-            echo "✗ Not all workflows passed yet"
+            echo "✗ Not all workflows passed yet (Test Suite: ${TEST_SUITE}, Smoke Test: ${SMOKE_TEST})"
             echo "should_build=false" >> $GITHUB_OUTPUT
           fi
         env:
