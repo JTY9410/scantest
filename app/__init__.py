@@ -53,6 +53,7 @@ def create_app(config_name: str | None = None) -> Flask:
     login_manager.init_app(app)
 
     _import_models()
+    _register_template_filters(app)
     _register_blueprints(app)
     _register_security(app)
     _register_errors(app)
@@ -105,6 +106,22 @@ def _import_models() -> None:
     from app.modules.scanner import learning_models  # noqa: F401
     from app.modules.vin import models as vin  # noqa: F401
     from app.core import maker_aliases_model  # noqa: F401
+
+
+def _register_template_filters(app: Flask) -> None:
+    """Register Jinja2 template filters."""
+    from datetime import datetime, timedelta, timezone
+    
+    @app.template_filter('kst')
+    def kst_filter(dt):
+        """Convert datetime to KST and format as YYYY-MM-DD HH:MM:SS."""
+        if dt is None:
+            return ''
+        # Assume input is UTC, convert to KST (UTC+9)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        kst = dt.astimezone(timezone(timedelta(hours=9)))
+        return kst.strftime('%Y-%m-%d %H:%M:%S')
 
 
 def _register_blueprints(app: Flask) -> None:

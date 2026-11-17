@@ -379,7 +379,8 @@ def test_admin_route_crawl_200(admin_client, app):
             '/admin/scan/<int:scan_id>/pdf',
             '/admin/scan/<int:scan_id>/wescan-json',
             '/admin/battery-references/export',
-            '/admin/scan/<int:scan_id>/recalculate-soh'  # POST only
+            '/admin/scan/<int:scan_id>/recalculate-soh',  # POST only
+            '/admin/canlab/rules/export.dbc'  # Requires maker/model params or returns 400
         }
         
         admin_routes = []
