@@ -70,7 +70,7 @@ def test_psycopg3_not_psycopg2():
     assert 'psycopg-binary==' in requirements_lock, "psycopg-binary not found in requirements.lock"
     
     # Should NOT have psycopg2 or psycopg2-binary
-    assert 'psycopg2==' not in requirements.lock, \
-        "psycopg2 (v2) found in requirements.lock - use psycopg (v3) instead"
-    assert 'psycopg2-binary==' not in requirements.lock, \
-        "psycopg2-binary found in requirements.lock - use psycopg-binary (v3) instead"
+    assert 'psycopg2==' not in requirements_lock, \
+        "psycopg2 (v2) found in requirements_lock - use psycopg (v3) instead"
+    assert 'psycopg2-binary==' not in requirements_lock, \
+        "psycopg2-binary found in requirements_lock - use psycopg-binary (v3) instead"
