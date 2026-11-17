@@ -1,0 +1,124 @@
+"""Test battery reference CLI commands."""
+
+import pytest
+from sqlalchemy import text
+from pathlib import Path
+
+
+def test_battery_ref_seed_command(app):
+    """Test that flask battery-ref-seed command works via CLI runner."""
+    with app.app_context():
+        from app.extensions import db
+        
+        # Clear any existing data
+        db.session.execute(text("DELETE FROM battery_reference_capacity"))
+        db.session.commit()
+        
+        # Run the CLI command
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=['battery-ref-seed'])
+        
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        
+        # Verify data was seeded
+        count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
+        assert count == 223, f"Expected 223 rows, got {count}"
+        
+        # Verify PK044 and PK045 are present
+        pk044 = db.session.execute(text(
+            "SELECT COUNT(*) FROM battery_reference_capacity WHERE pack_id = 'PK044'"
+        )).scalar()
+        pk045 = db.session.execute(text(
+            "SELECT COUNT(*) FROM battery_reference_capacity WHERE pack_id = 'PK045'"
+        )).scalar()
+        
+        assert pk044 > 0, "PK044 not found"
+        assert pk045 > 0, "PK045 not found"
+
+
+def test_battery_ref_import_command(app):
+    """Test that flask battery-ref-import command works via CLI runner."""
+    with app.app_context():
+        from app.extensions import db
+        
+        # Clear any existing data
+        db.session.execute(text("DELETE FROM battery_reference_capacity"))
+        db.session.commit()
+        
+        # Run the CLI command with import7 file
+        runner = app.test_cli_runner()
+        import7_path = Path(__file__).parent.parent.parent / 'data' / 'battery_reference' / 'import7_brands_capacity_master.xlsx'
+        result = runner.invoke(args=['battery-ref-import', str(import7_path)])
+        
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        assert 'Successfully imported' in result.output
+        
+        # Verify data was imported
+        count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
+        assert count == 22, f"Expected 22 rows from import7, got {count}"
+
+
+def test_entrypoint_commands_are_registered(app):
+    """Test that all flask commands called in docker/web-entrypoint.sh are registered."""
+    # Read entrypoint script
+    entrypoint_path = Path(__file__).parent.parent.parent / 'docker' / 'web-entrypoint.sh'
+    entrypoint_content = entrypoint_path.read_text()
+    
+    # Extract flask commands from entrypoint
+    import re
+    flask_commands = re.findall(r'flask\s+([a-z-]+)', entrypoint_content)
+    
+    # Get all registered CLI commands
+    registered_commands = set(app.cli.commands.keys())
+    
+    # Verify each flask command in entrypoint is registered
+    for cmd in flask_commands:
+        assert cmd in registered_commands, \
+            f"Command 'flask {cmd}' used in entrypoint but not registered in app.cli.commands"
+
+
+def test_seed_replaces_null_capacity_rows(app):
+    """Test that seed removes rows with NULL capacity (unusable for SOH)."""
+    with app.app_context():
+        from app.extensions import db
+        from app.modules.scans.battery_capacity import BatteryReferenceCapacity
+        
+        # Clear and insert a bad row (NULL capacity, like leftover opendbc data)
+        db.session.execute(text("DELETE FROM battery_reference_capacity"))
+        db.session.commit()
+        
+        bad_row = BatteryReferenceCapacity(
+            maker='Tesla',
+            model='Model 3',
+            year_from=2018,
+            year_to=2021,
+            gross_capacity_kwh=None,  # NULL
+            net_capacity_kwh=None,    # NULL
+            warnings='opendbc PACK_74_KWH',
+        )
+        db.session.add(bad_row)
+        db.session.commit()
+        
+        # Run seed
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=['battery-ref-seed'])
+        
+        assert result.exit_code == 0, f"Command failed: {result.output}"
+        
+        # Verify NULL-capacity row was removed
+        null_count = db.session.execute(text("""
+            SELECT COUNT(*) FROM battery_reference_capacity 
+            WHERE gross_capacity_kwh IS NULL OR net_capacity_kwh IS NULL
+        """)).scalar()
+        
+        assert null_count == 0, f"Found {null_count} rows with NULL capacity after seed"
+        
+        # Verify good data was imported
+        total_count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
+        assert total_count == 223, f"Expected 223 rows, got {total_count}"
+
+
+def test_version_is_correct(app):
+    """Test that app version is 2.2.14."""
+    from app import __version__
+    assert __version__ == "2.2.14", f"Expected version 2.2.14, got {__version__}"
