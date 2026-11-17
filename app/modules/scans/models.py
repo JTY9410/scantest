@@ -13,6 +13,7 @@ from sqlalchemy import (
     Integer,
     LargeBinary,
     Numeric,
+    SmallInteger,
     String,
     Text,
 )
@@ -208,7 +209,10 @@ class DtcClearLog(db.Model):
 
 class ScanCode(TimestampMixin, SoftDeleteMixin, db.Model):
     __tablename__ = "scan_codes"
-    __table_args__ = (CheckConstraint("type IN ('ev', 'ice')", name="type_valid"),)
+    __table_args__ = (
+        CheckConstraint("type IN ('ev', 'ice')", name="type_valid"),
+        CheckConstraint("status_class IS NULL OR status_class IN ('현재', '임시', '과거')", name="status_class_valid"),
+    )
 
     id: Mapped[int] = mapped_column(
         BigInteger().with_variant(Integer(), "sqlite"),
@@ -217,6 +221,10 @@ class ScanCode(TimestampMixin, SoftDeleteMixin, db.Model):
     type: Mapped[str] = mapped_column(String(10))
     scan_id: Mapped[int] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
     code_id: Mapped[int] = mapped_column(ForeignKey("codes.id", ondelete="RESTRICT"), index=True)
+    
+    # UDS 0x19 status byte and derived classification (v2.2.20)
+    status_byte: Mapped[int | None] = mapped_column(SmallInteger)
+    status_class: Mapped[str | None] = mapped_column(String(10))  # 현재/임시/과거
 
     scan: Mapped[Scan] = relationship()
     code: Mapped[Code] = relationship()
