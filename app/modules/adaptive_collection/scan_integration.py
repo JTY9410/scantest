@@ -101,7 +101,7 @@ def _step_to_signal_id(step: dict) -> Optional[str]:
         0101 -> pid:01
         190209 -> uds:190209
     """
-    command = (step.get('command') or '').strip().upper()
+    command = (step.get('command') or '').strip().upper().replace(' ', '')
     
     if not command or command.startswith('AT'):
         return None
