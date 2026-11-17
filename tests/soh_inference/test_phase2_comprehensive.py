@@ -17,7 +17,7 @@ class TestInferenceEngine:
     
     def test_feature_extraction(self, app, make_user):
         """Test feature extraction from scan data."""
-        user_id = make_user('admin', is_admin=True)
+        user_id = make_user('admin', type='admin')
         
         # Create battery reference for nominal capacity
         with app.app_context():
@@ -73,7 +73,7 @@ class TestInferenceEngine:
     
     def test_scope_resolution_model_specific(self, app, make_user):
         """Test scope resolution: model-specific model preferred."""
-        user_id = make_user('admin', is_admin=True)
+        user_id = make_user('admin', type='admin')
         
         with app.app_context():
             # Create model-specific model
@@ -113,7 +113,7 @@ class TestInferenceEngine:
     
     def test_scope_resolution_manufacturer_fallback(self, app, make_user):
         """Test scope resolution: manufacturer fallback when no model-specific."""
-        user_id = make_user('admin', is_admin=True)
+        user_id = make_user('admin', type='admin')
         
         with app.app_context():
             # Only manufacturer-level model
@@ -140,7 +140,7 @@ class TestInferenceEngine:
     
     def test_scope_resolution_global_fallback(self, app, make_user):
         """Test scope resolution: global fallback (미산정)."""
-        user_id = make_user('admin', is_admin=True)
+        user_id = make_user('admin', type='admin')
         
         with app.app_context():
             # Only global model
@@ -167,7 +167,7 @@ class TestInferenceEngine:
     
     def test_linear_inference(self, app, make_user):
         """Test linear model inference."""
-        user_id = make_user('admin', is_admin=True)
+        user_id = make_user('admin', type='admin')
         
         with app.app_context():
             ref = BatteryReferenceCapacity(
@@ -211,7 +211,7 @@ class TestInferenceEngine:
     
     def test_polynomial_inference(self, app, make_user):
         """Test polynomial model inference."""
-        user_id = make_user('admin', is_admin=True)
+        user_id = make_user('admin', type='admin')
         
         with app.app_context():
             ref = BatteryReferenceCapacity(
@@ -256,7 +256,7 @@ class TestApprovalWorkflow:
     
     def test_approve_model_creates_audit_log(self, app, client, make_user):
         """Test approving a model creates audit log."""
-        user_id = make_user('admin', is_admin=True)
+        user_id = make_user('admin', type='admin')
         
         with app.app_context():
             model = SOHInferenceModel(
@@ -301,7 +301,7 @@ class TestApprovalWorkflow:
     
     def test_approve_requires_notes(self, app, client, make_user):
         """Test approval requires notes."""
-        user_id = make_user('admin', is_admin=True)
+        user_id = make_user('admin', type='admin')
         
         with app.app_context():
             model = SOHInferenceModel(
@@ -328,7 +328,7 @@ class TestApprovalWorkflow:
     
     def test_reject_model_deletes_with_audit(self, app, client, make_user):
         """Test rejecting a model deletes it but keeps audit log."""
-        user_id = make_user('admin', is_admin=True)
+        user_id = make_user('admin', type='admin')
         
         with app.app_context():
             model = SOHInferenceModel(
@@ -368,7 +368,7 @@ class TestApprovalWorkflow:
     
     def test_reject_requires_reason(self, app, client, make_user):
         """Test rejection requires reason."""
-        user_id = make_user('admin', is_admin=True)
+        user_id = make_user('admin', type='admin')
         
         with app.app_context():
             model = SOHInferenceModel(
@@ -394,7 +394,7 @@ class TestApprovalWorkflow:
     
     def test_retire_approved_model(self, app, client, make_user):
         """Test retiring an approved model."""
-        user_id = make_user('admin', is_admin=True)
+        user_id = make_user('admin', type='admin')
         
         with app.app_context():
             model = SOHInferenceModel(
@@ -433,7 +433,7 @@ class TestApprovalWorkflow:
     
     def test_retire_requires_reason(self, app, client, make_user):
         """Test retirement requires reason."""
-        user_id = make_user('admin', is_admin=True)
+        user_id = make_user('admin', type='admin')
         
         with app.app_context():
             model = SOHInferenceModel(
@@ -460,7 +460,7 @@ class TestApprovalWorkflow:
     
     def test_non_admin_blocked(self, app, client, make_user):
         """Test non-admin users blocked from approval actions."""
-        user_id = make_user('viewer', is_admin=False)
+        user_id = make_user('viewer', type='tester')
         
         with app.app_context():
             model = SOHInferenceModel(
@@ -489,7 +489,7 @@ class TestInferenceSaving:
     
     def test_inference_saved_to_database(self, app, make_user):
         """Test inference result saved to database."""
-        user_id = make_user('admin', is_admin=True)
+        user_id = make_user('admin', type='admin')
         
         with app.app_context():
             ref = BatteryReferenceCapacity(
@@ -549,7 +549,7 @@ class TestRuntimeBehavior:
     
     def test_only_approved_models_used(self, app, make_user):
         """Test only approved models used for inference."""
-        user_id = make_user('admin', is_admin=True)
+        user_id = make_user('admin', type='admin')
         
         with app.app_context():
             # Create draft model (should not be used)
