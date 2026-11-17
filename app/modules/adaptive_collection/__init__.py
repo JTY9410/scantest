@@ -8,6 +8,11 @@ from .models import (
     SignalWhitelistAudit,
     ProfileStatus
 )
+from .scan_integration import (
+    get_active_profile,
+    apply_profile_to_plan,
+    update_usage_stats
+)
 
 __all__ = [
     'SignalUsageStats',
@@ -15,5 +20,8 @@ __all__ = [
     'CollectionProfileAudit',
     'SignalWhitelist',
     'SignalWhitelistAudit',
-    'ProfileStatus'
+    'ProfileStatus',
+    'get_active_profile',
+    'apply_profile_to_plan',
+    'update_usage_stats'
 ]

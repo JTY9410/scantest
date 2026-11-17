@@ -114,6 +114,12 @@ class Scan(TimestampMixin, SoftDeleteMixin, db.Model):
     battery_spec_id: Mapped[int | None] = mapped_column(ForeignKey('battery_specs.id', ondelete='SET NULL'))
     raw: Mapped[Any | None] = mapped_column(JSON)
     bms_data: Mapped[Any | None] = mapped_column(JSON)
+    
+    # Phase 3: Adaptive collection
+    collection_profile_id: Mapped[int | None] = mapped_column(Integer)
+    was_full_scan: Mapped[bool | None] = mapped_column(default=True)
+    force_full_scan: Mapped[bool | None] = mapped_column(default=False)
+    is_rescan_sample: Mapped[bool | None] = mapped_column(default=False)
 
     owner: Mapped[User | None] = relationship(foreign_keys=[owner_id])
     tester: Mapped[User] = relationship(foreign_keys=[tester_id])
