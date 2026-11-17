@@ -53,6 +53,8 @@ jobs:
             --network host \
             -e DATABASE_URL="postgresql://scantest:testpass@localhost:5432/scantest_smoke" \
             -e SECRET_KEY="smoke-test-secret-key-for-ci-only" \
+            -e JWT_SECRET="smoke-test-jwt-secret-with-enough-length-for-hs256" \
+            -e ENCRYPTION_KEY="4PjmU8z4M3K5L6N7P8Q9R0S1T2U3V4W5X6Y7Z8A9B0C=" \
             -e FLASK_ENV=production \
             -e AUTO_DB_UPGRADE=true \
             -e GUNICORN_WORKERS=1 \
