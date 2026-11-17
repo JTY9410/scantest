@@ -4,10 +4,13 @@ import pytest
 from pathlib import Path
 
 
-def test_store_and_retrieve_raw_file(app, make_user):
+def test_store_and_retrieve_raw_file(app, make_user, tmp_path):
     """Store raw file and verify SHA256 match."""
     from app.modules.scans.raw_storage import store_raw_file, read_raw_file
     from app import db
+    
+    # Override RAW_STORAGE_DIR to use temp directory
+    app.config['RAW_STORAGE_DIR'] = str(tmp_path / 'raw_uploads')
     
     with app.app_context():
         # Create user for tester_id
@@ -35,10 +38,13 @@ def test_store_and_retrieve_raw_file(app, make_user):
         assert content == test_data
 
 
-def test_raw_viewer_admin_only(admin_client, client, app, make_user):
+def test_raw_viewer_admin_only(admin_client, client, app, make_user, tmp_path):
     """Raw viewer requires admin role."""
     from app.modules.scans.models import Scan
     from app import db
+    
+    # Override RAW_STORAGE_DIR to use temp directory
+    app.config['RAW_STORAGE_DIR'] = str(tmp_path / 'raw_uploads')
     
     with app.app_context():
         user_id = make_user(tid="test_raw_user2", type="tester")
@@ -57,11 +63,14 @@ def test_raw_viewer_admin_only(admin_client, client, app, make_user):
     assert response.status_code in [302, 403]
 
 
-def test_raw_viewer_shows_unmasked_content(admin_client, app, make_user):
+def test_raw_viewer_shows_unmasked_content(admin_client, app, make_user, tmp_path):
     """Preview shows UNMASKED plates and VINs."""
     from app.modules.scans.raw_storage import store_raw_file
     from app.modules.scans.models import Scan
     from app import db
+    
+    # Override RAW_STORAGE_DIR to use temp directory
+    app.config['RAW_STORAGE_DIR'] = str(tmp_path / 'raw_uploads')
     
     with app.app_context():
         user_id = make_user(tid="test_raw_user3", type="tester")
@@ -85,12 +94,15 @@ def test_raw_viewer_shows_unmasked_content(admin_client, app, make_user):
     assert '12가3456' in response.get_data(as_text=True)
 
 
-def test_download_creates_audit_log(admin_client, app, make_user):
+def test_download_creates_audit_log(admin_client, app, make_user, tmp_path):
     """Download creates audit log entry."""
     from app.modules.scans.raw_storage import store_raw_file
     from app.modules.scans.models import Scan
     from app.modules.scans.raw_files import RawFileAccessLog
     from app import db
+    
+    # Override RAW_STORAGE_DIR to use temp directory
+    app.config['RAW_STORAGE_DIR'] = str(tmp_path / 'raw_uploads')
     
     with app.app_context():
         user_id = make_user(tid="test_raw_user4", type="tester")
@@ -121,10 +133,13 @@ def test_download_creates_audit_log(admin_client, app, make_user):
         assert logs[0].user_email is not None
 
 
-def test_old_scan_shows_no_raw_files(admin_client, app, make_user):
+def test_old_scan_shows_no_raw_files(admin_client, app, make_user, tmp_path):
     """Scan without raw files shows '원본 없음 (v2.2.19 이전 업로드)'."""
     from app.modules.scans.models import Scan
     from app import db
+    
+    # Override RAW_STORAGE_DIR to use temp directory
+    app.config['RAW_STORAGE_DIR'] = str(tmp_path / 'raw_uploads')
     
     with app.app_context():
         user_id = make_user(tid="test_raw_user5", type="tester")
