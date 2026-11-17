@@ -1,9 +1,10 @@
 from typing import Any
 
-from flask import Blueprint, render_template, request
+from flask import Blueprint, jsonify, render_template, request
 from sqlalchemy import select
 
 from app.core.pagination import clamp_page
+from app.extensions import db
 from app.modules.auth.access import admin_required
 from app.modules.monitoring import service
 from app.modules.scanner.learn import answered_commands, list_commands
