@@ -36,7 +36,8 @@
         ("연식", view.vehicle.year), ("연료 형식", view.vehicle.fuel),
         ("차량번호", view.vehicle.number), ("차대번호 (VIN)", view.vehicle.vin),
         ("주행거리", view.vehicle.mileage_text),
-        ("진단 일시", view.diagnosed_at)] %}
+        ("진단 일시", view.diagnosed_at),
+        ("수집 방식", view.collection_method)] %}
       <div>
         <p class="text-sm text-muted">{{ label }}</p>
         <p class="font-semibold">{{ value }}</p>

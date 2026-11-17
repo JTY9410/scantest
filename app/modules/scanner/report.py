@@ -785,6 +785,25 @@ def inspection(scan, result: dict) -> dict:
                 "source_note": source_note,
             }
     
+    # 수집 방식 표시 (v2.2.28)
+    collection_method = "전체 스캔"
+    if getattr(scan, "force_full_scan", False):
+        collection_method = "전체 스캔 (강제)"
+    elif getattr(scan, "is_rescan_sample", False):
+        collection_method = "전체 스캔 (샘플링 재수집)"
+    elif getattr(scan, "collection_profile_id", None):
+        profile_id = scan.collection_profile_id
+        # Get profile version if available
+        try:
+            from app.modules.adaptive_collection.models import CollectionProfile
+            profile = db.session.get(CollectionProfile, profile_id)
+            if profile and profile.version:
+                collection_method = f"프로파일 #{profile_id} v{profile.version} 적용"
+            else:
+                collection_method = f"프로파일 #{profile_id} 적용"
+        except Exception:
+            collection_method = f"프로파일 #{profile_id} 적용"
+    
     return {
         "kind": kind,
         "kind_label": LABELS[kind] + (" (플러그인)" if pt.get("plugin") else "") + (" (수소)" if pt.get("hydrogen") else ""),
@@ -796,6 +815,7 @@ def inspection(scan, result: dict) -> dict:
         "code": code,
         "issued_on": when.strftime("%Y.%m.%d") if when else "-",
         "diagnosed_at": when.strftime("%Y. %m. %d.") if when else "-",
+        "collection_method": collection_method,
         "app_version": app_version,
         "vehicle": {
             "manufacturer": maker or "-",

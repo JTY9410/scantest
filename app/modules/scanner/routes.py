@@ -417,15 +417,16 @@ def upload_scan_data():
     car_no = request.form.get("car_no")
     car_json = request.form.get("car")
     car = json.loads(car_json) if car_json else None
+    force_full_scan = request.form.get("force_full_scan") == "true"
     
     try:
         if len(files) == 1:
             # 단일 파일
-            scan_id = process_upload(current_user, files[0], car_no=car_no, car=car)
+            scan_id = process_upload(current_user, files[0], car_no=car_no, car=car, force_full_scan=force_full_scan)
             current_app.logger.info(f"User {current_user.id} uploaded scan data: {files[0].filename}")
         else:
             # 다중 파일 병합
-            scan_id = process_multi_upload(current_user, files, car_no=car_no, car=car)
+            scan_id = process_multi_upload(current_user, files, car_no=car_no, car=car, force_full_scan=force_full_scan)
             filenames = ", ".join(f.filename for f in files)
             current_app.logger.info(f"User {current_user.id} uploaded {len(files)} files: {filenames}")
         

@@ -364,7 +364,8 @@ def process_upload(
     file: FileStorage,
     car_no: str | None = None,
     car: dict | None = None,
-    device: str = "파일 업로드"
+    device: str = "파일 업로드",
+    force_full_scan: bool = False
 ) -> int:
     """
     업로드 파일을 처리하고 스캔 결과를 생성합니다.
@@ -375,6 +376,7 @@ def process_upload(
         car_no: 차량번호 (선택)
         car: 차종 정보 (선택)
         device: 장비명
+        force_full_scan: 전체 스캔 강제 (프로파일 무시)
     
     Returns:
         생성된 Scan ID
@@ -462,6 +464,10 @@ def process_upload(
         except Exception:
             # 조회 실패해도 업로드는 계속 진행
             pass
+    
+    # force_full_scan 전달 (v2.2.28)
+    if force_full_scan:
+        car['force_full_scan'] = True
     
     try:
         scan = run_scan(
@@ -686,7 +692,7 @@ def _process_tesla_upload(
     return scan.id
 
 
-def process_multi_upload(actor: User, files: list, car_no: str = None, car: dict = None, device: str = "파일 업로드") -> int:
+def process_multi_upload(actor: User, files: list, car_no: str = None, car: dict = None, device: str = "파일 업로드", force_full_scan: bool = False) -> int:
     """다중 파일 업로드 및 병합 처리.
     
     Args:
@@ -695,6 +701,7 @@ def process_multi_upload(actor: User, files: list, car_no: str = None, car: dict
         car_no: 차량 번호
         car: 차량 정보
         device: 장치명
+        force_full_scan: 전체 스캔 강제
     
     Returns:
         생성된 스캔 ID
@@ -774,8 +781,14 @@ def process_multi_upload(actor: User, files: list, car_no: str = None, car: dict
     # 차량 정보 정규화
     if car:
         car = normalize_dto(car)
+    else:
+        car = {}
     if car_no:
         car_no = normalize_car_no(car_no)
+    
+    # force_full_scan 전달 (v2.2.28)
+    if force_full_scan:
+        car['force_full_scan'] = True
     
     # 스캔 실행
     scan = run_scan(actor, car_no=car_no, car=car, steps=steps, transport=device)
