@@ -248,17 +248,17 @@ def parse_tesla_file(wb, filename: str) -> List[Dict[str, Any]]:
 
 
 def parse_reference_rows(xlsx_paths: List[Path]) -> List[Dict[str, Any]]:
-    """Pure function: parse xlsx files and return all parsed rows.
+    """Pure function: parse xlsx files and return deduplicated rows.
     
     Args:
         xlsx_paths: List of paths to xlsx files
         
     Returns:
-        List of all parsed rows (no deduplication - idempotency comes from DELETE + INSERT)
+        List of deduplicated parsed rows
         
-    Note: Deduplication is NOT done at parse time. The import process is idempotent
-    via DELETE (all old data) + INSERT (all new parsed data). Historical duplicates
-    in production came from re-importing without clearing, which no longer happens.
+    Note: Deduplication removes only EXACT duplicates (byte-identical rows with same
+    source_file and sheet_name). This handles cases where the same data appears
+    multiple times within a single sheet. The DELETE + INSERT pattern ensures idempotency.
     """
     import openpyxl
     
@@ -286,4 +286,15 @@ def parse_reference_rows(xlsx_paths: List[Path]) -> List[Dict[str, Any]]:
         
         all_rows.extend(rows)
     
-    return all_rows
+    # Deduplicate: remove exact duplicates (same source, sheet, and ALL column values)
+    # Convert dict to tuple of sorted items for hashing
+    seen = set()
+    deduped_rows = []
+    for row in all_rows:
+        # Create hashable key from ALL fields including source_file and sheet_name
+        key = tuple(sorted(row.items()))
+        if key not in seen:
+            seen.add(key)
+            deduped_rows.append(row)
+    
+    return deduped_rows
