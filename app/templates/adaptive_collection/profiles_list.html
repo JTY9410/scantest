@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+
+{% block title %}Collection Profiles{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-8">
+  <h1 class="text-2xl font-bold mb-4">컬렉션 프로파일</h1>
+  
+  <table class="w-full border">
+    <thead>
+      <tr class="bg-gray-100">
+        <th class="px-4 py-2">Version</th>
+        <th class="px-4 py-2">Status</th>
+        <th class="px-4 py-2">Manufacturer</th>
+        <th class="px-4 py-2">Model</th>
+        <th class="px-4 py-2">Created</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for profile in profiles %}
+      <tr>
+        <td class="border px-4 py-2">{{ profile.version }}</td>
+        <td class="border px-4 py-2">{{ profile.status }}</td>
+        <td class="border px-4 py-2">{{ profile.manufacturer }}</td>
+        <td class="border px-4 py-2">{{ profile.model or '(전체)' }}</td>
+        <td class="border px-4 py-2">{{ profile.created_at.strftime('%Y-%m-%d') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

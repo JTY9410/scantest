@@ -1954,6 +1954,78 @@ def register_cli(app: Flask) -> None:
     from app.modules.scans.battery_ref_import import register_commands as register_battery_ref_commands
     register_battery_ref_commands(app)
     
+    # Adaptive collection commands (Phase 3)
+    @click.group()
+    def adaptive():
+        """Adaptive data collection commands."""
+        pass
+    
+    @adaptive.command('generate-profile')
+    @click.option('--manufacturer', required=True, help='Vehicle manufacturer')
+    @click.option('--model', default=None, help='Vehicle model (optional, manufacturer-level if omitted)')
+    @click.option('--threshold', default=20, type=int, help='Skip threshold (minimum scans)')
+    @click.option('--rescan-interval', default=10, type=int, help='Full rescan every N scans')
+    def generate_profile_command(manufacturer, model, threshold, rescan_interval):
+        """Generate a collection profile proposal."""
+        from app.modules.adaptive_collection.models import CollectionProfile, CollectionProfileAudit, ProfileStatus
+        from app.modules.adaptive_collection.profile_generator import generate_collection_profile
+        
+        click.echo(f"Generating profile for {manufacturer}" + (f" {model}" if model else " (manufacturer-level)"))
+        
+        profile = generate_collection_profile(
+            manufacturer=manufacturer,
+            model=model,
+            skip_threshold_scans=threshold,
+            full_rescan_interval=rescan_interval
+        )
+        
+        if not profile:
+            click.echo("No signals to skip found. Profile not generated.")
+            return
+        
+        db.session.add(profile)
+        db.session.commit()
+        
+        audit = CollectionProfileAudit(
+            profile_id=profile.id,
+            action='create',
+            user_email='cli',
+            previous_status=None,
+            new_status=ProfileStatus.DRAFT.value,
+            reason=f"Generated via CLI with threshold={threshold}, rescan_interval={rescan_interval}"
+        )
+        
+        db.session.add(audit)
+        db.session.commit()
+        
+        click.echo(f"✓ Profile created: {profile.version}")
+        click.echo(f"  Status: {profile.status}")
+        click.echo(f"  Signals to skip: {len(profile.signals_to_skip)}")
+        click.echo(f"  Evidence: {len(profile.generation_evidence.get('skip_candidates', []))} candidates analyzed")
+    
+    @adaptive.command('check-reenable')
+    @click.option('--manufacturer', required=True, help='Vehicle manufacturer')
+    @click.option('--model', default=None, help='Vehicle model')
+    def check_reenable_command(manufacturer, model):
+        """Check for signals that should be re-enabled."""
+        from app.modules.adaptive_collection.profile_generator import check_reenable_signals
+        
+        click.echo(f"Checking re-enable proposals for {manufacturer}" + (f" {model}" if model else ""))
+        
+        proposals = check_reenable_signals(manufacturer=manufacturer, model=model)
+        
+        if not proposals:
+            click.echo("No re-enable proposals found.")
+            return
+        
+        click.echo(f"Found {len(proposals)} signal(s) that should be re-enabled:")
+        for p in proposals:
+            click.echo(f"  • {p['signal']}")
+            click.echo(f"    Responded: {p['responded_count']}, Decoded: {p['decoded_count']}")
+            click.echo(f"    Usage: {p['usage']}")
+    
+    app.cli.add_command(adaptive)
+    
     @app.cli.command("seed-tesla-reference")
     def seed_tesla_reference():
         """Tesla 기준 용량 참조 테이블 시드 (기존 행 유지)."""

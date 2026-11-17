@@ -86,6 +86,8 @@ def test_admin_route_crawl_no_500s(admin_client):
         "/admin/battery-references",
         "/admin/users",
         "/admin/settings",
+        "/admin/adaptive/profiles",
+        "/admin/adaptive/whitelist",
     ]
     
     errors = []
