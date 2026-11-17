@@ -1,6 +1,6 @@
 """Adaptive collection admin routes (v2.2.24 Phase 3)."""
 
-from flask import Blueprint, request, jsonify, render_template
+from flask import Blueprint, request, jsonify, render_template, redirect
 from flask_login import current_user
 from datetime import datetime, timezone
 
@@ -8,7 +8,7 @@ from app.extensions import db
 from app.modules.auth.access import admin_required, login_required
 from app.modules.adaptive_collection.models import (
     CollectionProfile, CollectionProfileAudit, SignalWhitelist, SignalWhitelistAudit,
-    ProfileStatus
+    SignalUsageStats, ProfileStatus
 )
 from app.modules.adaptive_collection.profile_generator import generate_collection_profile, check_reenable_signals
 
