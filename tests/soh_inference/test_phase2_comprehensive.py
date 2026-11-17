@@ -347,11 +347,14 @@ class TestApprovalWorkflow:
             model = db.session.get(SOHInferenceModel, model_id)
             assert model is None
             
-            # But audit log exists
-            audits = db.session.query(InferenceModelAudit).filter_by(model_id=model_id).all()
-            assert len(audits) == 1
-            assert audits[0].action == 'reject'
-            assert audits[0].reason == 'Validation metrics too poor, retrain required'
+            # But audit log exists (model_id will be NULL after deletion due to ON DELETE SET NULL)
+            audits = db.session.query(InferenceModelAudit).filter_by(action='reject').all()
+            assert len(audits) >= 1
+            reject_audit = next((a for a in audits if a.reason == 'Validation metrics too poor, retrain required'), None)
+            assert reject_audit is not None
+            assert reject_audit.action == 'reject'
+            assert reject_audit.previous_status == 'draft'
+            assert reject_audit.new_status == 'deleted'
     
     def test_reject_requires_reason(self, app, admin_client):
         """Test rejection requires reason."""
