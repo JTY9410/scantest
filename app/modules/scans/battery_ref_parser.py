@@ -149,27 +149,33 @@ def parse_tesla_model_year_list(ws, sheet_name: str, filename: str) -> List[Dict
     import sys
     rows = []
     
-    # Find header row
+    # Find header row (look for '모델연도' in col 0 or '차종' in col 1)
     header_row = None
     for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=10), start=1):
-        cell_val = str(row[0].value or '') if row[0].value else ''
-        if '차종' in cell_val or 'Model' in cell_val:
+        col0_val = str(row[0].value or '') if row[0].value else ''
+        col1_val = str(row[1].value or '') if len(row) > 1 and row[1].value else ''
+        if '모델연도' in col0_val or '차종' in col1_val:
             header_row = row_idx
-            print(f"[DEBUG] {sheet_name}: Found header at row {header_row}, value='{cell_val}'", file=sys.stderr)
+            print(f"[DEBUG] {sheet_name}: Found header at row {header_row}, col0='{col0_val}', col1='{col1_val}'", file=sys.stderr)
             break
     
     if not header_row:
         print(f"[DEBUG] {sheet_name}: No header found! Checked rows 1-10", file=sys.stderr)
         for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=10), start=1):
-            print(f"[DEBUG]   Row {row_idx}, col 0: '{row[0].value}'", file=sys.stderr)
+            col0 = row[0].value if row[0] else None
+            col1 = row[1].value if len(row) > 1 and row[1] else None
+            print(f"[DEBUG]   Row {row_idx}: col0='{col0}', col1='{col1}'", file=sys.stderr)
         return rows
     
-    # 차종,트림/구성,모델연도,공장,팩ID,총량(실측),사용량(실측),총량(이론),사용량(이론),VIN WMI,증빙,출처,비고
+    # Header: 모델연도,차종,트림/구성,팩ID,공장,총량(실측),사용량(실측),총량(이론),사용량(이론),VIN WMI,증빙,출처,비고
     row_count = 0
     skipped_count = 0
     for row in ws.iter_rows(min_row=header_row + 1):
-        model = row[0].value
-        if not model:
+        year = row[0].value if row[0] else None
+        model = row[1].value if len(row) > 1 else None
+        
+        # Skip rows with no year or model
+        if not year or not model:
             skipped_count += 1
             continue
         row_count += 1
@@ -178,11 +184,11 @@ def parse_tesla_model_year_list(ws, sheet_name: str, filename: str) -> List[Dict
             'source_file': 'tesla',
             'sheet_name': sheet_name,
             'maker': 'Tesla',
+            'year_from': parse_int(year),
             'model': str(model).strip(),
-            'trim': str(row[1].value or '').strip() if len(row) > 1 and row[1].value else None,
-            'year_from': parse_int(row[2].value) if len(row) > 2 else None,
-            'plant_code': str(row[3].value or '').strip() if len(row) > 3 and row[3].value else None,
-            'pack_id': str(row[4].value or '').strip() if len(row) > 4 and row[4].value else None,
+            'trim': str(row[2].value or '').strip() if len(row) > 2 and row[2].value else None,
+            'pack_id': str(row[3].value or '').strip() if len(row) > 3 and row[3].value else None,
+            'plant_code': str(row[4].value or '').strip() if len(row) > 4 and row[4].value else None,
             'gross_capacity_kwh': parse_float(row[5].value) if len(row) > 5 else None,
             'net_capacity_kwh': parse_float(row[6].value) if len(row) > 6 else None,
             'gross_capacity_theoretical': parse_float(row[7].value) if len(row) > 7 else None,

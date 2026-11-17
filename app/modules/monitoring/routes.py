@@ -271,7 +271,7 @@ def list_battery_specs():
     maker = request.args.get("maker", "").strip()
     model = request.args.get("model", "").strip()
     
-    stmt = select(BatterySpec).where(BatterySpec.is_active == True).order_by(
+    stmt = select(BatterySpec).order_by(
         BatterySpec.maker, BatterySpec.model, BatterySpec.model_year.desc()
     )
     
