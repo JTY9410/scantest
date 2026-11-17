@@ -1,0 +1,40 @@
+{% extends "layouts/admin.html" %}
+{% block title %}사용 통계{% endblock %}
+{% block content %}
+<div class="container mx-auto py-6 px-4">
+  <h1 class="text-2xl font-bold mb-6">신호 사용 통계</h1>
+  
+  <table class="w-full border-collapse border">
+    <thead>
+      <tr class="bg-gray-100">
+        <th class="border p-2">제조사</th>
+        <th class="border p-2">모델</th>
+        <th class="border p-2">신호 수</th>
+        <th class="border p-2">요청</th>
+        <th class="border p-2">응답</th>
+        <th class="border p-2">디코드</th>
+        <th class="border p-2">응답률</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for stat in stats %}
+      <tr>
+        <td class="border p-2">{{ stat.manufacturer }}</td>
+        <td class="border p-2">{{ stat.model or '(전체)' }}</td>
+        <td class="border p-2">{{ stat.signal_count }}</td>
+        <td class="border p-2">{{ stat.total_requested or 0 }}</td>
+        <td class="border p-2">{{ stat.total_responded or 0 }}</td>
+        <td class="border p-2">{{ stat.total_decoded or 0 }}</td>
+        <td class="border p-2">
+          {% if stat.total_requested and stat.total_requested > 0 %}
+            {{ "%.1f"|format(100.0 * (stat.total_responded or 0) / stat.total_requested) }}%
+          {% else %}
+            -
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

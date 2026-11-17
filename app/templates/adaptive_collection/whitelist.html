@@ -6,6 +6,16 @@
   
   <p class="mb-4 text-gray-600">항상 요청되는 보호 신호 목록입니다.</p>
   
+  <form method="POST" action="/admin/adaptive/whitelist/add" class="mb-6 p-4 border rounded bg-gray-50">
+    {{ csrf_token() }}
+    <h2 class="font-bold mb-3">신호 추가</h2>
+    <div class="grid grid-cols-3 gap-4">
+      <input type="text" name="signal_identifier" placeholder="신호 ID (예: did:F190)" required class="border rounded px-3 py-2">
+      <input type="text" name="reason" placeholder="사유 *" required class="border rounded px-3 py-2">
+      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">추가</button>
+    </div>
+  </form>
+  
   <table class="w-full border-collapse border">
     <thead>
       <tr class="bg-gray-100">
@@ -13,6 +23,7 @@
         <th class="border p-2">사유</th>
         <th class="border p-2">설명</th>
         <th class="border p-2">추가일</th>
+        <th class="border p-2">액션</th>
       </tr>
     </thead>
     <tbody>
@@ -22,6 +33,13 @@
         <td class="border p-2">{{ item.reason }}</td>
         <td class="border p-2">{{ item.description or '-' }}</td>
         <td class="border p-2">{{ item.added_at.strftime('%Y-%m-%d') if item.added_at else '-' }}</td>
+        <td class="border p-2">
+          <form method="POST" action="/admin/adaptive/whitelist/{{ item.id }}/remove" style="display:inline">
+            {{ csrf_token() }}
+            <input type="text" name="reason" placeholder="삭제 사유" required class="border rounded px-2 py-1 text-sm">
+            <button type="submit" class="px-2 py-1 bg-red-600 text-white rounded text-sm hover:bg-red-700">삭제</button>
+          </form>
+        </td>
       </tr>
       {% endfor %}
     </tbody>

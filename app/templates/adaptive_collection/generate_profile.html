@@ -1,0 +1,36 @@
+{% extends "layouts/admin.html" %}
+{% block title %}프로파일 생성{% endblock %}
+{% block content %}
+<div class="container mx-auto py-6 px-4">
+  <h1 class="text-2xl font-bold mb-6">새 프로파일 생성</h1>
+  
+  {% if error %}
+  <div class="mb-4 p-4 bg-red-100 text-red-800 rounded">{{ error }}</div>
+  {% endif %}
+  
+  <form method="POST" class="max-w-md">
+    {{ csrf_token() }}
+    
+    <div class="mb-4">
+      <label class="block text-sm font-bold mb-2">제조사 *</label>
+      <input type="text" name="manufacturer" required class="w-full border rounded px-3 py-2">
+    </div>
+    
+    <div class="mb-4">
+      <label class="block text-sm font-bold mb-2">모델 (선택사항)</label>
+      <input type="text" name="model" class="w-full border rounded px-3 py-2">
+      <p class="text-sm text-gray-600 mt-1">비워두면 제조사 전체 프로파일</p>
+    </div>
+    
+    <div class="mb-4">
+      <label class="block text-sm font-bold mb-2">스킵 임계값 (스캔 수)</label>
+      <input type="number" name="threshold" value="20" min="1" class="w-full border rounded px-3 py-2">
+    </div>
+    
+    <div class="flex gap-2">
+      <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">생성</button>
+      <a href="/admin/adaptive/profiles" class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300">취소</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

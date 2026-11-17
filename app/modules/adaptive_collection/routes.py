@@ -25,6 +25,54 @@ def list_profiles():
     return render_template('adaptive_collection/profiles_list.html', profiles=profiles)
 
 
+@bp.route('/profiles/generate', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def generate_profile():
+    """Generate new collection profile (synchronous)."""
+    if request.method == 'GET':
+        return render_template('adaptive_collection/generate_profile.html')
+    
+    # POST: run generation synchronously
+    from app.modules.adaptive_collection.profile_generator import generate_collection_profile
+    
+    manufacturer = request.form.get('manufacturer', '').strip()
+    model = request.form.get('model', '').strip() or None
+    threshold = int(request.form.get('threshold', 20))
+    
+    if not manufacturer:
+        return "제조사를 입력하세요", 400
+    
+    profile = generate_collection_profile(
+        manufacturer=manufacturer,
+        model=model,
+        skip_threshold_scans=threshold
+    )
+    
+    if not profile:
+        return render_template('adaptive_collection/generate_profile.html',
+                             error='생성할 프로파일이 없습니다 (스킵 신호 없음)')
+    
+    db.session.add(profile)
+    
+    # Create audit
+    audit = CollectionProfileAudit(
+        profile_id=None,
+        action='create',
+        user_id=current_user.id,
+        user_email=current_user.email or current_user.tid,
+        new_status=ProfileStatus.DRAFT.value,
+        reason=f'Generated via admin UI'
+    )
+    db.session.add(audit)
+    db.session.commit()
+    
+    audit.profile_id = profile.id
+    db.session.commit()
+    
+    return redirect(f'/admin/adaptive/profiles/{profile.id}')
+
+
 @bp.route('/profiles/<int:profile_id>', methods=['GET'])
 @login_required
 @admin_required
@@ -142,23 +190,50 @@ def list_whitelist():
     return render_template('adaptive_collection/whitelist.html', whitelist=whitelist)
 
 
-@bp.route('/whitelist', methods=['POST'])
+@bp.route('/usage-stats', methods=['GET'])
+@login_required
+@admin_required
+def usage_stats():
+    """View signal usage statistics."""
+    from sqlalchemy import select, func
+    
+    # Get aggregated stats by manufacturer
+    stats = db.session.execute(
+        select(
+            SignalUsageStats.manufacturer,
+            SignalUsageStats.model,
+            func.count(SignalUsageStats.id).label('signal_count'),
+            func.sum(SignalUsageStats.requested_count).label('total_requested'),
+            func.sum(SignalUsageStats.responded_count).label('total_responded'),
+            func.sum(SignalUsageStats.decoded_count).label('total_decoded')
+        ).group_by(
+            SignalUsageStats.manufacturer,
+            SignalUsageStats.model
+        ).order_by(
+            SignalUsageStats.manufacturer,
+            SignalUsageStats.model
+        )
+    ).all()
+    
+    return render_template('adaptive_collection/usage_stats.html', stats=stats)
+
+
+@bp.route('/whitelist/add', methods=['POST'])
 @login_required
 @admin_required
 def add_to_whitelist():
-    """Add signal to whitelist."""
-    data = request.get_json() or {}
-    signal_id = data.get('signal_identifier', '').strip()
-    reason = data.get('reason', '').strip()
-    description = data.get('description', '').strip()
+    """Add signal to whitelist (with CSRF protection)."""
+    signal_id = request.form.get('signal_identifier', '').strip()
+    reason = request.form.get('reason', '').strip()
+    description = request.form.get('description', '').strip()
     
     if not signal_id or not reason:
-        return jsonify({'error': 'Signal identifier and reason required'}), 400
+        return "Signal identifier and reason required", 400
     
     # Check if already exists
     existing = db.session.query(SignalWhitelist).filter_by(signal_identifier=signal_id).first()
     if existing:
-        return jsonify({'error': 'Signal already in whitelist'}), 400
+        return "Signal already in whitelist", 400
     
     # Add to whitelist
     whitelist_entry = SignalWhitelist(
@@ -184,28 +259,23 @@ def add_to_whitelist():
     db.session.add(audit)
     db.session.commit()
     
-    return jsonify({
-        'success': True,
-        'whitelist_id': whitelist_entry.id,
-        'signal_identifier': signal_id
-    })
+    return redirect('/admin/adaptive/whitelist')
 
 
-@bp.route('/whitelist/<int:whitelist_id>', methods=['DELETE'])
+@bp.route('/whitelist/<int:whitelist_id>/remove', methods=['POST'])
 @login_required
 @admin_required
 def remove_from_whitelist(whitelist_id):
-    """Remove signal from whitelist."""
+    """Remove signal from whitelist (with CSRF protection)."""
     entry = db.session.get(SignalWhitelist, whitelist_id)
     
     if not entry:
-        return jsonify({'error': 'Whitelist entry not found'}), 404
+        return "Whitelist entry not found", 404
     
-    data = request.get_json() or {}
-    reason = data.get('reason', '').strip()
+    reason = request.form.get('reason', '').strip()
     
     if not reason:
-        return jsonify({'error': 'Removal reason required'}), 400
+        return "Removal reason required", 400
     
     # Create audit log before removal
     audit = SignalWhitelistAudit(
@@ -224,10 +294,7 @@ def remove_from_whitelist(whitelist_id):
     
     db.session.commit()
     
-    return jsonify({
-        'success': True,
-        'whitelist_id': whitelist_id
-    })
+    return redirect('/admin/adaptive/whitelist')
 
 
 @bp.route('/profiles/<int:profile_id>/reenable-check', methods=['GET'])
