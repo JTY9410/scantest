@@ -21,7 +21,7 @@ def test_startup_commands_registered(app):
 
 def test_battery_references_loaded(app):
     """Verify battery references are present after seed."""
-    from app.modules.scans.models import BatteryReferenceCapacity
+    from app.modules.scans.battery_capacity import BatteryReferenceCapacity
     from app import db
     
     with app.app_context():
