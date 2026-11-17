@@ -38,7 +38,8 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ./docker/Dockerfile
+          file: ./Dockerfile
+          target: prod
           push: false
           load: true
           tags: scantest:smoke
