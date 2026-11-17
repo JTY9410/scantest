@@ -20,11 +20,19 @@ def test_startup_commands_registered(app):
 
 
 def test_battery_references_loaded(app):
-    """Verify battery references are present after seed."""
+    """Verify battery references are present after seed.
+    
+    This test runs the seed command first, then verifies the data.
+    """
     from app.modules.scans.battery_capacity import BatteryReferenceCapacity
     from app import db
     
     with app.app_context():
+        # Run the seed command first
+        runner = app.test_cli_runner()
+        result = runner.invoke(args=["battery-ref-seed"])
+        assert result.exit_code == 0, f"Seed command failed: {result.output}"
+        
         count = db.session.query(BatteryReferenceCapacity).count()
         assert count == 221, f"Expected 221 battery references, got {count}"
         
