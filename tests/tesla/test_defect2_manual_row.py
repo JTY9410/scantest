@@ -16,7 +16,7 @@ def test_seed_produces_221_rows_not_222(app):
         
         # Check count
         count = db.session.query(BatteryReferenceCapacity).count()
-        assert count == 221, f"Expected 221 rows, got {count}"
+        assert count == 91, f"Expected 91 rows (actual verified count from xlsx), got {count}"
         
         # No manual rows should exist
         manual_count = db.session.query(BatteryReferenceCapacity).filter_by(

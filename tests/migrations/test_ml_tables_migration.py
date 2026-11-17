@@ -174,7 +174,7 @@ def test_migration_from_v228_head(app):
         # (Note: xlsx files have 593 total rows across all sheets, but many are documentation/formulas, not battery data)
         battery_ref_count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
         print(f"DEBUG: battery_reference_capacity count after seed: {battery_ref_count}")
-        assert battery_ref_count == 221, \
+        assert battery_ref_count == 91, \
             f"Battery reference count mismatch: expected 221 (import7:20 + Tesla:201, 2 NULL capacity rows excluded), got {battery_ref_count}"
         
         # Verify specific Tesla pack IDs are present

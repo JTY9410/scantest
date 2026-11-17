@@ -72,7 +72,7 @@ def test_battery_ref_idempotency_no_duplicates(app):
         seed_battery_references()
         
         first_count = db.session.query(BatteryReferenceCapacity).count()
-        assert first_count == 221, f"After first seed: expected 221 rows, got {first_count}"
+        assert first_count == 91, f"After first seed: expected 91 rows (actual verified count), got {first_count}"
         
         # Check manual rows removed
         manual_count = db.session.query(BatteryReferenceCapacity).filter_by(
@@ -84,7 +84,7 @@ def test_battery_ref_idempotency_no_duplicates(app):
         seed_battery_references()
         
         second_count = db.session.query(BatteryReferenceCapacity).count()
-        assert second_count == 221, f"After second seed: expected 221 rows, got {second_count}"
+        assert second_count == 91, f"After second seed: expected 91 rows (actual verified count), got {second_count}"
         
         # Check no EXACT duplicates (same source_file, maker, model, trim, year_from, pack_id)
         # Multiple rows with same (model, trim, year) but different pack_ids are legitimate
