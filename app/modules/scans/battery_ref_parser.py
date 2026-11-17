@@ -146,23 +146,33 @@ def parse_tesla_vin_decode(ws, sheet_name: str, filename: str) -> List[Dict[str,
 
 def parse_tesla_model_year_list(ws, sheet_name: str, filename: str) -> List[Dict[str, Any]]:
     """Parse Tesla model year comprehensive list (Sheet 4)"""
+    import sys
     rows = []
     
     # Find header row
     header_row = None
-    for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=5), start=1):
-        if row[0].value and ('차종' in str(row[0].value) or 'Model' in str(row[0].value)):
+    for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=10), start=1):
+        cell_val = str(row[0].value or '') if row[0].value else ''
+        if '차종' in cell_val or 'Model' in cell_val:
             header_row = row_idx
+            print(f"[DEBUG] {sheet_name}: Found header at row {header_row}, value='{cell_val}'", file=sys.stderr)
             break
     
     if not header_row:
+        print(f"[DEBUG] {sheet_name}: No header found! Checked rows 1-10", file=sys.stderr)
+        for row_idx, row in enumerate(ws.iter_rows(min_row=1, max_row=10), start=1):
+            print(f"[DEBUG]   Row {row_idx}, col 0: '{row[0].value}'", file=sys.stderr)
         return rows
     
     # 차종,트림/구성,모델연도,공장,팩ID,총량(실측),사용량(실측),총량(이론),사용량(이론),VIN WMI,증빙,출처,비고
+    row_count = 0
+    skipped_count = 0
     for row in ws.iter_rows(min_row=header_row + 1):
         model = row[0].value
         if not model:
+            skipped_count += 1
             continue
+        row_count += 1
         
         record = {
             'source_file': 'tesla',
@@ -185,6 +195,7 @@ def parse_tesla_model_year_list(ws, sheet_name: str, filename: str) -> List[Dict
         
         rows.append(record)
     
+    print(f"[DEBUG] {sheet_name}: Processed {row_count} data rows, skipped {skipped_count} empty rows, returning {len(rows)} records", file=sys.stderr)
     return rows
 
 
