@@ -190,8 +190,17 @@ def import_import7_file(wb, filename):
 
 
 def import_tesla_file(wb, filename):
-    """Import Tesla VIN + pack candidate DB file"""
-    imported = 0
+    """Import Tesla VIN + pack candidate DB file.
+    
+    Note: Multiple sheets may contain overlapping data (e.g., same Model/Year/Trim
+    in both 팩후보_DB and 연식별_전체목록). To handle this, we collect all rows
+    first, then deduplicate by (pack_id, model, trim, year_from) before inserting.
+    """
+    from app.extensions import db
+    from app.modules.scans.battery_capacity import BatteryReferenceCapacity
+    
+    # Collect all rows from all sheets (may have duplicates)
+    all_rows = []
     
     # Sheet names to process (actual sheet names in the xlsx file)
     sheets_to_process = {
@@ -203,11 +212,38 @@ def import_tesla_file(wb, filename):
     
     for sheet_name, import_func in sheets_to_process.items():
         if sheet_name in wb.sheetnames:
+            # Import func adds to db.session but doesn't commit yet
             count = import_func(wb[sheet_name], sheet_name, filename)
-            imported += count
-            click.echo(f"  Imported {count} records from {sheet_name}")
+            click.echo(f"  Processed {count} records from {sheet_name}")
         else:
             click.echo(f"  Warning: Sheet '{sheet_name}' not found, skipping")
+    
+    # Now deduplicate: get all pending Tesla rows from session
+    pending = [obj for obj in db.session.new if isinstance(obj, BatteryReferenceCapacity) and obj.source_file == 'tesla']
+    
+    # Deduplicate by (pack_id, model, trim, year_from)
+    # Keep first occurrence of each key
+    seen_keys = set()
+    deduped = []
+    
+    for row in pending:
+        # Build key
+        key = (
+            row.pack_id or '',
+            row.model or '',
+            row.trim or '',
+            row.year_from or 0
+        )
+        
+        if key not in seen_keys:
+            seen_keys.add(key)
+            deduped.append(row)
+        else:
+            # Remove duplicate from session
+            db.session.expunge(row)
+    
+    imported = len(deduped)
+    click.echo(f"  Deduplicated: {len(pending)} → {imported} unique rows")
     
     return imported
 
