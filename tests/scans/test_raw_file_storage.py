@@ -12,7 +12,7 @@ def test_store_and_retrieve_raw_file(app):
     with app.app_context():
         # Create fake scan
         from app.modules.scans.models import Scan
-        scan = Scan(type='manual', device_type='file', car_no='88가8888', car_vin='ZZZ12345678901234')
+        scan = Scan(type='manual', device_type='file', device_uid='test', car_no='88가8888', car_vin='ZZZ12345678901234')
         db.session.add(scan)
         db.session.flush()
         
@@ -37,7 +37,7 @@ def test_raw_viewer_admin_only(admin_client, client, app):
     from app import db
     
     with app.app_context():
-        scan = Scan(type='manual', device_type='file', car_no='88가8888')
+        scan = Scan(type='manual', device_type='file', device_uid='test', car_no='88가8888')
         db.session.add(scan)
         db.session.commit()
         scan_id = scan.id
@@ -58,7 +58,7 @@ def test_raw_viewer_shows_unmasked_content(admin_client, app):
     from app import db
     
     with app.app_context():
-        scan = Scan(type='manual', device_type='file', car_no='12가3456', car_vin='5YJ3E1EB1KF123456')
+        scan = Scan(type='manual', device_type='file', device_uid='test', car_no='12가3456', car_vin='5YJ3E1EB1KF123456')
         db.session.add(scan)
         db.session.flush()
         
@@ -85,7 +85,7 @@ def test_download_creates_audit_log(admin_client, app):
     from app import db
     
     with app.app_context():
-        scan = Scan(type='manual', device_type='file', car_no='88가8888')
+        scan = Scan(type='manual', device_type='file', device_uid='test', car_no='88가8888')
         db.session.add(scan)
         db.session.flush()
         
@@ -117,7 +117,7 @@ def test_old_scan_shows_no_raw_files(admin_client, app):
     from app import db
     
     with app.app_context():
-        scan = Scan(type='manual', device_type='file', car_no='88가8888')
+        scan = Scan(type='manual', device_type='file', device_uid='test', car_no='88가8888')
         db.session.add(scan)
         db.session.commit()
         scan_id = scan.id

@@ -216,6 +216,7 @@ def test_recalculate_soh_datetime_import(admin_client, app):
         scan = Scan(
             type='manual',  # Required field
             device_type='file',  # Required field
+            device_uid='test',  # Required field
             car_vin='ZZZ12345678901234',
             car_no='88가8888',
             car_maker='Tesla',
@@ -373,7 +374,7 @@ def test_tesla_ml_features_soh_status(app):
     assert unmeasurable['soh'] != '미수신', "Should not be 미수신 when data exists"
 
 
-def test_admin_route_crawl_200(client_authed_admin, app):
+def test_admin_route_crawl_200(admin_client, app):
     """Smoke test: Crawl all parameter-less admin GET routes, assert 200.
     
     Excludes file-export endpoints that require params:

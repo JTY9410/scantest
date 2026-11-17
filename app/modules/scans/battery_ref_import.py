@@ -192,12 +192,12 @@ def import_import7_file(wb, filename):
 def import_tesla_file(wb, filename):
     """Import Tesla VIN + pack candidate DB file.
     
-    With clear=True at the file level, we import all rows as-is.
-    The xlsx is the source of truth; overlapping data across sheets
-    represents legitimate configurations (e.g., same model/year/trim
-    with different pack options).
+    Deduplicates EXACT duplicates (same pack_id + model/trim/year) that
+    appear multiple times in the xlsx. Different pack_ids with same
+    model/trim/year are legitimate and kept.
     """
-    imported = 0
+    from app.extensions import db
+    from app.modules.scans.battery_capacity import BatteryReferenceCapacity
     
     # Sheet names to process (actual sheet names in the xlsx file)
     sheets_to_process = {
@@ -210,10 +210,36 @@ def import_tesla_file(wb, filename):
     for sheet_name, import_func in sheets_to_process.items():
         if sheet_name in wb.sheetnames:
             count = import_func(wb[sheet_name], sheet_name, filename)
-            imported += count
-            click.echo(f"  Imported {count} records from {sheet_name}")
+            click.echo(f"  Processed {count} records from {sheet_name}")
         else:
             click.echo(f"  Warning: Sheet '{sheet_name}' not found, skipping")
+    
+    # Deduplicate EXACT duplicates from session.new
+    pending = [obj for obj in db.session.new if isinstance(obj, BatteryReferenceCapacity) and obj.source_file == 'tesla']
+    
+    # Build unique key: (maker, model, trim, year_from, pack_id)
+    seen_keys = set()
+    deduped = []
+    
+    for row in pending:
+        key = (
+            row.maker or '',
+            row.model or '',
+            row.trim or '',
+            row.year_from or 0,
+            row.pack_id or ''
+        )
+        
+        if key not in seen_keys:
+            seen_keys.add(key)
+            deduped.append(row)
+        else:
+            # EXACT duplicate - remove from session
+            db.session.expunge(row)
+    
+    imported = len(deduped)
+    if len(pending) != imported:
+        click.echo(f"  Deduplicated: {len(pending)} → {imported} unique rows (removed {len(pending) - imported} exact duplicates)")
     
     return imported
 
