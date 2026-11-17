@@ -1,188 +1,158 @@
-"""Adaptive Collection Models."""
+"""Adaptive collection models (v2.2.24 Phase 3)."""
 
 from datetime import datetime
 from enum import Enum
 
-from sqlalchemy import JSON
+from sqlalchemy import BigInteger, Integer, String, Float, Boolean, Text, DateTime, ForeignKey, Index, CheckConstraint, UniqueConstraint, JSON
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.extensions import db
 
 
-class CollectionProfileStatus(str, Enum):
-    """Collection profile lifecycle status."""
+class ProfileStatus(str, Enum):
+    """Collection profile status."""
     DRAFT = 'draft'
     PENDING_APPROVAL = 'pending_approval'
     APPROVED = 'approved'
-    RETIRED = 'retired'
+    ROLLED_BACK = 'rolled_back'
 
 
-class SignalUsageTracking(db.Model):
-    """Per-signal usage tracking for learning."""
-    __tablename__ = 'signal_usage_tracking'
+class SignalUsageStats(db.Model):
+    """Per-signal usage statistics for adaptive collection."""
     
-    id = db.Column(db.Integer, primary_key=True)
+    __tablename__ = 'signal_usage_stats'
+    __table_args__ = (
+        UniqueConstraint('manufacturer', 'model', 'signal_identifier', name='uq_signal_usage_scope'),
+        Index('idx_signal_usage_manufacturer', 'manufacturer'),
+        Index('idx_signal_usage_model', 'manufacturer', 'model'),
+        Index('idx_signal_usage_signal', 'signal_identifier'),
+    )
     
-    # Signal identification
-    maker = db.Column(db.String(50), nullable=False)
-    model = db.Column(db.String(100), nullable=True)  # NULL = manufacturer-level
-    signal_name = db.Column(db.String(100), nullable=False)  # e.g. 'dtc_status', 'cell_voltages'
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer(), "sqlite"), primary_key=True)
+    manufacturer: Mapped[str] = mapped_column(String(50))
+    model: Mapped[str | None] = mapped_column(String(100))  # NULL = manufacturer-level
+    signal_identifier: Mapped[str] = mapped_column(String(200))  # e.g., "did:2101"
     
-    # Usage counts
-    requested_count = db.Column(db.Integer, default=0, nullable=False)
-    responded_count = db.Column(db.Integer, default=0, nullable=False)
-    decoded_count = db.Column(db.Integer, default=0, nullable=False)
+    # Usage counters
+    requested_count: Mapped[int] = mapped_column(Integer, server_default='0')
+    responded_count: Mapped[int] = mapped_column(Integer, server_default='0')
+    decoded_count: Mapped[int] = mapped_column(Integer, server_default='0')
     
-    # Usage by purpose
-    used_for_report = db.Column(db.Integer, default=0, nullable=False)
-    used_for_soh = db.Column(db.Integer, default=0, nullable=False)
-    used_for_verdict = db.Column(db.Integer, default=0, nullable=False)
-    used_for_ml = db.Column(db.Integer, default=0, nullable=False)
-    used_for_inference = db.Column(db.Integer, default=0, nullable=False)
+    # Usage in different contexts
+    used_in_report_count: Mapped[int] = mapped_column(Integer, server_default='0')
+    used_in_soh_count: Mapped[int] = mapped_column(Integer, server_default='0')
+    used_in_verdict_count: Mapped[int] = mapped_column(Integer, server_default='0')
+    used_in_ml_quality_count: Mapped[int] = mapped_column(Integer, server_default='0')
+    used_in_soh_inference_count: Mapped[int] = mapped_column(Integer, server_default='0')
     
-    # Response time stats (milliseconds)
-    total_response_time_ms = db.Column(db.Integer, default=0, nullable=False)
+    # Performance metrics
+    avg_response_time_ms: Mapped[float | None] = mapped_column(Float)
+    total_response_time_ms: Mapped[int] = mapped_column(BigInteger, server_default='0')
     
-    # Timestamps
-    first_seen = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    last_seen = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    
-    def __repr__(self):
-        return f'<SignalUsageTracking {self.maker}/{self.model or "ALL"} {self.signal_name}>'
-    
-    @property
-    def response_rate(self) -> float:
-        """Response rate: responded / requested."""
-        if self.requested_count == 0:
-            return 0.0
-        return self.responded_count / self.requested_count
-    
-    @property
-    def decode_rate(self) -> float:
-        """Decode rate: decoded / responded."""
-        if self.responded_count == 0:
-            return 0.0
-        return self.decoded_count / self.responded_count
-    
-    @property
-    def usage_rate(self) -> float:
-        """Usage rate: total_used / decoded."""
-        if self.decoded_count == 0:
-            return 0.0
-        total_used = (
-            self.used_for_report + self.used_for_soh + self.used_for_verdict +
-            self.used_for_ml + self.used_for_inference
-        )
-        return total_used / self.decoded_count
-    
-    @property
-    def avg_response_time_ms(self) -> float:
-        """Average response time in milliseconds."""
-        if self.responded_count == 0:
-            return 0.0
-        return self.total_response_time_ms / self.responded_count
+    # Metadata
+    last_seen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=db.func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=db.func.now(), onupdate=db.func.now())
 
 
 class CollectionProfile(db.Model):
-    """Versioned data collection profile."""
+    """Versioned collection profile with approval workflow."""
+    
     __tablename__ = 'collection_profiles'
+    __table_args__ = (
+        CheckConstraint("status IN ('draft', 'pending_approval', 'approved', 'rolled_back')", name='ck_profile_status_valid'),
+        Index('idx_collection_profiles_status', 'status'),
+        Index('idx_collection_profiles_scope', 'manufacturer', 'model'),
+    )
     
-    id = db.Column(db.Integer, primary_key=True)
-    version = db.Column(db.String(50), nullable=False, unique=True)
-    status = db.Column(db.String(20), nullable=False, default=CollectionProfileStatus.DRAFT.value)
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer(), "sqlite"), primary_key=True)
+    version: Mapped[str] = mapped_column(String(50), unique=True)
+    status: Mapped[str] = mapped_column(String(20))
     
-    # Scope: NULL model = manufacturer-level
-    scope_maker = db.Column(db.String(50), nullable=False)
-    scope_model = db.Column(db.String(100), nullable=True)
+    # Scope
+    manufacturer: Mapped[str] = mapped_column(String(50))
+    model: Mapped[str | None] = mapped_column(String(100))  # NULL = manufacturer-level
     
-    # Profile definition
-    signals_to_skip = db.Column(JSON, nullable=False)  # List of signal names to skip
-    skip_reason = db.Column(JSON, nullable=True)  # Reason per signal: {'signal_name': 'never used', ...}
+    # Configuration
+    skip_threshold_scans: Mapped[int] = mapped_column(Integer, server_default='20')
+    full_rescan_interval: Mapped[int] = mapped_column(Integer, server_default='10')
     
-    # Learning metadata
-    generation_method = db.Column(db.String(50), nullable=False)  # 'threshold_based', 'ml_based'
-    learning_sample_count = db.Column(db.Integer, nullable=True)
-    learning_metrics = db.Column(JSON, nullable=True)  # Usage rates, response times
-    
-    # Impact estimation
-    estimated_time_saved_ms = db.Column(db.Integer, nullable=True)
-    estimated_signals_reduced = db.Column(db.Integer, nullable=True)
+    # Profile data
+    signals_to_skip: Mapped[list] = mapped_column(JSON)  # List of signal identifiers
+    generation_evidence: Mapped[dict | None] = mapped_column(JSON)  # Stats that led to this profile
     
     # Approval workflow
-    created_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    approved_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    approved_at = db.Column(db.DateTime, nullable=True)
-    approval_notes = db.Column(db.Text, nullable=True)
-    
-    # Retirement / rollback
-    retired_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    retired_at = db.Column(db.DateTime, nullable=True)
-    retirement_reason = db.Column(db.Text, nullable=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='SET NULL'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=db.func.now())
+    approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='SET NULL'))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approval_notes: Mapped[str | None] = mapped_column(Text)
+    rolled_back_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='SET NULL'))
+    rolled_back_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rollback_reason: Mapped[str | None] = mapped_column(Text)
     
     # Relationships
-    audit_logs = db.relationship('CollectionProfileAudit', back_populates='profile', lazy='dynamic')
-    
-    def __repr__(self):
-        return f'<CollectionProfile {self.version} {self.status}>'
+    audit_logs: Mapped[list["CollectionProfileAudit"]] = relationship(back_populates="profile", cascade="all, delete-orphan")
 
 
 class CollectionProfileAudit(db.Model):
     """Audit log for collection profile lifecycle."""
+    
     __tablename__ = 'collection_profile_audit'
+    __table_args__ = (
+        CheckConstraint("action IN ('create', 'approve', 'rollback', 'reenable_signal', 'update')", name='ck_profile_audit_action_valid'),
+        Index('idx_collection_profile_audit_profile', 'profile_id'),
+        Index('idx_collection_profile_audit_action', 'action'),
+    )
     
-    id = db.Column(db.Integer, primary_key=True)
-    profile_id = db.Column(db.Integer, db.ForeignKey('collection_profiles.id'), nullable=False)
-    
-    action = db.Column(db.String(50), nullable=False)  # 'create', 'approve', 'retire', 'rollback'
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    user_email = db.Column(db.String(255), nullable=True)
-    
-    previous_status = db.Column(db.String(20), nullable=True)
-    new_status = db.Column(db.String(20), nullable=True)
-    
-    reason = db.Column(db.Text, nullable=True)
-    changes = db.Column(JSON, nullable=True)
-    
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    id: Mapped[int] = mapped_column(BigInteger().with_variant(Integer(), "sqlite"), primary_key=True)
+    profile_id: Mapped[int | None] = mapped_column(ForeignKey('collection_profiles.id', ondelete='SET NULL'))
+    action: Mapped[str] = mapped_column(String(50))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='SET NULL'))
+    user_email: Mapped[str | None] = mapped_column(String(255))
+    action_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=db.func.now())
+    previous_status: Mapped[str | None] = mapped_column(String(20))
+    new_status: Mapped[str | None] = mapped_column(String(20))
+    reason: Mapped[str | None] = mapped_column(Text)
+    changes: Mapped[dict | None] = mapped_column(JSON)
     
     # Relationships
-    profile = db.relationship('CollectionProfile', back_populates='audit_logs')
-    
-    def __repr__(self):
-        return f'<CollectionProfileAudit profile={self.profile_id} action={self.action}>'
+    profile: Mapped["CollectionProfile | None"] = relationship(back_populates="audit_logs")
 
 
-class ProtectedSignal(db.Model):
-    """Protected whitelist: signals never skipped."""
-    __tablename__ = 'protected_signals'
+class SignalWhitelist(db.Model):
+    """Protected signals that can never be skipped."""
     
-    id = db.Column(db.Integer, primary_key=True)
-    signal_name = db.Column(db.String(100), nullable=False, unique=True)
-    reason = db.Column(db.Text, nullable=False)  # Why this signal is protected
-    added_by_user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
-    added_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    __tablename__ = 'signal_whitelist'
+    __table_args__ = (
+        Index('idx_signal_whitelist_active', 'is_active'),
+        Index('idx_signal_whitelist_reason', 'reason'),
+    )
     
-    def __repr__(self):
-        return f'<ProtectedSignal {self.signal_name}>'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    signal_identifier: Mapped[str] = mapped_column(String(200), unique=True)
+    reason: Mapped[str] = mapped_column(String(200))  # e.g., "required_for_soh"
+    description: Mapped[str | None] = mapped_column(Text)
+    is_active: Mapped[bool] = mapped_column(Boolean, server_default='true')
+    added_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='SET NULL'))
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=db.func.now())
 
 
-class FullScanSample(db.Model):
-    """Track full re-scan samples for re-enabling proposals."""
-    __tablename__ = 'full_scan_samples'
+class SignalWhitelistAudit(db.Model):
+    """Audit log for whitelist changes."""
     
-    id = db.Column(db.Integer, primary_key=True)
-    scan_id = db.Column(db.Integer, db.ForeignKey('scans.id'), nullable=False, unique=True)
-    maker = db.Column(db.String(50), nullable=False)
-    model = db.Column(db.String(100), nullable=True)
+    __tablename__ = 'signal_whitelist_audit'
+    __table_args__ = (
+        CheckConstraint("action IN ('add', 'remove', 'update')", name='ck_whitelist_audit_action_valid'),
+        Index('idx_signal_whitelist_audit_signal', 'signal_identifier'),
+    )
     
-    # Why this was a full scan
-    reason = db.Column(db.String(50), nullable=False)  # 'nth_sample', 'admin_forced', 'profile_disabled'
-    
-    # Findings
-    skipped_signals_used = db.Column(JSON, nullable=True)  # Signals that were skipped but turned out useful
-    new_signals_found = db.Column(JSON, nullable=True)  # New signals not in profile
-    
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
-    
-    def __repr__(self):
-        return f'<FullScanSample scan={self.scan_id} reason={self.reason}>'
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    whitelist_id: Mapped[int | None] = mapped_column(ForeignKey('signal_whitelist.id', ondelete='SET NULL'))
+    signal_identifier: Mapped[str] = mapped_column(String(200))
+    action: Mapped[str] = mapped_column(String(20))
+    user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id', ondelete='SET NULL'))
+    user_email: Mapped[str | None] = mapped_column(String(255))
+    action_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=db.func.now())
+    reason: Mapped[str | None] = mapped_column(Text)
+    changes: Mapped[dict | None] = mapped_column(JSON)
