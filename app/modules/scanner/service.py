@@ -532,8 +532,20 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     _record_learning_stats(scan.car_maker, scan.car_model, steps, result)
     
     record_incidents(scan.id, logic, result["errors"])
-    for code in {c.id: c for c in matched.values()}.values():
-        db.session.add(ScanCode(type=code.type, scan_id=scan.id, code_id=code.id))
+    # Store DTCs with status byte and classification (v2.2.20)
+    from app.modules.scans.dtc_status import classify_dtc_status
+    for dtc in result["dtcs"]:
+        code = matched.get(dtc["code"])
+        if code:
+            status_byte = dtc.get("status")  # UDS 0x19 status byte
+            status_class = classify_dtc_status(status_byte)
+            db.session.add(ScanCode(
+                type=code.type,
+                scan_id=scan.id,
+                code_id=code.id,
+                status_byte=status_byte,
+                status_class=status_class
+            ))
     document = _save_document(scan)
     if document is None:
         _add_error(result, "pdf", "결과 PDF", "pdf_error", "결과 PDF를 만들지 못했습니다. 결과 화면에서 다시 내려받으세요.")
