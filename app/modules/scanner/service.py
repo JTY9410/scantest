@@ -298,6 +298,15 @@ def run_scan_with_transport(
         steps_to_execute = read_plan()
     else:
         steps_to_execute = build_plan(car, expand=False)["steps"]
+        
+        # Apply collection profile (v2.2.25)
+        from app.modules.scanner.profile_hook import apply_profile_if_enabled
+        car_maker = car.get('maker') if car else None
+        car_model = car.get('model') if car else None
+        force_full = car.get('force_full_scan', False) if car else False
+        steps_to_execute, profile_id_used, was_full = apply_profile_if_enabled(
+            steps_to_execute, car_maker, car_model, force_full_scan=force_full
+        )
     
     # 전송 어댑터 초기화
     adapter = None
