@@ -192,15 +192,12 @@ def import_import7_file(wb, filename):
 def import_tesla_file(wb, filename):
     """Import Tesla VIN + pack candidate DB file.
     
-    Note: Multiple sheets may contain overlapping data (e.g., same Model/Year/Trim
-    in both 팩후보_DB and 연식별_전체목록). To handle this, we collect all rows
-    first, then deduplicate by (pack_id, model, trim, year_from) before inserting.
+    With clear=True at the file level, we import all rows as-is.
+    The xlsx is the source of truth; overlapping data across sheets
+    represents legitimate configurations (e.g., same model/year/trim
+    with different pack options).
     """
-    from app.extensions import db
-    from app.modules.scans.battery_capacity import BatteryReferenceCapacity
-    
-    # Collect all rows from all sheets (may have duplicates)
-    all_rows = []
+    imported = 0
     
     # Sheet names to process (actual sheet names in the xlsx file)
     sheets_to_process = {
@@ -212,56 +209,11 @@ def import_tesla_file(wb, filename):
     
     for sheet_name, import_func in sheets_to_process.items():
         if sheet_name in wb.sheetnames:
-            # Import func adds to db.session but doesn't commit yet
             count = import_func(wb[sheet_name], sheet_name, filename)
-            click.echo(f"  Processed {count} records from {sheet_name}")
+            imported += count
+            click.echo(f"  Imported {count} records from {sheet_name}")
         else:
             click.echo(f"  Warning: Sheet '{sheet_name}' not found, skipping")
-    
-    # Now deduplicate: get all pending Tesla rows from session
-    pending = [obj for obj in db.session.new if isinstance(obj, BatteryReferenceCapacity) and obj.source_file == 'tesla']
-    
-    # Deduplicate: prefer rows with more specific data (pack_id > no pack_id)
-    # Group by (model, trim, year_from) across ALL sheets
-    from collections import defaultdict
-    
-    groups = defaultdict(list)
-    for row in pending:
-        key = (
-            row.model or '',
-            row.trim or '',
-            row.year_from or 0
-            # Don't include sheet_name - we want to dedupe across sheets
-        )
-        groups[key].append(row)
-    
-    deduped = []
-    for key, rows in groups.items():
-        if len(rows) == 1:
-            deduped.append(rows[0])
-        else:
-            # Multiple rows for same key - prefer one with pack_id
-            with_pack_id = [r for r in rows if r.pack_id]
-            if with_pack_id:
-                # Keep all rows with distinct pack_ids
-                seen_packs = set()
-                for r in with_pack_id:
-                    if r.pack_id not in seen_packs:
-                        seen_packs.add(r.pack_id)
-                        deduped.append(r)
-                # Remove duplicates
-                for r in rows:
-                    if r not in deduped:
-                        db.session.expunge(r)
-            else:
-                # No pack_ids - keep first row, remove rest
-                deduped.append(rows[0])
-                for r in rows[1:]:
-                    db.session.expunge(r)
-    
-    imported = len(deduped)
-    if len(pending) != imported:
-        click.echo(f"  Deduplicated: {len(pending)} → {imported} unique rows")
     
     return imported
 
