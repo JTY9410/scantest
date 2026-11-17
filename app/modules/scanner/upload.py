@@ -504,7 +504,18 @@ def process_upload(
             current_app.logger.warning(f"Failed to save upload metadata for scan {scan.id}: {exc}", exc_info=True)
             db.session.rollback()
     
-    # 9. 원본 파일은 저장하지 않음 (run_scan이 이미 처리된 텍스트를 저장함)
+    # 9. Calculate consistency score (DEFECT 4)
+    from app.modules.ml_learning.consistency import calculate_consistency_score
+    try:
+        consistency_score = calculate_consistency_score(scan)
+        db.session.add(consistency_score)
+        db.session.commit()
+        current_app.logger.info(f"Consistency score calculated: {consistency_score.score}")
+    except Exception as e:
+        current_app.logger.error(f"Failed to calculate consistency score: {e}")
+        db.session.rollback()
+    
+    # 10. 원본 파일은 저장하지 않음 (run_scan이 이미 처리된 텍스트를 저장함)
     current_app.logger.info(f"Upload scan created: {scan.id} from {filename}")
     
     return scan.id
@@ -657,6 +668,17 @@ def _process_tesla_upload(
         extract_and_store_features(scan)
     except Exception as exc:
         current_app.logger.warning(f"ML feature extraction failed for Tesla scan {scan.id}: {exc}")
+    
+    # Calculate consistency score (DEFECT 4)
+    from app.modules.ml_learning.consistency import calculate_consistency_score
+    try:
+        consistency_score = calculate_consistency_score(scan)
+        db.session.add(consistency_score)
+        db.session.commit()
+        current_app.logger.info(f"Consistency score calculated: {consistency_score.score}")
+    except Exception as e:
+        current_app.logger.error(f"Failed to calculate consistency score: {e}")
+        db.session.rollback()
     
     current_app.logger.info(f"Tesla upload scan created: {scan.id} from {filename}")
     

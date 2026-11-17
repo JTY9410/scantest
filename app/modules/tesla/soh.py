@@ -58,7 +58,7 @@ def calculate_soh(current_nominal_full: float,
         model=model,
         year=year,
         trim=pack_code,
-        vin=None  # VIN should be passed if available
+        vin=vin  # VIN for WMI/model/year/plant matching
     )
     
     result['reference_capacity'] = soh_data['reference_capacity_kwh']
