@@ -87,7 +87,6 @@ def find_matching_references(
                 and_(col >= 5, col <= 300)  # Very permissive range
             )
         )
-    )
     
     # Order by verification level (official first)
     results = query.order_by(
