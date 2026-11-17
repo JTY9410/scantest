@@ -58,8 +58,10 @@ def test_raw_viewer_admin_only(admin_client, client, app, make_user, tmp_path):
     response = admin_client.get(f'/admin/scan/{scan_id}/raw')
     assert response.status_code == 200
     
-    # Non-admin redirected/denied
-    response = client.get(f'/admin/scan/{scan_id}/raw', follow_redirects=False)
+    # Non-admin redirected/denied (use fresh client to avoid session bleed)
+    from flask.testing import FlaskClient
+    anon_client = FlaskClient(app)
+    response = anon_client.get(f'/admin/scan/{scan_id}/raw', follow_redirects=False)
     assert response.status_code in [302, 403]
 
 
