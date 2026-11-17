@@ -533,10 +533,10 @@ class TestAccessControl:
             assert user.type == "tester"  # Not admin
         
         # Login as regular user
-        token = csrf_token(client, "/auth/login")
-        response = client.post("/auth/login", data={
+        token = csrf_token(client, "/admin/login")
+        response = client.post("/admin/login", data={
             "csrf_token": token,
-            "username": "tester_regular",
+            "tid": "tester_regular",  # Login uses 'tid', not 'username'
             "password": "test123"
         })
         assert response.status_code == 302
