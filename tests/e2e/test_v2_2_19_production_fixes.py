@@ -199,7 +199,7 @@ def test_tesla_candidates_exclude_implausible_kwh(app):
         assert 355.0 not in capacities, "355 kWh should be excluded (implausible)"
 
 
-def test_recalculate_soh_datetime_import(client_authed_admin, app):
+def test_recalculate_soh_datetime_import(admin_client, app):
     """Defect 3: POST /admin/scan/<id>/recalculate-soh datetime import.
     
     Tests that the route doesn't crash with NameError: name 'datetime' is not defined.
@@ -244,7 +244,7 @@ def test_recalculate_soh_datetime_import(client_authed_admin, app):
         scan_id = scan.id
     
     # POST recalculate with pack_id
-    response = client_authed_admin.post(
+    response = admin_client.post(
         f'/admin/scan/{scan_id}/recalculate-soh',
         json={'pack_id': 'PK031'}
     )
@@ -263,7 +263,7 @@ def test_ml_decoder_proposals_route(client_authed_admin, app):
     
     Tests that the route doesn't crash with UndefinedColumn.
     """
-    response = client_authed_admin.get('/admin/ml/decoder-proposals')
+    response = admin_client.get('/admin/ml/decoder-proposals')
     
     # Should return 200, not 500 UndefinedColumn
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
@@ -279,19 +279,19 @@ def test_admin_template_errors(client_authed_admin, app):
     - /admin/api/battery-specs/list: select import
     """
     # wescan-profiles
-    response = client_authed_admin.get('/admin/wescan-profiles')
+    response = admin_client.get('/admin/wescan-profiles')
     assert response.status_code == 200, f"/admin/wescan-profiles failed: {response.status_code}"
     
     # learning status
-    response = client_authed_admin.get('/admin/learning/')
+    response = admin_client.get('/admin/learning/')
     assert response.status_code == 200, f"/admin/learning/ failed: {response.status_code}"
     
     # learning commands (now exists)
-    response = client_authed_admin.get('/admin/learning/commands')
+    response = admin_client.get('/admin/learning/commands')
     assert response.status_code == 200, f"/admin/learning/commands failed: {response.status_code}"
     
     # battery-specs/list (select import)
-    response = client_authed_admin.get('/admin/api/battery-specs/list')
+    response = admin_client.get('/admin/api/battery-specs/list')
     assert response.status_code == 200, f"/admin/api/battery-specs/list failed: {response.status_code}"
 
 
@@ -401,7 +401,7 @@ def test_admin_route_crawl_200(client_authed_admin, app):
             url = route.replace('<int:scan_id>', '1')
             url = url.replace('<int:id>', '1')
             
-            response = client_authed_admin.get(url)
+            response = admin_client.get(url)
             
             # Allow 200, 302 (redirect), 404 (not found)
             # Do NOT allow 500 (server error)

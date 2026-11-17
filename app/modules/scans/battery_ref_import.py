@@ -221,29 +221,47 @@ def import_tesla_file(wb, filename):
     # Now deduplicate: get all pending Tesla rows from session
     pending = [obj for obj in db.session.new if isinstance(obj, BatteryReferenceCapacity) and obj.source_file == 'tesla']
     
-    # Deduplicate by (pack_id, model, trim, year_from)
-    # Keep first occurrence of each key
-    seen_keys = set()
-    deduped = []
+    # Deduplicate: prefer rows with more specific data (pack_id > no pack_id)
+    # Group by (model, trim, year_from) and keep best row per group
+    from collections import defaultdict
     
+    groups = defaultdict(list)
     for row in pending:
-        # Build key
         key = (
-            row.pack_id or '',
             row.model or '',
             row.trim or '',
-            row.year_from or 0
+            row.year_from or 0,
+            row.sheet_name or ''  # Include sheet to distinguish sources
         )
-        
-        if key not in seen_keys:
-            seen_keys.add(key)
-            deduped.append(row)
+        groups[key].append(row)
+    
+    deduped = []
+    for key, rows in groups.items():
+        if len(rows) == 1:
+            deduped.append(rows[0])
         else:
-            # Remove duplicate from session
-            db.session.expunge(row)
+            # Multiple rows for same key - prefer one with pack_id
+            with_pack_id = [r for r in rows if r.pack_id]
+            if with_pack_id:
+                # Keep all rows with distinct pack_ids
+                seen_packs = set()
+                for r in with_pack_id:
+                    if r.pack_id not in seen_packs:
+                        seen_packs.add(r.pack_id)
+                        deduped.append(r)
+                # Remove duplicates
+                for r in rows:
+                    if r not in deduped:
+                        db.session.expunge(r)
+            else:
+                # No pack_ids - keep first row, remove rest
+                deduped.append(rows[0])
+                for r in rows[1:]:
+                    db.session.expunge(r)
     
     imported = len(deduped)
-    click.echo(f"  Deduplicated: {len(pending)} → {imported} unique rows")
+    if len(pending) != imported:
+        click.echo(f"  Deduplicated: {len(pending)} → {imported} unique rows")
     
     return imported
 
