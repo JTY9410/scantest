@@ -6,6 +6,11 @@
 <div class="container mt-4">
     <h2>원본 업로드 파일 - Scan #{{ scan.id }}</h2>
     
+    <div class="mb-4">
+        <p><strong>차량번호:</strong> {{ scan.car_no }}</p>
+        <p><strong>수집 방식:</strong> {{ collection_method }}</p>
+    </div>
+    
     {% if not raw_files %}
     <p class="text-muted">원본 없음 (v2.2.19 이전 업로드)</p>
     {% else %}

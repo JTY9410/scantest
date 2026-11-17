@@ -385,6 +385,13 @@ def scan_errors(scan_id: int):
     }, 200
 
 
+@bp.get("/upload")
+@admin_required
+def upload_form():
+    """Upload form page."""
+    return render_template("scanner/upload.html")
+
+
 @bp.post("/upload")
 @admin_required
 @limiter.limit("10 per minute")
