@@ -171,7 +171,7 @@ def admin_login(client, tid: str = "wecar", password: str = ADMIN_PASSWORD):
 
 @pytest.fixture
 def admin_client(client, make_user):
-    make_user("wecar", type="admin", password=ADMIN_PASSWORD, name="운영관리자")
+    make_user("wecar", type="admin", password=ADMIN_PASSWORD, name="운영관리자", email="admin@wecarmobility.com")
     response = admin_login(client)
     assert response.status_code == 302
     return client
