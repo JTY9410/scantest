@@ -77,13 +77,15 @@ jobs:
           docker logs scantest-smoke
           exit 1
       
-      - name: Verify battery reference data
+      - name: Comprehensive smoke test (all v2.2.17 defects)
         run: |
           docker exec scantest-smoke flask shell << 'EOF'
           from app.extensions import db
           from sqlalchemy import text
+          import sys
           
-          # Check row count
+          print("=== DEFECT 1 & 2: Battery references ===")
+          # Check row count (221 not 222 - no manual Tesla row)
           count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
           print(f"Battery reference count: {count}")
           assert count == 221, f"Expected 221 rows, got {count}"
@@ -91,22 +93,50 @@ jobs:
           # Check PK044 and PK045
           pk044 = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity WHERE pack_id = 'PK044'")).scalar()
           pk045 = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity WHERE pack_id = 'PK045'")).scalar()
-          print(f"PK044 count: {pk044}, PK045 count: {pk045}")
-          assert pk044 > 0, "PK044 not found"
-          assert pk045 > 0, "PK045 not found"
+          print(f"PK044: {pk044}, PK045: {pk045}")
+          assert pk044 > 0 and pk045 > 0, "PK044 or PK045 not found"
           
-          # Check no rows with all NULL capacities
+          # Check no manual rows
+          manual_count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity WHERE source_file = 'manual'")).scalar()
+          print(f"Manual rows: {manual_count}")
+          assert manual_count == 0, f"Found {manual_count} manual rows, expected 0"
+          
+          # Check no NULL capacity rows
           null_count = db.session.execute(text("""
               SELECT COUNT(*) FROM battery_reference_capacity 
               WHERE gross_capacity_kwh IS NULL 
                 AND net_capacity_kwh IS NULL 
                 AND official_capacity_kwh IS NULL
           """)).scalar()
-          print(f"Rows with all NULL capacities: {null_count}")
-          assert null_count == 0, f"Found {null_count} rows with all NULL capacities"
+          print(f"NULL capacity rows: {null_count}")
+          assert null_count == 0, f"Found {null_count} NULL capacity rows"
           
-          print("✓ All smoke test assertions passed")
+          print("\n=== DEFECT 3: ML consistency scores schema ===")
+          # Check schema has correct columns
+          columns = db.session.execute(text("""
+              SELECT column_name FROM information_schema.columns 
+              WHERE table_name = 'ml_consistency_scores'
+          """)).scalars().all()
+          print(f"ml_consistency_scores columns: {columns}")
+          assert 'issues' in columns, "Column 'issues' missing"
+          assert 'issues_detected' not in columns, "'issues_detected' should be renamed"
+          assert 'sufficient_data' in columns, "'sufficient_data' missing"
+          assert 'min_samples_required' in columns, "'min_samples_required' missing"
+          assert 'actual_samples' in columns, "'actual_samples' missing"
+          
+          print("\n✓ All database smoke tests passed")
           EOF
+      
+      - name: Test admin battery-references page (Defect 1)
+        run: |
+          response=$(docker exec scantest-smoke curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/admin/battery-references || echo "000")
+          echo "Admin battery-references status: $response"
+          if [ "$response" != "200" ] && [ "$response" != "302" ]; then
+            echo "ERROR: Expected 200 or 302, got $response"
+            docker logs scantest-smoke
+            exit 1
+          fi
+          echo "✓ Battery-references page accessible"
       
       - name: Show container logs on failure
         if: failure()
