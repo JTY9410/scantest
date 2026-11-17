@@ -20,7 +20,7 @@ class SOHInferenceModel(db.Model):
     """Versioned SOH inference model."""
     __tablename__ = 'soh_inference_models'
     
-    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    id = db.Column(db.Integer, primary_key=True)
     version = db.Column(db.String(50), nullable=False, unique=True)
     status = db.Column(db.String(20), nullable=False, default=InferenceModelStatus.DRAFT.value)
     
