@@ -25,9 +25,9 @@ def raw_viewer(scan_id):
     # Log the view
     log = RawFileAccessLog(
         scan_id=scan_id,
-        user_id=current_user.id,
+        user_id=current_user.id if current_user.is_authenticated else None,
         action='view',
-        user_email=current_user.email,
+        user_email=current_user.email if (current_user.is_authenticated and current_user.email) else None,
         ip_address=request.remote_addr
     )
     db.session.add(log)
@@ -48,9 +48,9 @@ def download_raw_file(scan_id, file_id):
     log = RawFileAccessLog(
         raw_file_id=file_id,
         scan_id=scan_id,
-        user_id=current_user.id,
+        user_id=current_user.id if current_user.is_authenticated else None,
         action='download',
-        user_email=current_user.email,
+        user_email=current_user.email if (current_user.is_authenticated and current_user.email) else None,
         ip_address=request.remote_addr
     )
     db.session.add(log)
