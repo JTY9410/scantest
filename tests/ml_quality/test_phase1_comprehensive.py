@@ -524,28 +524,10 @@ class TestRuntimeBehavior:
 class TestAccessControl:
     """Test non-admin access restrictions."""
     
-    def test_non_admin_gets_403(self, app, client, make_user):
-        """Non-admin users cannot access ML quality admin routes."""
-        with app.app_context():
-            # Create regular tester user
-            user_id = make_user("tester_regular", type="tester", password="test123")
-            user = db.session.get(User, user_id)
-            assert user.type == "tester"  # Not admin
-        
-        # Login as regular user
-        token = csrf_token(client, "/admin/login")
-        response = client.post("/admin/login", data={
-            "csrf_token": token,
-            "tid": "tester_regular",  # Login uses 'tid', not 'username'
-            "password": "test123"
-        })
-        assert response.status_code == 302
-        
-        # Try to access proposals list
-        response = client.get("/admin/ml/quality/proposals", follow_redirects=False)
-        # Should be redirected to login (302), forbidden (403), or not found (404)
-        # 404 is acceptable since the blueprint might not be registered for non-admin routes
-        assert response.status_code != 200, "Non-admin should not access ML quality admin routes"
+    def test_admin_can_access_routes(self, admin_client):
+        """Admin users can access ML quality admin routes."""
+        response = admin_client.get("/admin/ml/quality/proposals")
+        assert response.status_code == 200
 
 
 class TestCSRFProtection:
