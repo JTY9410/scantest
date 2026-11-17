@@ -222,7 +222,7 @@ def import_tesla_file(wb, filename):
     pending = [obj for obj in db.session.new if isinstance(obj, BatteryReferenceCapacity) and obj.source_file == 'tesla']
     
     # Deduplicate: prefer rows with more specific data (pack_id > no pack_id)
-    # Group by (model, trim, year_from) and keep best row per group
+    # Group by (model, trim, year_from) across ALL sheets
     from collections import defaultdict
     
     groups = defaultdict(list)
@@ -230,8 +230,8 @@ def import_tesla_file(wb, filename):
         key = (
             row.model or '',
             row.trim or '',
-            row.year_from or 0,
-            row.sheet_name or ''  # Include sheet to distinguish sources
+            row.year_from or 0
+            # Don't include sheet_name - we want to dedupe across sheets
         )
         groups[key].append(row)
     
