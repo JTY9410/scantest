@@ -214,14 +214,17 @@ def import_tesla_file(wb, filename):
         else:
             click.echo(f"  Warning: Sheet '{sheet_name}' not found, skipping")
     
-    # Deduplicate EXACT duplicates from session.new
+    # Deduplicate EXACT duplicates before commit
     # Must include ALL significant fields to avoid collapsing legitimate distinct rows
+    # Flush first to ensure all objects are in session.new
+    db.session.flush()
+    
     pending = [obj for obj in db.session.new if isinstance(obj, BatteryReferenceCapacity) and obj.source_file == 'tesla']
     
     # Build unique key: include ALL fields that define a row's identity
     # Different sheets have different fields, so include capacity values too
-    seen_keys = set()
-    deduped = []
+    seen_keys = {}  # Maps key -> first object with that key
+    duplicates = []
     
     for row in pending:
         key = (
@@ -237,15 +240,18 @@ def import_tesla_file(wb, filename):
         )
         
         if key not in seen_keys:
-            seen_keys.add(key)
-            deduped.append(row)
+            seen_keys[key] = row
         else:
-            # EXACT duplicate - remove from session
-            db.session.expunge(row)
+            # EXACT duplicate - mark for removal
+            duplicates.append(row)
     
-    imported = len(deduped)
-    if len(pending) != imported:
-        click.echo(f"  Deduplicated: {len(pending)} → {imported} unique rows (removed {len(pending) - imported} exact duplicates)")
+    # Remove duplicates from session
+    for dup in duplicates:
+        db.session.expunge(dup)
+    
+    imported = len(seen_keys)
+    if duplicates:
+        click.echo(f"  Deduplicated: {len(pending)} → {imported} unique rows (removed {len(duplicates)} exact duplicates)")
     
     return imported
 

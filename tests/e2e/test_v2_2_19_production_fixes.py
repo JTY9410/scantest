@@ -202,7 +202,7 @@ def test_tesla_candidates_exclude_implausible_kwh(app):
         assert 355.0 not in capacities, "355 kWh should be excluded (implausible)"
 
 
-def test_recalculate_soh_datetime_import(admin_client, app):
+def test_recalculate_soh_datetime_import(admin_client, make_user, app):
     """Defect 3: POST /admin/scan/<id>/recalculate-soh datetime import.
     
     Tests that the route doesn't crash with NameError: name 'datetime' is not defined.
@@ -212,11 +212,15 @@ def test_recalculate_soh_datetime_import(admin_client, app):
     from app import db
     
     with app.app_context():
+        # Create admin user for tester_id
+        admin = make_user(tid="test_recalc_admin", type="admin")
+        
         # Create a fake Tesla scan with BMS data
         scan = Scan(
             type='manual',  # Required field
             device_type='file',  # Required field
             device_uid='test',  # Required field
+            tester_id=admin.id,  # Required field
             car_vin='ZZZ12345678901234',
             car_no='88가8888',
             car_maker='Tesla',
@@ -275,7 +279,7 @@ def test_ml_decoder_proposals_route(admin_client, app):
     assert response.status_code == 200, f"Expected 200, got {response.status_code}"
 
 
-def test_admin_template_errors(client_authed_admin, app):
+def test_admin_template_errors(admin_client, app):
     """Defect 5: Admin template errors fixed.
     
     Tests:
