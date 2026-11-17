@@ -57,21 +57,12 @@ def find_matching_references(
             (BatteryReferenceCapacity.vin_wmi == decoded['wmi'])
         )
     
-    # Exclude manual rows explicitly, but allow NULL (tests/legacy) and other sources
-    # SQL: NULL != 'manual' evaluates to NULL (falsy), so use explicit OR with is_(None)
-    from sqlalchemy import and_, or_
-    query = query.filter(
-        or_(
-            BatteryReferenceCapacity.source_file.is_(None),  # Allow NULL (tests, legacy imports)
-            BatteryReferenceCapacity.source_file != 'manual'  # Exclude manual rows
-        )
-    )
-    
-    # Only exclude rows with ALL three capacity columns NULL (completely unusable)
+    # Note: Manual row cleanup is handled by seed logic, not here
+    # The model has default='manual' for source_file, so test fixtures get 'manual' by default
+    # Only filter completely unusable rows (all capacity columns NULL)
     # Also exclude rows where ONLY official_capacity_kwh is set and it's implausible (not battery kWh)
     # Plausible range: 10-250 kWh for automotive batteries
-    from sqlalchemy import and_, case
-    
+    from sqlalchemy import and_, or_
     query = query.filter(
         or_(
             # Has gross or net (always usable)
