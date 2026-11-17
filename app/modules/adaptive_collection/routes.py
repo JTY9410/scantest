@@ -22,16 +22,7 @@ bp = Blueprint('adaptive_collection', __name__, url_prefix='/admin/adaptive')
 def list_profiles():
     """List collection profiles."""
     profiles = db.session.query(CollectionProfile).order_by(CollectionProfile.created_at.desc()).all()
-    return jsonify({
-        'profiles': [{
-            'id': p.id,
-            'version': p.version,
-            'status': p.status,
-            'manufacturer': p.manufacturer,
-            'model': p.model,
-            'created_at': p.created_at.isoformat()
-        } for p in profiles]
-    })
+    return render_template('adaptive_collection/profiles_list.html', profiles=profiles)
 
 
 @bp.route('/profiles/<int:profile_id>', methods=['GET'])
@@ -41,18 +32,9 @@ def view_profile(profile_id):
     """View collection profile detail."""
     profile = db.session.get(CollectionProfile, profile_id)
     if not profile:
-        return jsonify({'error': 'Profile not found'}), 404
+        return "Profile not found", 404
     
-    return jsonify({
-        'id': profile.id,
-        'version': profile.version,
-        'status': profile.status,
-        'manufacturer': profile.manufacturer,
-        'model': profile.model,
-        'signals_to_skip': profile.signals_to_skip,
-        'generation_evidence': profile.generation_evidence,
-        'created_at': profile.created_at.isoformat()
-    })
+    return render_template('adaptive_collection/profile_detail.html', profile=profile)
 
 
 @bp.route('/profiles/<int:profile_id>/approve', methods=['POST'])
@@ -157,15 +139,7 @@ def rollback_profile(profile_id):
 def list_whitelist():
     """List signal whitelist."""
     whitelist = db.session.query(SignalWhitelist).filter_by(is_active=True).all()
-    return jsonify({
-        'whitelist': [{
-            'id': w.id,
-            'signal_identifier': w.signal_identifier,
-            'reason': w.reason,
-            'description': w.description,
-            'added_at': w.added_at.isoformat()
-        } for w in whitelist]
-    })
+    return render_template('adaptive_collection/whitelist.html', whitelist=whitelist)
 
 
 @bp.route('/whitelist', methods=['POST'])
