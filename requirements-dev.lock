@@ -22,10 +22,13 @@ certifi==2026.7.22
     # via
     #   httpcore
     #   httpx
+    #   requests
 cffi==2.1.1
     # via cryptography
 charset-normalizer==3.5.2
-    # via reportlab
+    # via
+    #   reportlab
+    #   requests
 click==8.5.0
     # via flask
 cloudpickle==3.1.2
@@ -81,6 +84,7 @@ idna==3.20
     #   anyio
     #   email-validator
     #   httpx
+    #   requests
 iniconfig==2.3.1
     # via pytest
 itsdangerous==2.2.0
@@ -166,6 +170,8 @@ redis==6.4.0
     # via wecarscan (pyproject.toml)
 reportlab==5.0.1
     # via wecarscan (pyproject.toml)
+requests==2.34.2
+    # via wecarscan (pyproject.toml)
 rich==13.9.4
     # via flask-limiter
 scikit-learn==1.9.1
@@ -201,6 +207,8 @@ typing-extensions==4.16.0
     #   typing-inspection
 typing-inspection==0.4.5
     # via pydantic
+urllib3==2.8.0
+    # via requests
 werkzeug==3.1.9
     # via
     #   flask

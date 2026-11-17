@@ -246,16 +246,32 @@ def _extract_decoded_values(result: dict) -> dict[str, Any]:
 
 
 def _extract_unmeasurable(result: dict) -> tuple[dict, int]:
-    """측정불가 항목과 개수."""
+    """측정불가 항목과 개수.
+    
+    DEFECT 4 FIX: Tesla scans store data in decoded not battery,
+    so check both locations before marking signals as '미수신'.
+    """
     battery = result.get("battery", {})
+    decoded = result.get("decoded", {})  # Tesla data
     unmeasurable = {}
     count = 0
     
     for signal in ["soc", "soh", "pack_voltage", "max_cell_v", "min_cell_v"]:
-        if signal not in battery or battery[signal] is None:
+        value = battery.get(signal) if signal in battery else None
+        
+        # For Tesla, also check decoded sections
+        if value is None and decoded:
+            if signal == "soc" and decoded.get('soc', {}).get('soc_ui'):
+                value = True  # Signal present
+            elif signal == "pack_voltage" and decoded.get('pack_vi', {}).get('pack_voltage'):
+                value = True
+            elif signal in ["max_cell_v", "min_cell_v"] and decoded.get('bricks'):
+                value = True  # Brick voltages present
+        
+        if value is None:
             unmeasurable[signal] = "미수신"
             count += 1
-        elif isinstance(battery[signal], dict) and battery[signal].get("outlier"):
+        elif isinstance(value, dict) and value.get("outlier"):
             unmeasurable[signal] = "이상치"
             count += 1
     
