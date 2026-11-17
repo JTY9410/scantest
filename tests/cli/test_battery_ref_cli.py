@@ -20,9 +20,9 @@ def test_battery_ref_seed_command(app):
         
         assert result.exit_code == 0, f"Command failed: {result.output}"
         
-        # Verify data was seeded
+        # Verify data was seeded (223 - 2 Land Rover rows with NULL capacities = 221)
         count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
-        assert count == 223, f"Expected 223 rows, got {count}"
+        assert count == 221, f"Expected 221 rows (223 - 2 NULL capacity rows), got {count}"
         
         # Verify PK044 and PK045 are present
         pk044 = db.session.execute(text(
@@ -53,9 +53,9 @@ def test_battery_ref_import_command(app):
         assert result.exit_code == 0, f"Command failed: {result.output}"
         assert 'Successfully imported' in result.output
         
-        # Verify data was imported
+        # Verify data was imported (22 - 2 Land Rover with NULL capacities = 20)
         count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
-        assert count == 22, f"Expected 22 rows from import7, got {count}"
+        assert count == 20, f"Expected 20 rows from import7 (22 - 2 NULL capacity), got {count}"
 
 
 def test_entrypoint_commands_are_registered(app):
@@ -116,9 +116,9 @@ def test_seed_replaces_null_capacity_rows(app):
         
         assert null_count == 0, f"Found {null_count} rows with all NULL capacities after seed"
         
-        # Verify good data was imported
+        # Verify good data was imported (excluding NULL capacity rows)
         total_count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
-        assert total_count == 223, f"Expected 223 rows, got {total_count}"
+        assert total_count == 221, f"Expected 221 rows (223 - 2 NULL capacity), got {total_count}"
 
 
 def test_version_is_correct(app):

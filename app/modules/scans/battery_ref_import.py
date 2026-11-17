@@ -169,6 +169,12 @@ def import_import7_file(wb, filename):
                 if not record.maker or not record.model:
                     continue
                 
+                # Skip rows with ALL capacity columns NULL (unusable for SOH)
+                if (record.official_capacity_kwh is None and 
+                    record.gross_capacity_kwh is None and 
+                    record.net_capacity_kwh is None):
+                    continue
+                
                 db.session.add(record)
                 imported += 1
                 
@@ -248,6 +254,12 @@ def import_tesla_pack_db(ws, sheet_name, filename):
                 source_id=str(row[16].value or '').strip() if row[16].value and len(row) > 16 else None,
                 source_url_1=str(row[17].value or '').strip() if row[17].value and len(row) > 17 else None,
             )
+            
+            # Skip rows with ALL capacity columns NULL (unusable for SOH)
+            if (record.gross_capacity_kwh is None and 
+                record.net_capacity_kwh is None and 
+                getattr(record, 'official_capacity_kwh', None) is None):
+                continue
             
             db.session.add(record)
             imported += 1
