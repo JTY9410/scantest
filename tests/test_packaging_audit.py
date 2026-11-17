@@ -28,6 +28,7 @@ def test_all_app_modules_importable(monkeypatch):
         "app.modules.ml_learning.anomaly",  # MLAnomalyDetection not implemented yet
         "app.modules.ml_learning.soh_estimator",  # MLFeedback not implemented yet
         "app.wsgi",  # Needs full app initialization
+        "app.utils.plate_lookup",  # Optional feature, requests verified in lockfile test
     }
     
     # Walk all modules under app/
