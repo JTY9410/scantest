@@ -66,9 +66,9 @@
                             <tr>
                                 <td>{{ row[0] }}</td>
                                 <td>{{ row[1] }}</td>
-                                <td>{{ "{:,}".format(row[2]) }}</td>
-                                <td>{{ "{:,}".format(row[3]) }}</td>
-                                <td>{{ row[4] }}%</td>
+                                <td>{{ "{:,}".format(row[2] or 0) }}</td>
+                                <td>{{ "{:,}".format(row[3] or 0) }}</td>
+                                <td>{{ row[4] or 0 }}%</td>
                             </tr>
                             {% endfor %}
                         </tbody>

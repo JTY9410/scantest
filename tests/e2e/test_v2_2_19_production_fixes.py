@@ -228,6 +228,7 @@ def test_recalculate_soh_datetime_import(admin_client, make_user, app):
             car_year=2020,
             bms_data={
                 'source': 'tesla_upload',
+                'current_full_kwh': 65.26,
                 'decoded': {
                     'pack_vi': {
                         'current_nominal_full': 65.26
