@@ -43,9 +43,9 @@ def should_seed_battery_references() -> bool:
         current_app.logger.info(f"Found {null_capacity_count} rows with NULL capacity, will re-import")
         return True
     
-    # Check if we have the expected count (223 importable rows)
-    if total_count < 223:
-        current_app.logger.info(f"Found only {total_count} rows, expected 223, will re-import")
+    # Check if we have the expected count (221 valid rows after filtering)
+    if total_count < 221:
+        current_app.logger.info(f"Found only {total_count} rows, expected 221, will re-import")
         return True
     
     return False

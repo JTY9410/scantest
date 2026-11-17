@@ -250,19 +250,25 @@ def _extract_unmeasurable(result: dict) -> tuple[dict, int]:
     
     DEFECT 4 FIX: Tesla scans store data in decoded not battery,
     so check both locations before marking signals as '미수신'.
+    Also check soh field in the result root for Tesla reference SOH.
     """
     battery = result.get("battery", {})
     decoded = result.get("decoded", {})  # Tesla data
+    soh_result = result.get("soh", {})  # Tesla SOH calculation
     unmeasurable = {}
     count = 0
     
     for signal in ["soc", "soh", "pack_voltage", "max_cell_v", "min_cell_v"]:
         value = battery.get(signal) if signal in battery else None
         
-        # For Tesla, also check decoded sections
+        # For Tesla, also check decoded sections and soh result
         if value is None and decoded:
             if signal == "soc" and decoded.get('soc', {}).get('soc_ui'):
                 value = True  # Signal present
+            elif signal == "soh":
+                # Check if Tesla has SOH reference value (from catalog or BOL)
+                if soh_result and (soh_result.get('soh_percent') or soh_result.get('reference_capacity')):
+                    value = True  # SOH reference available
             elif signal == "pack_voltage" and decoded.get('pack_vi', {}).get('pack_voltage'):
                 value = True
             elif signal in ["max_cell_v", "min_cell_v"] and decoded.get('bricks'):
@@ -308,12 +314,21 @@ def _extract_device_type(scan: Scan) -> str:
 
 
 def _extract_app_version(scan: Scan) -> str | None:
-    """앱 버전 추출."""
+    """앱 버전 추출.
+    
+    DEFECT 4 FIX: Always use current app version for Tesla/EV uploads.
+    """
+    from app.__version__ import __version__
+    
     bms_data = scan.bms_data or {}
     if isinstance(bms_data, dict):
         wescan = bms_data.get("wescan", {})
         if isinstance(wescan, dict):
             diagnosis_info = wescan.get("diagnosis_info", {})
             if isinstance(diagnosis_info, dict):
-                return diagnosis_info.get("app_version")
-    return None
+                version = diagnosis_info.get("app_version")
+                if version:
+                    return version
+    
+    # Fallback to current app version (for Tesla/EV uploads that don't embed version)
+    return __version__

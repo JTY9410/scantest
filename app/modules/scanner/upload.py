@@ -609,12 +609,13 @@ def _process_tesla_upload(
     bol_energy = decoded.get('soc', {}).get('bol_energy')
     
     if current_full:
+        # Don't invent pack_code from capacity heuristic - let VIN matching handle it
         soh_result = tesla_soh.calculate_soh(
             current_nominal_full=current_full,
             manufacturer=manufacturer,
             model=model_name,
             year=year,
-            pack_code='Long Range' if current_full > 60 else None,
+            pack_code=None,  # DEFECT 2 FIX: Don't use invented heuristic
             bol_energy=bol_energy,
             vin=vin  # Pass VIN for catalog lookup
         )
