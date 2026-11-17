@@ -57,37 +57,34 @@ def find_matching_references(
             (BatteryReferenceCapacity.vin_wmi == decoded['wmi'])
         )
     
-    # Exclude non-xlsx sources (manual, etc)
+    # Exclude non-xlsx sources (manual, etc) but allow NULL for tests/backwards compat
     from sqlalchemy import and_, or_
     query = query.filter(
         or_(
             BatteryReferenceCapacity.source_file.like('%.xlsx'),
-            BatteryReferenceCapacity.source_file.is_(None)  # Allow NULL for backward compat
+            BatteryReferenceCapacity.source_file.is_(None)
         )
     )
     
-    # Filter out rows with implausible capacity values
-    # Valid kWh range for EVs: 10-200 kWh
-    # Exclude official_capacity_kwh > 200 (likely range in km, not kWh)
+    # Filter out rows with ALL capacity columns NULL or obviously implausible values
+    # Exclude rows where all three capacity columns are NULL
     query = query.filter(
         or_(
-            and_(
-                BatteryReferenceCapacity.gross_capacity_kwh.isnot(None),
-                BatteryReferenceCapacity.gross_capacity_kwh >= 10,
-                BatteryReferenceCapacity.gross_capacity_kwh <= 200
-            ),
-            and_(
-                BatteryReferenceCapacity.net_capacity_kwh.isnot(None),
-                BatteryReferenceCapacity.net_capacity_kwh >= 10,
-                BatteryReferenceCapacity.net_capacity_kwh <= 200
-            ),
-            # Don't use official_capacity_kwh unless it's in valid range AND no gross/net
-            and_(
-                BatteryReferenceCapacity.gross_capacity_kwh.is_(None),
-                BatteryReferenceCapacity.net_capacity_kwh.is_(None),
-                BatteryReferenceCapacity.official_capacity_kwh.isnot(None),
-                BatteryReferenceCapacity.official_capacity_kwh >= 10,
-                BatteryReferenceCapacity.official_capacity_kwh <= 200
+            BatteryReferenceCapacity.gross_capacity_kwh.isnot(None),
+            BatteryReferenceCapacity.net_capacity_kwh.isnot(None),
+            BatteryReferenceCapacity.official_capacity_kwh.isnot(None)
+        )
+    )
+    
+    # Exclude rows with obviously wrong capacity values (>300 kWh is likely km range, not kWh)
+    # Don't be too strict here - just exclude clearly wrong data
+    for col in [BatteryReferenceCapacity.gross_capacity_kwh, 
+                BatteryReferenceCapacity.net_capacity_kwh,
+                BatteryReferenceCapacity.official_capacity_kwh]:
+        query = query.filter(
+            or_(
+                col.is_(None),
+                and_(col >= 5, col <= 300)  # Very permissive range
             )
         )
     )
