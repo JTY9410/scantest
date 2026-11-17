@@ -604,7 +604,8 @@ def _process_tesla_upload(
             model=model_name,
             year=year,
             pack_code='Long Range' if current_full > 60 else None,
-            bol_energy=bol_energy
+            bol_energy=bol_energy,
+            vin=vin  # Pass VIN for catalog lookup
         )
         
         # 교차 검증 (UI SOC 사용 - 사용자가 보는 표시 SOC)

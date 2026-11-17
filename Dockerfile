@@ -47,6 +47,8 @@ COPY --chown=app:app \
   "EV_DTC_전체코드.xlsx" \
   ICE_DTC_Global_Complete_no_grade.xlsx \
   ./
+# Battery reference xlsx files for seed command
+COPY --chown=app:app data/battery_reference ./data/battery_reference
 COPY --from=assets --chown=app:app /build/app/static/dist ./app/static/dist
 USER app
 EXPOSE 8000

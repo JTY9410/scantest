@@ -9,7 +9,8 @@ def calculate_soh(current_nominal_full: float,
                  model: str,
                  year: int | None = None,
                  pack_code: str | None = None,
-                 bol_energy: float | None = None) -> Dict[str, Any]:
+                 bol_energy: float | None = None,
+                 vin: str | None = None) -> Dict[str, Any]:
     """
     SOH 계산.
     

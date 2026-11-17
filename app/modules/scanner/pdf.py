@@ -84,9 +84,13 @@ def _pairs(items: list[tuple[str, object]]) -> Table:
 
 
 def _with_unit(item: dict) -> str:
-    if item["text"] == "-":
+    """Format item with unit. Handles both 'text' and 'value' keys for compatibility."""
+    # Support both 'text' (standard) and 'value' (Tesla SOH reference) keys
+    text = item.get("text") or item.get("value") or "-"
+    if text == "-":
         return "-"
-    return f"{item['text']} {item['unit']}".strip()
+    unit = item.get("unit", "")
+    return f"{text} {unit}".strip()
 
 
 def _cover(view: dict) -> list:
