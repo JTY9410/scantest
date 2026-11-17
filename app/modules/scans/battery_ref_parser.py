@@ -86,6 +86,7 @@ def parse_import7_file(wb, filename: str) -> List[Dict[str, Any]]:
 
 def parse_tesla_pack_db(ws, sheet_name: str, filename: str) -> List[Dict[str, Any]]:
     """Parse Tesla pack candidate database (Sheet 3)"""
+    import sys
     rows = []
     
     # Find header row
@@ -96,7 +97,10 @@ def parse_tesla_pack_db(ws, sheet_name: str, filename: str) -> List[Dict[str, An
             break
     
     if not header_row:
+        print(f"[DEBUG] No header found in {sheet_name}", file=sys.stderr)
         return rows
+    
+    print(f"[DEBUG] {sheet_name}: header at row {header_row}", file=sys.stderr)
     
     # 팩ID,차종,트림,세대,시작 모델연도,끝 모델연도,VIN WMI,공장,셀 제조사,화학계,명목/추정 에너지,사용가능 후보,팩형식 참고,신뢰도,국내 적용 증빙,주의사항,출처ID,자료 URL
     for row in ws.iter_rows(min_row=header_row + 1):
@@ -224,6 +228,7 @@ def parse_tesla_official_domestic(ws, sheet_name: str, filename: str) -> List[Di
 
 def parse_tesla_file(wb, filename: str) -> List[Dict[str, Any]]:
     """Parse Tesla VIN + pack candidate DB file - returns list of dicts"""
+    import sys
     
     # Sheet names to process
     sheets_to_process = {
@@ -233,12 +238,18 @@ def parse_tesla_file(wb, filename: str) -> List[Dict[str, Any]]:
         '공식_국내정격': parse_tesla_official_domestic,
     }
     
+    print(f"\n[DEBUG] Available sheets in {filename}: {wb.sheetnames}", file=sys.stderr)
+    
     all_rows = []
     for sheet_name, parser_func in sheets_to_process.items():
         if sheet_name in wb.sheetnames:
             rows = parser_func(wb[sheet_name], sheet_name, filename)
+            print(f"[DEBUG] Sheet '{sheet_name}': parsed {len(rows)} rows", file=sys.stderr)
             all_rows.extend(rows)
+        else:
+            print(f"[DEBUG] Sheet '{sheet_name}' not found in workbook", file=sys.stderr)
     
+    print(f"[DEBUG] Total Tesla rows parsed: {len(all_rows)}", file=sys.stderr)
     return all_rows
 
 
