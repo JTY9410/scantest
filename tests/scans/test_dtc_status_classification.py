@@ -63,40 +63,17 @@ class TestDtcStatusClassification:
         assert classify_dtc_status(0x0D) == "현재"  # confirmed + testFailed
         assert classify_dtc_status(0x2D) == "현재"  # confirmed + testFailed + since clear
         assert classify_dtc_status(0x24) == "과거"  # testFailedSinceLastClear + testNotCompleted
-        assert classify_dtc_status(0x50) == "과거"  # testFailedSinceLastClear + testNotCompleted
+        assert classify_dtc_status(0x30) == "과거"  # testFailedSinceLastClear + testNotCompleted
 
 
 class TestDtcStorageIntegration:
     """Integration test: verify DTCs are stored with status classification."""
 
-    def test_scan_stores_status_classification(self, app, db, admin_client, device_factory, fake_tesla):
-        """Verify ScanCode stores status_byte and status_class from parsed DTCs."""
-        from app.modules.scans.models import Scan, ScanCode
-        from app.modules.scanner import service as scanner_service
-        from datetime import datetime, timezone
-        
-        # Create fake scan result with DTCs having various status bytes
-        scan_result = {
-            "status": "ok",
-            "started": datetime.now(timezone.utc),
-            "finished": datetime.now(timezone.utc),
-            "dtcs": [
-                {"code": "P0420", "status": 0x0D, "active": True, "confirmed": True},  # → 현재
-                {"code": "P0171", "status": 0x02, "active": False, "confirmed": False},  # → 임시
-                {"code": "P0300", "status": 0x24, "active": False, "confirmed": False},  # → 과거
-            ],
-            "errors": [],
-            "counts": {"errors": 0},
-            "steps": [],
-            "wescan": {},
-        }
-        
-        # Mock the scanner to return this result
-        # (In real usage, these come from UDS 0x19 parsing)
-        # For this test, we'll verify the storage path
-        
-        # Verify that our classify function works as expected for these bytes
+    def test_classify_function_consistency(self):
+        """Verify classify function works correctly for typical scan results."""
         from app.modules.scans.dtc_status import classify_dtc_status
-        assert classify_dtc_status(0x0D) == "현재"
-        assert classify_dtc_status(0x02) == "임시"
-        assert classify_dtc_status(0x24) == "과거"
+        
+        # Verify classification works for bytes that would come from real scans
+        assert classify_dtc_status(0x0D) == "현재"   # confirmed + testFailed
+        assert classify_dtc_status(0x02) == "임시"   # testFailedThisOperationCycle
+        assert classify_dtc_status(0x24) == "과거"   # testFailedSinceLastClear
