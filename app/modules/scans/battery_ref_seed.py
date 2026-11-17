@@ -101,13 +101,15 @@ def seed_battery_references():
         current_app.logger.warning(f"No xlsx files found in {data_dir}")
         return
     
-    # Import each xlsx file
+    # Import each xlsx file with clear=True for idempotency
+    # Each file replaces all rows with its source_file type
     from app.modules.scans.battery_ref_import import import_battery_reference
     
     for xlsx_path in xlsx_files:
         try:
             current_app.logger.info(f"Importing {xlsx_path.name}...")
-            rows_imported = import_battery_reference(str(xlsx_path), clear=False)
+            # clear=True ensures idempotency: replaces all rows of this source_file type
+            rows_imported = import_battery_reference(str(xlsx_path), clear=True)
             current_app.logger.info(f"✓ Imported {rows_imported} rows from {xlsx_path.name}")
         except Exception as exc:
             current_app.logger.error(f"Failed to import {xlsx_path.name}: {exc}", exc_info=True)

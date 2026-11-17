@@ -457,6 +457,13 @@ def _additional_info_and_issues_section(view: dict) -> list:
                     for reason in unique_examples[:2]:
                         story.append(_p(f"  예: {reason}", _SMALL))
             
+            # Render additional issues (e.g., consistency score from ML)
+            if issues.get("additional"):
+                has_issues = True
+                additional = issues["additional"]
+                for item in additional:
+                    story.append(_p(f"· {item}", _SMALL))
+            
             # 내용이 없을 때만 "없음" 표시 (has_issues가 False)
             if not has_issues:
                 pass  # 이미 빈 dict는 위에서 걸러짐, 여기는 도달하지 않음

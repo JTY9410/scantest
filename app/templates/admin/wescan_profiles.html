@@ -60,7 +60,8 @@
               </tr>
             </thead>
             <tbody>
-              {% for maker, count in coverage.commands_by_maker.items()|sort(attribute='1', reverse=True)[:10] %}
+              {% set sorted_makers = coverage.commands_by_maker.items()|list|sort(attribute='1', reverse=True) %}
+              {% for maker, count in sorted_makers[:10] %}
               <tr>
                 <td>{{ maker }}</td>
                 <td class="text-end">{{ count }}</td>
