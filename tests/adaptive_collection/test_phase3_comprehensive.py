@@ -182,17 +182,16 @@ class TestSignalWhitelist:
     def test_add_to_whitelist(self, app, admin_client):
         """Test adding signal to whitelist."""
         response = admin_client.post(
-            '/admin/adaptive/whitelist',
-            json={
+            '/admin/adaptive/whitelist/add',
+            data={
                 'signal_identifier': 'did:2101',
                 'reason': 'required_for_soh',
                 'description': 'Battery voltage signal'
-            }
+            },
+            follow_redirects=False
         )
         
-        assert response.status_code == 200
-        data = response.get_json()
-        assert data['success'] is True
+        assert response.status_code == 302
 
 
 class TestReenableProposals:
