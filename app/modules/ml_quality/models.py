@@ -30,7 +30,7 @@ class ScanQualitySignal(db.Model):
     
     __tablename__ = "scan_quality_signals"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     scan_id: Mapped[int] = mapped_column(ForeignKey("scans.id", ondelete="CASCADE"), index=True)
     collected_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=db.func.now())
     
@@ -60,7 +60,7 @@ class ImprovementProposal(db.Model):
         Index("ix_improvement_proposals_model", "model"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=db.func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=db.func.now(), onupdate=db.func.now())
     
@@ -96,7 +96,7 @@ class ProposalAuditLog(db.Model):
         Index("ix_proposal_audit_log_action_at", "action_at"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     proposal_id: Mapped[int] = mapped_column(ForeignKey("improvement_proposals.id", ondelete="CASCADE"))
     action: Mapped[str] = mapped_column(String(20))  # approve, reject, rollback
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
@@ -120,7 +120,7 @@ class VersionedConfig(db.Model):
         Index("ix_versioned_configs_type_key", "config_type", "config_key"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     config_type: Mapped[str] = mapped_column(String(50))  # decoder_mapping, threshold, soh_parameter
     manufacturer: Mapped[str | None] = mapped_column(String(50))
     model: Mapped[str | None] = mapped_column(String(100))

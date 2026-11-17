@@ -435,7 +435,7 @@ class TestApprovalWorkflow:
     
     def test_non_admin_blocked(self, app, client, make_user):
         """Test non-admin users blocked from approval actions."""
-        make_user('viewer', type='user', password='test123')
+        make_user('viewer', type='tester', password='test123')
         
         with app.app_context():
             model = SOHInferenceModel(
