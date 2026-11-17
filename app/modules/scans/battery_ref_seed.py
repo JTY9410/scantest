@@ -101,18 +101,33 @@ def seed_battery_references():
         current_app.logger.warning(f"No xlsx files found in {data_dir}")
         return
     
-    # Import each xlsx file with clear=True for idempotency
-    # Each file replaces all rows with its source_file type
-    from app.modules.scans.battery_ref_import import import_battery_reference
+    # Parse all files (pure function, no DB)
+    from app.modules.scans.battery_ref_parser import parse_reference_rows
     
-    for xlsx_path in xlsx_files:
-        try:
-            current_app.logger.info(f"Importing {xlsx_path.name}...")
-            # clear=True ensures idempotency: replaces all rows of this source_file type
-            rows_imported = import_battery_reference(str(xlsx_path), clear=True)
-            current_app.logger.info(f"✓ Imported {rows_imported} rows from {xlsx_path.name}")
-        except Exception as exc:
-            current_app.logger.error(f"Failed to import {xlsx_path.name}: {exc}", exc_info=True)
+    current_app.logger.info(f"Parsing {len(xlsx_files)} xlsx files...")
+    raw_rows, deduped_rows = parse_reference_rows(xlsx_files)
     
-    total = db.session.query(BatteryReferenceCapacity).count()
-    current_app.logger.info(f"Battery reference seeding complete: {total} total rows")
+    current_app.logger.info(f"Parsed {len(raw_rows)} rows, {len(deduped_rows)} unique after deduplication")
+    
+    # One transaction: DELETE old data, INSERT new data (idempotent by construction)
+    try:
+        # Delete all existing reference data (old formats + current formats)
+        deleted = db.session.query(BatteryReferenceCapacity).filter(
+            or_(
+                BatteryReferenceCapacity.source_file.in_(['tesla', 'import7', 'manual']),
+                BatteryReferenceCapacity.source_file.is_(None)
+            )
+        ).delete()
+        current_app.logger.info(f"Deleted {deleted} old reference rows")
+        
+        # Bulk insert deduplicated rows
+        if deduped_rows:
+            db.session.bulk_insert_mappings(BatteryReferenceCapacity, deduped_rows)
+        
+        db.session.commit()
+        current_app.logger.info(f"✓ Battery reference seeding complete: {len(deduped_rows)} rows")
+        
+    except Exception as exc:
+        db.session.rollback()
+        current_app.logger.error(f"Failed to seed battery references: {exc}", exc_info=True)
+        raise
