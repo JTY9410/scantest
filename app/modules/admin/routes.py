@@ -435,35 +435,61 @@ def scan_recalculate_soh(scan_id):
     if not scan:
         return jsonify({"error": "Scan not found"}), 404
     
-    pack_id = request.json.get('pack_id')
-    if not pack_id:
+    pack_id_input = request.json.get('pack_id')
+    if not pack_id_input:
         return jsonify({"error": "pack_id required"}), 400
     
-    reference = db.session.get(BatteryReferenceCapacity, pack_id)
+    # Query by pack_id column (string like 'PK031'), not by integer primary key
+    reference = db.session.query(BatteryReferenceCapacity).filter_by(pack_id=pack_id_input).first()
     if not reference:
-        return jsonify({"error": "Reference not found"}), 404
+        return jsonify({"error": f"Reference not found for pack_id={pack_id_input}"}), 404
     
-    # Get current capacity from scan (placeholder - actual extraction depends on scan type)
-    current_capacity_kwh = scan.bms_data.get('current_full_kwh') if scan.bms_data else None
+    # Get current capacity from scan
+    # For Tesla: bms_data['soh']['current_nominal_full']
+    # For others: bms_data.get('current_full_kwh')
+    current_capacity_kwh = None
+    if scan.bms_data:
+        # Try Tesla format first
+        if 'soh' in scan.bms_data and isinstance(scan.bms_data['soh'], dict):
+            current_capacity_kwh = scan.bms_data['soh'].get('current_nominal_full')
+        # Fallback to generic format
+        if not current_capacity_kwh:
+            current_capacity_kwh = scan.bms_data.get('current_full_kwh')
+    
     if not current_capacity_kwh:
-        return jsonify({"error": "Current capacity not available in scan"}), 400
+        return jsonify({"error": "Current capacity not available in scan data"}), 400
     
-    # Calculate SOH
+    # Calculate SOH with gross capacity
+    ref_capacity = reference.gross_capacity_kwh
+    if not ref_capacity:
+        ref_capacity = reference.net_capacity_kwh or reference.official_capacity_kwh
+    if not ref_capacity:
+        return jsonify({"error": "Reference has no valid capacity"}), 400
+    
     soh_percent, error_reason = calculate_soh(current_capacity_kwh, 'gross', reference)
     
     if error_reason:
         return jsonify({"error": error_reason}), 400
     
-    # Update scan metadata
-    if not scan.metadata:
-        scan.metadata = {}
-    scan.metadata['soh_percent'] = soh_percent
-    scan.metadata['soh_reference_id'] = reference.id
-    scan.metadata['soh_reference_capacity'] = reference.gross_capacity_kwh
+    # Store recalculated SOH in bms_data (create soh_recalculated field)
+    if not scan.bms_data:
+        scan.bms_data = {}
+    if not isinstance(scan.bms_data, dict):
+        scan.bms_data = {}
+    
+    scan.bms_data['soh_recalculated'] = {
+        'soh_percent': round(soh_percent, 1),
+        'pack_id': pack_id_input,
+        'reference_capacity_kwh': round(ref_capacity, 2),
+        'reference_source': reference.verification_level or '2차 자료',
+        'recalculated_at': datetime.utcnow().isoformat()
+    }
     db.session.commit()
     
     return jsonify({
-        "soh_percent": soh_percent,
-        "reference_capacity": reference.gross_capacity_kwh,
+        "success": True,
+        "soh_percent": round(soh_percent, 1),
+        "pack_id": pack_id_input,
+        "reference_capacity": round(ref_capacity, 2),
         "reference_source": reference.verification_level
     })

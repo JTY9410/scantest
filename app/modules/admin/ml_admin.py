@@ -17,7 +17,7 @@ bp = Blueprint("ml_admin", __name__, url_prefix="/admin/ml")
 @admin_required
 def models():
     """학습된 모델 목록."""
-    models_list = db.session.query(MLModel).order_by(MLModel.created_at.desc()).limit(100).all()
+    models_list = db.session.query(MLModelRun).order_by(MLModelRun.started_at.desc()).limit(100).all()
     return render_template("admin/ml/models.html", models=models_list)
 
 
@@ -26,28 +26,28 @@ def models():
 @admin_required
 def promote_model(model_id):
     """모델을 active로 승격."""
-    model = db.session.get(MLModel, model_id)
+    model = db.session.get(MLModelRun, model_id)
     if not model:
         flash("모델을 찾을 수 없습니다.", "error")
         return redirect(url_for("ml_admin.models"))
     
-    if model.status != 'candidate':
-        flash("candidate 상태인 모델만 승격할 수 있습니다.", "error")
+    if model.status != 'completed':
+        flash("completed 상태인 모델만 승격할 수 있습니다.", "error")
         return redirect(url_for("ml_admin.models"))
     
-    # 기존 active 모델을 retired로
-    old_active = db.session.query(MLModel).filter_by(
-        model_type=model.model_type,
-        status='active'
-    ).first()
+    # Create or update active model record
+    active = db.session.query(MLActiveModel).first()
+    if not active:
+        active = MLActiveModel(model_run_id=model.id, activated_by='admin')
+        db.session.add(active)
+    else:
+        active.model_run_id = model.id
+        active.activated_at = db.func.now()
     
-    if old_active:
-        old_active.status = 'retired'
-    
-    model.status = 'active'
+    model.promoted_to_active = True
     db.session.commit()
     
-    flash(f"모델 {model.model_version}을 활성화했습니다.", "success")
+    flash(f"모델 {model.id}를 활성화했습니다.", "success")
     return redirect(url_for("ml_admin.models"))
 
 
@@ -55,10 +55,9 @@ def promote_model(model_id):
 @login_required
 @admin_required
 def anomalies():
-    """이상 탐지 결과 목록."""
-    detections = db.session.query(MLAnomalyDetection).filter(
-        MLAnomalyDetection.is_anomaly == True
-    ).order_by(MLAnomalyDetection.created_at.desc()).limit(100).all()
+    """이상 탐지 결과 목록 (placeholder - feature not yet implemented)."""
+    # MLAnomalyDetection model doesn't exist yet - return empty list
+    detections = []
     return render_template("admin/ml/anomalies.html", detections=detections)
 
 
@@ -69,7 +68,7 @@ def decoder_proposals():
     """디코더 제안 목록."""
     proposals = db.session.query(MLDecoderProposal).filter(
         MLDecoderProposal.status == 'pending'
-    ).order_by(MLDecoderProposal.confidence_score.desc()).limit(100).all()
+    ).order_by(MLDecoderProposal.confidence.desc()).limit(100).all()
     return render_template("admin/ml/decoder_proposals.html", proposals=proposals)
 
 
@@ -94,6 +93,7 @@ def approve_proposal(proposal_id):
 @login_required
 @admin_required
 def feedback_list():
-    """피드백 목록."""
-    feedbacks = db.session.query(MLFeedback).order_by(MLFeedback.created_at.desc()).limit(100).all()
+    """피드백 목록 (placeholder - feature not yet implemented)."""
+    # MLFeedback model doesn't exist yet - return empty list
+    feedbacks = []
     return render_template("admin/ml/feedback.html", feedbacks=feedbacks)

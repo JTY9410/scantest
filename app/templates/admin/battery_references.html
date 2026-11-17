@@ -69,7 +69,7 @@
               <td>{{ ref.year_from }}-{{ ref.year_to }}</td>
               <td>{{ ref.gross_capacity_kwh or '-' }}</td>
               <td>{{ ref.net_capacity_kwh or '-' }}</td>
-              <td><span class="badge bg-{{ 'success' if '제조사' in ref.verification_level else 'info' }}">{{ ref.verification_level }}</span></td>
+              <td><span class="badge bg-{{ 'success' if ref.verification_level and '제조사' in ref.verification_level else 'info' }}">{{ ref.verification_level or '-' }}</span></td>
               <td><a href="{{ ref.source_url_1 }}" target="_blank" class="text-truncate d-inline-block" style="max-width: 200px">{{ ref.source_url_1 }}</a></td>
               <td>
                 <a href="{{ url_for('admin.battery_reference_edit', id=ref.id) }}" class="btn btn-sm btn-outline-primary">Edit</a>

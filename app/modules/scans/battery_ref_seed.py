@@ -21,12 +21,17 @@ def should_seed_battery_references() -> bool:
         return True
     
     # Check if old-format rows exist (rows without source_file - from v2.2.8)
-    old_format_count = db.session.query(BatteryReferenceCapacity).filter(
-        BatteryReferenceCapacity.source_file.is_(None)
+    # or manual rows (source_file='manual') that shouldn't be in the catalog
+    from sqlalchemy import or_
+    bad_source_count = db.session.query(BatteryReferenceCapacity).filter(
+        or_(
+            BatteryReferenceCapacity.source_file.is_(None),
+            BatteryReferenceCapacity.source_file == 'manual'
+        )
     ).count()
     
-    if old_format_count > 0:
-        current_app.logger.info(f"Found {old_format_count} old-format rows, will re-import")
+    if bad_source_count > 0:
+        current_app.logger.info(f"Found {bad_source_count} non-xlsx rows (old-format or manual), will re-import")
         return True
     
     # Check for invalid rows with ALL capacity columns NULL (unusable for SOH calculations)
@@ -64,11 +69,12 @@ def seed_battery_references():
         current_app.logger.info(f"Battery reference data already complete ({total} rows), skipping")
         return
     
-    # Delete old-format rows and rows with ALL capacity columns NULL
+    # Delete old-format rows, manual rows, and rows with ALL capacity columns NULL
     from sqlalchemy import or_, and_
     bad_rows = db.session.query(BatteryReferenceCapacity).filter(
         or_(
             BatteryReferenceCapacity.source_file.is_(None),
+            BatteryReferenceCapacity.source_file == 'manual',
             and_(
                 BatteryReferenceCapacity.gross_capacity_kwh.is_(None),
                 BatteryReferenceCapacity.net_capacity_kwh.is_(None),
@@ -78,7 +84,7 @@ def seed_battery_references():
     ).delete()
     if bad_rows > 0:
         db.session.commit()
-        current_app.logger.info(f"Removed {bad_rows} old-format or NULL-capacity rows")
+        current_app.logger.info(f"Removed {bad_rows} non-xlsx or NULL-capacity rows")
     
     current_app.logger.info("Seeding battery reference capacity data...")
     

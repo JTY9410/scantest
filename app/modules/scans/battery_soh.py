@@ -57,20 +57,66 @@ def find_matching_references(
             (BatteryReferenceCapacity.vin_wmi == decoded['wmi'])
         )
     
+    # Exclude non-xlsx sources (manual, etc)
+    from sqlalchemy import and_, or_
+    query = query.filter(
+        or_(
+            BatteryReferenceCapacity.source_file.like('%.xlsx'),
+            BatteryReferenceCapacity.source_file.is_(None)  # Allow NULL for backward compat
+        )
+    )
+    
+    # Filter out rows with implausible capacity values
+    # Valid kWh range for EVs: 10-200 kWh
+    # Exclude official_capacity_kwh > 200 (likely range in km, not kWh)
+    query = query.filter(
+        or_(
+            and_(
+                BatteryReferenceCapacity.gross_capacity_kwh.isnot(None),
+                BatteryReferenceCapacity.gross_capacity_kwh >= 10,
+                BatteryReferenceCapacity.gross_capacity_kwh <= 200
+            ),
+            and_(
+                BatteryReferenceCapacity.net_capacity_kwh.isnot(None),
+                BatteryReferenceCapacity.net_capacity_kwh >= 10,
+                BatteryReferenceCapacity.net_capacity_kwh <= 200
+            ),
+            # Don't use official_capacity_kwh unless it's in valid range AND no gross/net
+            and_(
+                BatteryReferenceCapacity.gross_capacity_kwh.is_(None),
+                BatteryReferenceCapacity.net_capacity_kwh.is_(None),
+                BatteryReferenceCapacity.official_capacity_kwh.isnot(None),
+                BatteryReferenceCapacity.official_capacity_kwh >= 10,
+                BatteryReferenceCapacity.official_capacity_kwh <= 200
+            )
+        )
+    )
+    
     # Order by verification level (official first)
     results = query.order_by(
         BatteryReferenceCapacity.verification_level.desc()
     ).all()
     
+    # Deduplicate by pack_id (keep first occurrence for each pack_id)
+    seen_pack_ids = set()
+    deduped_results = []
+    for r in results:
+        if r.pack_id and r.pack_id not in seen_pack_ids:
+            seen_pack_ids.add(r.pack_id)
+            deduped_results.append(r)
+        elif not r.pack_id:
+            # Keep rows without pack_id
+            deduped_results.append(r)
+    
     # Check if all candidates have the same gross capacity
-    if len(results) > 1:
-        capacities = {r.gross_capacity_kwh for r in results if r.gross_capacity_kwh}
+    if len(deduped_results) > 1:
+        capacities = {r.gross_capacity_kwh for r in deduped_results if r.gross_capacity_kwh}
         if len(capacities) == 1:
             # All same capacity → SOH can be computed, list all candidate IDs
             pass  # return all
         # Otherwise → multiple different capacities, '팩 후보 다수'
     
-    return results
+    return deduped_results
 
 
 def calculate_soh(
