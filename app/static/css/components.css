@@ -135,6 +135,11 @@
     background: var(--wc-color-surface);
     color: var(--wc-color-text);
     font-size: 1rem; /* iOS 확대 방지 */
+    transition: border-color var(--wc-motion-fast) var(--wc-ease),
+                background-color var(--wc-motion-fast) var(--wc-ease);
+  }
+  .input:hover:not(:disabled) {
+    border-color: var(--wc-color-text-muted);
   }
   textarea.input {
     min-height: 6.5rem;
@@ -266,6 +271,12 @@
   }
   .rtable tbody tr:hover {
     background: var(--wc-color-surface-2);
+    transition: background-color var(--wc-motion-fast) var(--wc-ease);
+  }
+  .rtable tbody tr:focus-within {
+    background: var(--wc-color-surface-2);
+    outline: 2px solid var(--wc-color-focus);
+    outline-offset: -2px;
   }
   .rtable .num {
     text-align: right;
