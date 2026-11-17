@@ -76,7 +76,7 @@ def upgrade():
     # soh_inference_model_audit table
     op.create_table('soh_inference_model_audit',
         sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('model_id', sa.Integer(), nullable=False),
+        sa.Column('model_id', sa.Integer(), nullable=True),  # Nullable to allow model deletion
         sa.Column('action', sa.String(length=50), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=True),
         sa.Column('user_email', sa.String(length=255), nullable=True),
@@ -85,8 +85,8 @@ def upgrade():
         sa.Column('reason', sa.Text(), nullable=True),
         sa.Column('changes', postgresql.JSON(astext_type=sa.Text()), nullable=True),
         sa.Column('created_at', sa.DateTime(), nullable=False),
-        sa.ForeignKeyConstraint(['model_id'], ['soh_inference_models.id'], ),
-        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ),
+        sa.ForeignKeyConstraint(['model_id'], ['soh_inference_models.id'], ondelete='SET NULL'),
+        sa.ForeignKeyConstraint(['user_id'], ['users.id'], ondelete='SET NULL'),
         sa.PrimaryKeyConstraint('id')
     )
     op.create_index('idx_soh_inference_audit_model', 'soh_inference_model_audit', ['model_id'], unique=False)

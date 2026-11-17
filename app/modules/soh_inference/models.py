@@ -101,7 +101,7 @@ class InferenceModelAudit(db.Model):
     __tablename__ = 'soh_inference_model_audit'
     
     id = db.Column(db.Integer, primary_key=True)
-    model_id = db.Column(db.Integer, db.ForeignKey('soh_inference_models.id'), nullable=False)
+    model_id = db.Column(db.Integer, db.ForeignKey('soh_inference_models.id', ondelete='SET NULL'), nullable=True)
     
     action = db.Column(db.String(50), nullable=False)  # 'create', 'approve', 'retire', 'update'
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
