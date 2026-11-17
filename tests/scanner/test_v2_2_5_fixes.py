@@ -70,36 +70,37 @@ def test_tesla_upload_vin_no_nul_in_db(_app_base, make_user):
 
 
 def test_seed_tesla_reference_idempotent(_app_base):
-    """Tesla 참조 데이터 시드: 중복 없음."""
+    """seed_tesla_reference_data is now a no-op (deprecated in v2.2.19).
+    
+    All Tesla data comes from xlsx import. This test verifies:
+    1. The deprecated function doesn't insert any rows
+    2. No manual rows exist after seed (cleaned by battery_ref_seed)
+    """
     from app.modules.tesla.reference_data import seed_tesla_reference_data
     from app.extensions import db
     from sqlalchemy import text
     
     with _app_base.app_context():
-        # 첫 시드
-        seed_tesla_reference_data()
-        first_count = db.session.execute(
+        # Get initial count
+        before_count = db.session.execute(
             text("SELECT COUNT(*) FROM battery_reference_capacity")
         ).scalar()
         
-        # 두 번째 시드 (중복되지 않아야 함)
+        # Call deprecated seed function (should be no-op)
         seed_tesla_reference_data()
-        second_count = db.session.execute(
+        
+        after_count = db.session.execute(
             text("SELECT COUNT(*) FROM battery_reference_capacity")
         ).scalar()
         
-        assert first_count > 0
-        assert first_count == second_count, "시드 실행 시 중복 생성되지 않아야 함"
+        # Verify no-op: count unchanged
+        assert before_count == after_count, "seed_tesla_reference_data should not insert any rows (deprecated)"
         
-        # Model 3 행 존재 확인
-        row = db.session.execute(
-            text("SELECT * FROM battery_reference_capacity WHERE maker='Tesla' AND model='Model 3' LIMIT 1")
-        ).fetchone()
-        
-        assert row is not None
-        # reference_energy_kwh and source_type are properties; check actual columns
-        assert row.gross_capacity_kwh == 74.0
-        assert '2차 자료' in row.verification_level  # source_type='community' maps to this
+        # Verify no manual rows exist
+        manual_count = db.session.execute(
+            text("SELECT COUNT(*) FROM battery_reference_capacity WHERE source_file = 'manual'")
+        ).scalar()
+        assert manual_count == 0, "No manual rows should exist after seed"
         
         db.session.rollback()
 

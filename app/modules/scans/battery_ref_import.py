@@ -215,18 +215,19 @@ def import_tesla_file(wb, filename):
             click.echo(f"  Warning: Sheet '{sheet_name}' not found, skipping")
     
     # Deduplicate EXACT duplicates before commit
-    # Must include ALL significant fields to avoid collapsing legitimate distinct rows
-    # Flush first to ensure all objects are in session.new
-    db.session.flush()
+    # Collect all pending objects BEFORE flush (session.new is cleared by flush)
+    pending = list(db.session.new)
+    tesla_objects = [obj for obj in pending if isinstance(obj, BatteryReferenceCapacity) and obj.source_file == 'tesla']
     
-    pending = [obj for obj in db.session.new if isinstance(obj, BatteryReferenceCapacity) and obj.source_file == 'tesla']
+    if not tesla_objects:
+        return 0
     
     # Build unique key: include ALL fields that define a row's identity
     # Different sheets have different fields, so include capacity values too
     seen_keys = {}  # Maps key -> first object with that key
     duplicates = []
     
-    for row in pending:
+    for row in tesla_objects:
         key = (
             row.maker or '',
             row.model or '',
@@ -234,9 +235,9 @@ def import_tesla_file(wb, filename):
             row.year_from or 0,
             row.year_to or 0,
             row.pack_id or '',
-            row.gross_capacity_kwh or 0.0,
-            row.net_capacity_kwh or 0.0,
-            row.official_capacity_kwh or 0.0
+            round(row.gross_capacity_kwh, 2) if row.gross_capacity_kwh else 0.0,
+            round(row.net_capacity_kwh, 2) if row.net_capacity_kwh else 0.0,
+            round(row.official_capacity_kwh, 2) if row.official_capacity_kwh else 0.0
         )
         
         if key not in seen_keys:
@@ -245,13 +246,13 @@ def import_tesla_file(wb, filename):
             # EXACT duplicate - mark for removal
             duplicates.append(row)
     
-    # Remove duplicates from session
+    # Remove duplicates from session BEFORE flush/commit
     for dup in duplicates:
         db.session.expunge(dup)
     
     imported = len(seen_keys)
     if duplicates:
-        click.echo(f"  Deduplicated: {len(pending)} → {imported} unique rows (removed {len(duplicates)} exact duplicates)")
+        click.echo(f"  Deduplicated: {len(tesla_objects)} → {imported} unique rows (removed {len(duplicates)} exact duplicates)")
     
     return imported
 

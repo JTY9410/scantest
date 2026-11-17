@@ -213,14 +213,14 @@ def test_recalculate_soh_datetime_import(admin_client, make_user, app):
     
     with app.app_context():
         # Create admin user for tester_id
-        admin = make_user(tid="test_recalc_admin", type="admin")
+        admin_id = make_user(tid="test_recalc_admin", type="admin")
         
         # Create a fake Tesla scan with BMS data
         scan = Scan(
             type='manual',  # Required field
             device_type='file',  # Required field
             device_uid='test',  # Required field
-            tester_id=admin.id,  # Required field
+            tester_id=admin_id,  # Required field
             car_vin='ZZZ12345678901234',
             car_no='88가8888',
             car_maker='Tesla',

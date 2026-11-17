@@ -4,15 +4,18 @@ import pytest
 from pathlib import Path
 
 
-def test_store_and_retrieve_raw_file(app):
+def test_store_and_retrieve_raw_file(app, make_user):
     """Store raw file and verify SHA256 match."""
     from app.modules.scans.raw_storage import store_raw_file, read_raw_file
     from app import db
     
     with app.app_context():
+        # Create user for tester_id
+        user_id = make_user(tid="test_raw_user1", type="user")
+        
         # Create fake scan
         from app.modules.scans.models import Scan
-        scan = Scan(type='manual', device_type='file', device_uid='test', car_no='88가8888', car_vin='ZZZ12345678901234')
+        scan = Scan(type='manual', device_type='file', device_uid='test', tester_id=user_id, car_no='88가8888', car_vin='ZZZ12345678901234')
         db.session.add(scan)
         db.session.flush()
         
@@ -31,13 +34,14 @@ def test_store_and_retrieve_raw_file(app):
         assert content == test_data
 
 
-def test_raw_viewer_admin_only(admin_client, client, app):
+def test_raw_viewer_admin_only(admin_client, client, app, make_user):
     """Raw viewer requires admin role."""
     from app.modules.scans.models import Scan
     from app import db
     
     with app.app_context():
-        scan = Scan(type='manual', device_type='file', device_uid='test', car_no='88가8888')
+        user_id = make_user(tid="test_raw_user2", type="user")
+        scan = Scan(type='manual', device_type='file', device_uid='test', tester_id=user_id, car_no='88가8888')
         db.session.add(scan)
         db.session.commit()
         scan_id = scan.id
@@ -51,14 +55,15 @@ def test_raw_viewer_admin_only(admin_client, client, app):
     assert response.status_code in [302, 403]
 
 
-def test_raw_viewer_shows_unmasked_content(admin_client, app):
+def test_raw_viewer_shows_unmasked_content(admin_client, app, make_user):
     """Preview shows UNMASKED plates and VINs."""
     from app.modules.scans.raw_storage import store_raw_file
     from app.modules.scans.models import Scan
     from app import db
     
     with app.app_context():
-        scan = Scan(type='manual', device_type='file', device_uid='test', car_no='12가3456', car_vin='5YJ3E1EB1KF123456')
+        user_id = make_user(tid="test_raw_user3", type="user")
+        scan = Scan(type='manual', device_type='file', device_uid='test', tester_id=user_id, car_no='12가3456', car_vin='5YJ3E1EB1KF123456')
         db.session.add(scan)
         db.session.flush()
         
@@ -77,7 +82,7 @@ def test_raw_viewer_shows_unmasked_content(admin_client, app):
     assert '12가3456' in response.get_data(as_text=True)
 
 
-def test_download_creates_audit_log(admin_client, app):
+def test_download_creates_audit_log(admin_client, app, make_user):
     """Download creates audit log entry."""
     from app.modules.scans.raw_storage import store_raw_file
     from app.modules.scans.models import Scan
@@ -85,7 +90,8 @@ def test_download_creates_audit_log(admin_client, app):
     from app import db
     
     with app.app_context():
-        scan = Scan(type='manual', device_type='file', device_uid='test', car_no='88가8888')
+        user_id = make_user(tid="test_raw_user4", type="user")
+        scan = Scan(type='manual', device_type='file', device_uid='test', tester_id=user_id, car_no='88가8888')
         db.session.add(scan)
         db.session.flush()
         
@@ -111,13 +117,14 @@ def test_download_creates_audit_log(admin_client, app):
         assert logs[0].user_email is not None
 
 
-def test_old_scan_shows_no_raw_files(admin_client, app):
+def test_old_scan_shows_no_raw_files(admin_client, app, make_user):
     """Scan without raw files shows '원본 없음 (v2.2.19 이전 업로드)'."""
     from app.modules.scans.models import Scan
     from app import db
     
     with app.app_context():
-        scan = Scan(type='manual', device_type='file', device_uid='test', car_no='88가8888')
+        user_id = make_user(tid="test_raw_user5", type="user")
+        scan = Scan(type='manual', device_type='file', device_uid='test', tester_id=user_id, car_no='88가8888')
         db.session.add(scan)
         db.session.commit()
         scan_id = scan.id
