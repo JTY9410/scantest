@@ -34,7 +34,7 @@ def test_battery_references_loaded(app):
         assert result.exit_code == 0, f"Seed command failed: {result.output}"
         
         count = db.session.query(BatteryReferenceCapacity).count()
-        assert count == 91, f"Expected 91 battery references (actual verified count from xlsx), got {count}"
+        assert count == 221, f"Expected 221 battery references (actual verified count from xlsx), got {count}"
         
         # Check Tesla Model Y and PK044
         pk045 = db.session.query(BatteryReferenceCapacity).filter_by(

@@ -242,24 +242,22 @@ def parse_tesla_file(wb, filename: str) -> List[Dict[str, Any]]:
     return all_rows
 
 
-def parse_reference_rows(xlsx_paths: List[Path]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """Pure function: parse xlsx files and return (raw_rows, deduped_rows).
+def parse_reference_rows(xlsx_paths: List[Path]) -> List[Dict[str, Any]]:
+    """Pure function: parse xlsx files and return all parsed rows.
     
     Args:
         xlsx_paths: List of paths to xlsx files
         
     Returns:
-        (raw_rows, deduped_rows) where:
-        - raw_rows: All rows parsed from xlsx (before deduplication)
-        - deduped_rows: Deduplicated rows by natural key
+        List of all parsed rows (no deduplication - idempotency comes from DELETE + INSERT)
         
-    Natural key for deduplication:
-        (source_file, maker, model, trim, year_from, year_to, pack_id, 
-         gross_capacity_kwh, net_capacity_kwh, official_capacity_kwh)
+    Note: Deduplication is NOT done at parse time. The import process is idempotent
+    via DELETE (all old data) + INSERT (all new parsed data). Historical duplicates
+    in production came from re-importing without clearing, which no longer happens.
     """
     import openpyxl
     
-    raw_rows = []
+    all_rows = []
     
     for xlsx_path in xlsx_paths:
         if not xlsx_path.exists():
@@ -281,29 +279,6 @@ def parse_reference_rows(xlsx_paths: List[Path]) -> Tuple[List[Dict[str, Any]], 
         elif file_type == 'tesla':
             rows = parse_tesla_file(wb, xlsx_path.name)
         
-        raw_rows.extend(rows)
+        all_rows.extend(rows)
     
-    # Deduplicate by natural key
-    seen_keys = {}
-    deduped_rows = []
-    
-    for row in raw_rows:
-        # Build natural key - round floats to avoid floating point comparison issues
-        key = (
-            row.get('source_file') or '',
-            row.get('maker') or '',
-            row.get('model') or '',
-            row.get('trim') or '',
-            row.get('year_from') or 0,
-            row.get('year_to') or 0,
-            row.get('pack_id') or '',
-            round(row.get('gross_capacity_kwh') or 0.0, 2),
-            round(row.get('net_capacity_kwh') or 0.0, 2),
-            round(row.get('official_capacity_kwh') or 0.0, 2),
-        )
-        
-        if key not in seen_keys:
-            seen_keys[key] = row
-            deduped_rows.append(row)
-    
-    return raw_rows, deduped_rows
+    return all_rows

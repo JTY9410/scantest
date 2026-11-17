@@ -105,9 +105,9 @@ def seed_battery_references():
     from app.modules.scans.battery_ref_parser import parse_reference_rows
     
     current_app.logger.info(f"Parsing {len(xlsx_files)} xlsx files...")
-    raw_rows, deduped_rows = parse_reference_rows(xlsx_files)
+    parsed_rows = parse_reference_rows(xlsx_files)
     
-    current_app.logger.info(f"Parsed {len(raw_rows)} rows, {len(deduped_rows)} unique after deduplication")
+    current_app.logger.info(f"Parsed {len(parsed_rows)} rows from xlsx files")
     
     # One transaction: DELETE old data, INSERT new data (idempotent by construction)
     try:
@@ -120,12 +120,12 @@ def seed_battery_references():
         ).delete()
         current_app.logger.info(f"Deleted {deleted} old reference rows")
         
-        # Bulk insert deduplicated rows
-        if deduped_rows:
-            db.session.bulk_insert_mappings(BatteryReferenceCapacity, deduped_rows)
+        # Bulk insert all parsed rows (no deduplication)
+        if parsed_rows:
+            db.session.bulk_insert_mappings(BatteryReferenceCapacity, parsed_rows)
         
         db.session.commit()
-        current_app.logger.info(f"✓ Battery reference seeding complete: {len(deduped_rows)} rows")
+        current_app.logger.info(f"✓ Battery reference seeding complete: {len(parsed_rows)} rows")
         
     except Exception as exc:
         db.session.rollback()

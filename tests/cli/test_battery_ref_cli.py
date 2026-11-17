@@ -22,7 +22,7 @@ def test_battery_ref_seed_command(app):
         
         # Verify data was seeded (223 - 2 Land Rover rows with NULL capacities = 221)
         count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
-        assert count == 91, f"Expected 91 rows (actual verified count from xlsx), got {count}"
+        assert count == 221, f"Expected 221 rows (actual verified count from xlsx), got {count}"
         
         # Verify PK044 and PK045 are present
         pk044 = db.session.execute(text(
@@ -118,7 +118,7 @@ def test_seed_replaces_null_capacity_rows(app):
         
         # Verify good data was imported (excluding NULL capacity rows)
         total_count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
-        assert total_count == 91, f"Expected 91 rows (actual verified count from xlsx), got {total_count}"
+        assert total_count == 221, f"Expected 221 rows (actual verified count from xlsx), got {total_count}"
 
 
 def test_version_is_correct(app):
