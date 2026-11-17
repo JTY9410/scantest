@@ -1,37 +1,42 @@
-{% extends "admin.html" %}
+{% extends "layouts/admin.html" %}
 {% block title %}컬렉션 프로파일{% endblock %}
-
 {% block content %}
-<div class="container">
-  <h1>적응형 데이터 수집 프로파일</h1>
+<div class="container mx-auto py-6 px-4">
+  <h1 class="text-2xl font-bold mb-6">적응형 데이터 수집 프로파일</h1>
   
-  <div class="mb-3">
-    <a href="/admin/adaptive/profiles/generate" class="btn btn-primary">새 프로파일 생성</a>
-  </div>
+  <p class="mb-4 text-gray-600">차량별 신호 수집 프로파일입니다. 승인된 프로파일이 스캔에 적용됩니다.</p>
   
-  <table class="table">
+  <table class="w-full border-collapse border">
     <thead>
-      <tr>
-        <th>버전</th>
-        <th>상태</th>
-        <th>제조사</th>
-        <th>모델</th>
-        <th>스킵 신호수</th>
-        <th>생성일</th>
-        <th></th>
+      <tr class="bg-gray-100">
+        <th class="border p-2">버전</th>
+        <th class="border p-2">상태</th>
+        <th class="border p-2">제조사</th>
+        <th class="border p-2">모델</th>
+        <th class="border p-2">스킵 신호수</th>
+        <th class="border p-2">생성일</th>
+        <th class="border p-2">액션</th>
       </tr>
     </thead>
     <tbody>
       {% for profile in profiles %}
       <tr>
-        <td>{{ profile.version }}</td>
-        <td>{{ profile.status }}</td>
-        <td>{{ profile.manufacturer }}</td>
-        <td>{{ profile.model or '(전체)' }}</td>
-        <td>{{ profile.signals_to_skip|length }}</td>
-        <td>{{ profile.created_at.strftime('%Y-%m-%d') }}</td>
-        <td>
-          <a href="/admin/adaptive/profiles/{{ profile.id }}">상세</a>
+        <td class="border p-2">{{ profile.version }}</td>
+        <td class="border p-2">
+          <span class="px-2 py-1 rounded text-sm
+            {% if profile.status == 'approved' %}bg-green-100 text-green-800
+            {% elif profile.status == 'pending_approval' %}bg-yellow-100 text-yellow-800
+            {% elif profile.status == 'rolled_back' %}bg-red-100 text-red-800
+            {% else %}bg-gray-100 text-gray-800{% endif %}">
+            {{ profile.status }}
+          </span>
+        </td>
+        <td class="border p-2">{{ profile.manufacturer }}</td>
+        <td class="border p-2">{{ profile.model or '(전체)' }}</td>
+        <td class="border p-2">{{ profile.signals_to_skip|length }}</td>
+        <td class="border p-2">{{ profile.created_at.strftime('%Y-%m-%d %H:%M') if profile.created_at else '-' }}</td>
+        <td class="border p-2">
+          <a href="/admin/adaptive/profiles/{{ profile.id }}" class="text-blue-600 hover:underline">상세</a>
         </td>
       </tr>
       {% endfor %}
