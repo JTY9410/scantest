@@ -56,10 +56,11 @@ jobs:
             -e JWT_SECRET="smoke-test-jwt-secret-with-enough-length-for-hs256" \
             -e ENCRYPTION_KEY="4PjmU8z4M3K5L6N7P8Q9R0S1T2U3V4W5X6Y7Z8A9B0C=" \
             -e FLASK_ENV=production \
-            -e AUTO_DB_UPGRADE=true \
+            -e AUTO_DB_UPGRADE=false \
             -e GUNICORN_WORKERS=1 \
             -e GUNICORN_TIMEOUT=60 \
-            scantest:smoke
+            scantest:smoke \
+            bash -c "flask db upgrade && flask battery-ref-seed && gunicorn -c gunicorn.conf.py app.wsgi:app"
       
       - name: Wait for /up endpoint
         run: |
