@@ -278,7 +278,8 @@ def test_ml_tables_have_correct_columns(app):
         consistency_cols = {col['name'] for col in inspector.get_columns('ml_consistency_scores')}
         required_consistency_cols = {
             'id', 'scan_id', 'score', 'distribution_match', 
-            'physical_plausibility', 'issues_detected', 'created_at'
+            'physical_plausibility', 'issues', 'created_at',
+            'sufficient_data', 'min_samples_required', 'actual_samples'
         }
         assert required_consistency_cols.issubset(consistency_cols), \
             f"ml_consistency_scores missing columns: {required_consistency_cols - consistency_cols}"
