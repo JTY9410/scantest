@@ -357,11 +357,16 @@ def interpret(steps: list[dict], rules: list, record: str, car: dict | None = No
                     ecus[_ecu_address(ecu)][field_name] = text
         elif service == 0x19 and command[2:4] in ("02", "15"):
             permanent = command[2:4] == "15"
+            # v2.2.20: Use ISO 14229 status byte classification
+            from app.modules.scans.dtc_status import classify_dtc_status
             for ecu, payloads in outcome.positive.items():
                 for payload in payloads:
                     for dtc in obd.uds_dtcs(payload):
-                        kind = "영구" if permanent else (
-                            "현재" if dtc["active"] else ("확정" if dtc["confirmed"] else "기록"))
+                        if permanent:
+                            kind = "영구"
+                        else:
+                            # Use status byte classification (현재/임시/과거)
+                            kind = classify_dtc_status(dtc.get("status")) or "기록"
                         dtcs.append(dtc | {"kind": kind, "ecu": _ecu_address(ecu),
                                            "source": f"UDS 19 {command[2:4]}"})
 
