@@ -1,6 +1,7 @@
 from typing import Any
 
 from flask import Blueprint, render_template, request
+from sqlalchemy import select
 
 from app.core.pagination import clamp_page
 from app.modules.auth.access import admin_required

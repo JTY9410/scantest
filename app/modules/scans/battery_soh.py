@@ -68,11 +68,21 @@ def find_matching_references(
     )
     
     # Only exclude rows with ALL three capacity columns NULL (completely unusable)
+    # Also exclude rows where ONLY official_capacity_kwh is set and it's implausible (not battery kWh)
+    # Plausible range: 10-250 kWh for automotive batteries
+    from sqlalchemy import and_, case
+    
     query = query.filter(
         or_(
+            # Has gross or net (always usable)
             BatteryReferenceCapacity.gross_capacity_kwh.isnot(None),
             BatteryReferenceCapacity.net_capacity_kwh.isnot(None),
-            BatteryReferenceCapacity.official_capacity_kwh.isnot(None)
+            # OR has plausible official_capacity_kwh (10-250 kWh range)
+            and_(
+                BatteryReferenceCapacity.official_capacity_kwh.isnot(None),
+                BatteryReferenceCapacity.official_capacity_kwh >= 10,
+                BatteryReferenceCapacity.official_capacity_kwh <= 250
+            )
         )
     )
     
@@ -83,14 +93,22 @@ def find_matching_references(
     
     # Deduplicate by pack_id (keep first occurrence for each pack_id)
     seen_pack_ids = set()
+    seen_combos = set()  # For rows without pack_id, dedupe by (model, trim, capacity)
     deduped_results = []
+    
     for r in results:
-        if r.pack_id and r.pack_id not in seen_pack_ids:
-            seen_pack_ids.add(r.pack_id)
-            deduped_results.append(r)
-        elif not r.pack_id:
-            # Keep rows without pack_id
-            deduped_results.append(r)
+        if r.pack_id:
+            # Has pack_id: dedupe by pack_id
+            if r.pack_id not in seen_pack_ids:
+                seen_pack_ids.add(r.pack_id)
+                deduped_results.append(r)
+        else:
+            # No pack_id: dedupe by (model, trim, capacity_kwh)
+            capacity = r.gross_capacity_kwh or r.net_capacity_kwh or r.official_capacity_kwh
+            combo_key = (r.model, r.trim or '', round(capacity, 1) if capacity else None)
+            if combo_key not in seen_combos:
+                seen_combos.add(combo_key)
+                deduped_results.append(r)
     
     # Check if all candidates have the same gross capacity
     if len(deduped_results) > 1:

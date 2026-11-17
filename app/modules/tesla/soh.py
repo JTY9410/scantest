@@ -69,6 +69,7 @@ def calculate_soh(current_nominal_full: float,
     if soh_data['soh_status']:
         # Could not calculate SOH (multiple candidates or no reference)
         result['soh_available'] = False
+        result['soh_status'] = soh_data['soh_status']  # Add explicit soh_status field for ML extractor
         result['calculation_note'] = soh_data['soh_status']
         if soh_data['candidates']:
             result['warnings'].append(f"팩 후보 {len(soh_data['candidates'])}개: 관리자 팩ID 선택 필요")

@@ -280,10 +280,15 @@ def _extract_unmeasurable(result: dict) -> tuple[dict, int]:
                     # If SOH is 미산정 (e.g. multiple pack candidates), mark as such
                     elif soh_result.get('soh_status'):
                         status = soh_result['soh_status']
-                        if '팩 후보 다수' in status or '미산정' in status:
+                        if '팩 후보 다수' in status:
                             unmeasurable[signal] = "미산정 (팩 후보 다수)"
                             count += 1
                             continue  # Skip the rest of the loop for this signal
+                        elif '미산정' in status:
+                            # Extract the reason from status like "미산정 (기준용량 정보 없음)"
+                            unmeasurable[signal] = status
+                            count += 1
+                            continue
             elif signal == "pack_voltage" and decoded.get('pack_vi', {}).get('pack_voltage'):
                 value = True
             elif signal in ["max_cell_v", "min_cell_v"] and decoded.get('bricks'):
