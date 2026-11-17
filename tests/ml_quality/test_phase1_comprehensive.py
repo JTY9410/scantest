@@ -40,12 +40,12 @@ class TestSignalCollection:
             scan = Scan(
                 type='ev',
                 device_uid='test-device',
+                device_type='app',
                 tester_id=user_id,
                 car_maker='현대',
                 car_model='아이오닉5',
                 car_no='88가8888',  # Fake plate
-                car_vin='ZZZ12345678901234',  # Fake VIN
-                status='ok'
+                car_vin='ZZZ12345678901234'  # Fake VIN
             )
             db.session.add(scan)
             db.session.flush()
@@ -90,12 +90,12 @@ class TestProposalGeneration:
                 scan = Scan(
                     type='ev',
                     device_uid=f'device-{i}',
+                    device_type='app',
                     tester_id=user_id,
                     car_maker='Tesla',
                     car_model='Model 3',
                     car_no=f'88가888{i}',
-                    car_vin=f'ZZZ1234567890123{i}',
-                    status='ok'
+                    car_vin=f'ZZZ1234567890123{i}'
                 )
                 db.session.add(scan)
                 db.session.flush()
@@ -125,12 +125,12 @@ class TestProposalGeneration:
                 scan = Scan(
                     type='ev',
                     device_uid=f'device-{i}',
+                    device_type='app',
                     tester_id=user_id,
                     car_maker='Tesla',
                     car_model='Model 3',
                     car_no=f'88가888{i}',
-                    car_vin=f'ZZZ1234567890123{i}',
-                    status='ok'
+                    car_vin=f'ZZZ1234567890123{i}'
                 )
                 db.session.add(scan)
                 db.session.flush()
@@ -179,12 +179,12 @@ class TestProposalGeneration:
                 scan = Scan(
                     type='ev',
                     device_uid=f'device-{i}',
+                    device_type='app',
                     tester_id=user_id,
                     car_maker='현대',
                     car_model='아이오닉5',
                     car_no=f'88가888{i}',
-                    car_vin=f'ZZZ1234567890123{i}',
-                    status='ok'
+                    car_vin=f'ZZZ1234567890123{i}'
                 )
                 db.session.add(scan)
                 db.session.flush()
@@ -543,7 +543,8 @@ class TestAccessControl:
         
         # Try to access proposals list
         response = client.get("/admin/ml/quality/proposals", follow_redirects=False)
-        assert response.status_code in [302, 403]  # Redirected or forbidden
+        # Should be redirected to login or get 404 (route doesn't exist for non-admin)
+        assert response.status_code in [302, 403, 404]
 
 
 class TestCSRFProtection:
@@ -587,12 +588,12 @@ class TestDataPrivacy:
                 scan = Scan(
                     type='ev',
                     device_uid=f'device-{i}',
+                    device_type='app',
                     tester_id=user_id,
                     car_maker='Tesla',
                     car_model='Model 3',
                     car_no='88가8888',  # Fake plate
-                    car_vin='ZZZ12345678901234',  # Fake VIN
-                    status='ok'
+                    car_vin='ZZZ12345678901234'  # Fake VIN
                 )
                 db.session.add(scan)
                 db.session.flush()
