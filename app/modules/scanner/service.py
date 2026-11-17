@@ -564,6 +564,15 @@ def run_scan(actor: User, *, car_no: str | None, car: dict | None, steps: Any, t
     except Exception as exc:
         current_app.logger.warning(f"ML feature extraction failed for scan {scan.id}: {exc}")
     
+    # Quality signal collection (v2.2.22 Phase 1)
+    try:
+        from app.modules.ml_quality.signal_collector import collect_quality_signals
+        quality_signal = collect_quality_signals(scan, result)
+        db.session.add(quality_signal)
+        db.session.commit()
+    except Exception as exc:
+        current_app.logger.warning(f"Quality signal collection failed for scan {scan.id}: {exc}")
+    
     return scan
 
 

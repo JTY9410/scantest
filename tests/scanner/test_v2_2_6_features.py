@@ -1,9 +1,9 @@
 """v2.2.6 기능 검증."""
 
 def test_version_is_2_2_6():
-    """__version__ = 2.2.21 (was 2.2.6 → ... → 2.2.18 → 2.2.19 → 2.2.20 → 2.2.21)"""
+    """__version__ = 2.2.22 (was 2.2.6 → ... → 2.2.18 → 2.2.19 → 2.2.20 → 2.2.21 → 2.2.22)"""
     from app import __version__
-    assert __version__.__version__ == "2.2.21"
+    assert __version__.__version__ == "2.2.22"
 
 
 def test_version_in_dockerfile_not_hardcoded():

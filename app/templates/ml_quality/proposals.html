@@ -1,0 +1,80 @@
+{% extends "layouts/admin.html" %}
+
+{% block title %}ML 품질 개선 제안{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-bold">ML 품질 개선 제안</h1>
+    <form method="post" action="{{ url_for('ml_quality.generate_new_proposals') }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-primary">새 제안 생성</button>
+    </form>
+  </div>
+
+  <div class="flex gap-4 mb-6">
+    <div>
+      <label class="block text-sm font-medium mb-1">상태 필터</label>
+      <select name="status" onchange="location.href='?status=' + this.value" class="input">
+        <option value="">전체</option>
+        <option value="pending" {% if request.args.get('status') == 'pending' %}selected{% endif %}>대기중</option>
+        <option value="approved" {% if request.args.get('status') == 'approved' %}selected{% endif %}>승인됨</option>
+        <option value="rejected" {% if request.args.get('status') == 'rejected' %}selected{% endif %}>거부됨</option>
+        <option value="rolled_back" {% if request.args.get('status') == 'rolled_back' %}selected{% endif %}>롤백됨</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-lg shadow overflow-hidden">
+    <table class="rtable">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>제안 유형</th>
+          <th>제조사/모델</th>
+          <th>상태</th>
+          <th>생성 방법</th>
+          <th>생성일</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for proposal in proposals %}
+        <tr>
+          <td class="mono">{{ proposal.id }}</td>
+          <td>{{ proposal.proposal_type }}</td>
+          <td>
+            {% if proposal.manufacturer %}{{ proposal.manufacturer }}{% endif %}
+            {% if proposal.model %} / {{ proposal.model }}{% endif %}
+            {% if not proposal.manufacturer and not proposal.model %}전체{% endif %}
+          </td>
+          <td>
+            {% if proposal.status == 'pending' %}
+              <span class="badge badge-warning">대기중</span>
+            {% elif proposal.status == 'approved' %}
+              <span class="badge badge-success">승인됨</span>
+            {% elif proposal.status == 'rejected' %}
+              <span class="badge badge-danger">거부됨</span>
+            {% elif proposal.status == 'rolled_back' %}
+              <span class="badge badge-secondary">롤백됨</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if proposal.generation_method == 'rule_based' %}규칙 기반
+            {% else %}AI 보조{% endif %}
+          </td>
+          <td class="mono">{{ proposal.created_at|kst }}</td>
+          <td>
+            <a href="{{ url_for('ml_quality.proposal_detail', proposal_id=proposal.id) }}" class="btn btn-secondary btn-sm">상세</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="7" class="text-center text-muted">제안이 없습니다</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

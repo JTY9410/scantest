@@ -1,0 +1,146 @@
+{% extends "layouts/admin.html" %}
+
+{% block title %}제안 #{{ proposal.id }} 상세{% endblock %}
+
+{% block content %}
+<div class="container mx-auto px-4 py-6">
+  <div class="mb-6">
+    <a href="{{ url_for('ml_quality.proposal_list') }}" class="btn btn-secondary">← 목록으로</a>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-6 mb-6">
+    <div class="flex justify-between items-start mb-4">
+      <h1 class="text-2xl font-bold">제안 #{{ proposal.id }}</h1>
+      <div>
+        {% if proposal.status == 'pending' %}
+          <span class="badge badge-warning">대기중</span>
+        {% elif proposal.status == 'approved' %}
+          <span class="badge badge-success">승인됨</span>
+        {% elif proposal.status == 'rejected' %}
+          <span class="badge badge-danger">거부됨</span>
+        {% elif proposal.status == 'rolled_back' %}
+          <span class="badge badge-secondary">롤백됨</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <dl class="grid grid-cols-2 gap-4">
+      <div>
+        <dt class="font-semibold">제안 유형</dt>
+        <dd>{{ proposal.proposal_type }}</dd>
+      </div>
+      <div>
+        <dt class="font-semibold">생성 방법</dt>
+        <dd>{% if proposal.generation_method == 'rule_based' %}규칙 기반{% else %}AI 보조{% endif %}</dd>
+      </div>
+      <div>
+        <dt class="font-semibold">제조사</dt>
+        <dd>{{ proposal.manufacturer or '전체' }}</dd>
+      </div>
+      <div>
+        <dt class="font-semibold">모델</dt>
+        <dd>{{ proposal.model or '전체' }}</dd>
+      </div>
+      <div>
+        <dt class="font-semibold">생성일</dt>
+        <dd class="mono">{{ proposal.created_at|kst }}</dd>
+      </div>
+      <div>
+        <dt class="font-semibold">수정일</dt>
+        <dd class="mono">{{ proposal.updated_at|kst }}</dd>
+      </div>
+    </dl>
+
+    {% if proposal.expected_effect %}
+    <div class="mt-4">
+      <dt class="font-semibold">예상 효과</dt>
+      <dd>{{ proposal.expected_effect }}</dd>
+    </div>
+    {% endif %}
+
+    <div class="mt-6">
+      <h2 class="font-semibold text-lg mb-2">증거 데이터</h2>
+      <pre class="bg-gray-100 p-4 rounded overflow-x-auto text-sm">{{ proposal.evidence|tojson(indent=2) }}</pre>
+    </div>
+
+    <div class="mt-6">
+      <h2 class="font-semibold text-lg mb-2">설정 변경 (Delta)</h2>
+      <pre class="bg-gray-100 p-4 rounded overflow-x-auto text-sm">{{ proposal.config_delta|tojson(indent=2) }}</pre>
+    </div>
+  </div>
+
+  {% if proposal.status == 'pending' %}
+  <div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h2 class="font-semibold text-lg mb-4">승인/거부</h2>
+    <div class="flex gap-4">
+      <form method="post" action="{{ url_for('ml_quality.approve_proposal', proposal_id=proposal.id) }}" class="flex-1">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="block mb-2">
+          <span class="text-sm font-medium">승인 사유 (선택)</span>
+          <textarea name="reason" class="input mt-1" rows="2" placeholder="승인 사유를 입력하세요"></textarea>
+        </label>
+        <button type="submit" class="btn btn-primary w-full">승인</button>
+      </form>
+      
+      <form method="post" action="{{ url_for('ml_quality.reject_proposal', proposal_id=proposal.id) }}" class="flex-1">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label class="block mb-2">
+          <span class="text-sm font-medium">거부 사유 (필수)</span>
+          <textarea name="reason" class="input mt-1" rows="2" placeholder="거부 사유를 입력하세요" required></textarea>
+        </label>
+        <button type="submit" class="btn btn-danger w-full">거부</button>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if proposal.status == 'approved' %}
+  <div class="bg-white rounded-lg shadow p-6 mb-6">
+    <h2 class="font-semibold text-lg mb-4">롤백</h2>
+    <form method="post" action="{{ url_for('ml_quality.rollback_proposal', proposal_id=proposal.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="block mb-2">
+        <span class="text-sm font-medium">롤백 사유 (필수)</span>
+        <textarea name="reason" class="input mt-1" rows="2" placeholder="롤백 사유를 입력하세요" required></textarea>
+      </label>
+      <button type="submit" class="btn btn-danger">롤백</button>
+    </form>
+  </div>
+  {% endif %}
+
+  <div class="bg-white rounded-lg shadow p-6">
+    <h2 class="font-semibold text-lg mb-4">감사 로그</h2>
+    <table class="rtable">
+      <thead>
+        <tr>
+          <th>동작</th>
+          <th>사용자</th>
+          <th>사유</th>
+          <th>이전 상태</th>
+          <th>시간</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in proposal.audit_logs %}
+        <tr>
+          <td>
+            {% if log.action == 'approve' %}승인
+            {% elif log.action == 'reject' %}거부
+            {% elif log.action == 'rollback' %}롤백
+            {% endif %}
+          </td>
+          <td>{{ log.user_email or '시스템' }}</td>
+          <td>{{ log.reason or '-' }}</td>
+          <td>{{ log.previous_status }}</td>
+          <td class="mono">{{ log.action_at|kst }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="5" class="text-center text-muted">감사 로그가 없습니다</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
