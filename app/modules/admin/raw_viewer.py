@@ -36,7 +36,25 @@ def raw_viewer(scan_id):
     db.session.add(log)
     db.session.commit()
     
-    return render_template('admin/raw_viewer.html', scan=scan, raw_files=raw_files)
+    # 수집 방식 계산 (v2.2.29)
+    collection_method = "전체 스캔"
+    if getattr(scan, "force_full_scan", False):
+        collection_method = "전체 스캔 (강제)"
+    elif getattr(scan, "is_rescan_sample", False):
+        collection_method = "전체 스캔 (샘플링 재수집)"
+    elif getattr(scan, "collection_profile_id", None):
+        profile_id = scan.collection_profile_id
+        try:
+            from app.modules.adaptive_collection.models import CollectionProfile
+            profile = db.session.get(CollectionProfile, profile_id)
+            if profile and profile.version:
+                collection_method = f"프로파일 #{profile_id} v{profile.version} 적용"
+            else:
+                collection_method = f"프로파일 #{profile_id} 적용"
+        except Exception:
+            collection_method = f"프로파일 #{profile_id} 적용"
+    
+    return render_template('admin/raw_viewer.html', scan=scan, raw_files=raw_files, collection_method=collection_method)
 
 
 @bp.route('/<int:scan_id>/raw/<int:file_id>/download')
