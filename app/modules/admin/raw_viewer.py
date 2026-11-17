@@ -16,35 +16,27 @@ bp = Blueprint('raw_viewer', __name__, url_prefix='/admin/scan')
 @admin_required
 def raw_viewer(scan_id):
     """View list of raw files for a scan (admin-only, UNMASKED)."""
-    import sys
-    import traceback
+    from app.modules.scans.raw_files import ScanRawFile
     
-    try:
-        from app.modules.scans.raw_files import ScanRawFile
-        
-        scan = db.session.get(Scan, scan_id)
-        if not scan:
-            abort(404)
-        
-        # Query raw files directly instead of using backref
-        raw_files = db.session.query(ScanRawFile).filter_by(scan_id=scan_id).order_by(ScanRawFile.uploaded_at.desc()).all()
-        
-        # Log the view
-        log = RawFileAccessLog(
-            scan_id=scan_id,
-            user_id=current_user.id if current_user.is_authenticated else None,
-            action='view',
-            user_email=current_user.email if (current_user.is_authenticated and current_user.email) else None,
-            ip_address=request.remote_addr
-        )
-        db.session.add(log)
-        db.session.commit()
-        
-        return render_template('admin/raw_viewer.html', scan=scan, raw_files=raw_files)
-    except Exception as e:
-        print(f"[RAW_VIEWER ERROR] {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
-        raise
+    scan = db.session.get(Scan, scan_id)
+    if not scan:
+        abort(404)
+    
+    # Query raw files directly instead of using backref
+    raw_files = db.session.query(ScanRawFile).filter_by(scan_id=scan_id).order_by(ScanRawFile.uploaded_at.desc()).all()
+    
+    # Log the view
+    log = RawFileAccessLog(
+        scan_id=scan_id,
+        user_id=current_user.id if current_user.is_authenticated else None,
+        action='view',
+        user_email=current_user.email if (current_user.is_authenticated and current_user.email) else None,
+        ip_address=request.remote_addr
+    )
+    db.session.add(log)
+    db.session.commit()
+    
+    return render_template('admin/raw_viewer.html', scan=scan, raw_files=raw_files)
 
 
 @bp.route('/<int:scan_id>/raw/<int:file_id>/download')
