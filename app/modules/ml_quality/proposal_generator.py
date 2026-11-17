@@ -35,12 +35,19 @@ def generate_proposals(manufacturer: str | None = None, model: str | None = None
     # Aggregate quality signals by manufacturer/model
     recent_cutoff = datetime.now(timezone.utc) - timedelta(days=30)
     
+    # Use group_concat for SQLite, array_agg for PostgreSQL
+    is_sqlite = db.engine.name == 'sqlite'
+    if is_sqlite:
+        signal_ids_expr = func.group_concat(ScanQualitySignal.id).label('signal_ids')
+    else:
+        signal_ids_expr = func.array_agg(ScanQualitySignal.id).label('signal_ids')
+    
     query = (
         select(
             Scan.car_maker,
             Scan.car_model,
             func.count(ScanQualitySignal.id).label('signal_count'),
-            func.array_agg(ScanQualitySignal.id).label('signal_ids')
+            signal_ids_expr
         )
         .join(Scan, ScanQualitySignal.scan_id == Scan.id)
         .where(ScanQualitySignal.collected_at >= recent_cutoff)
@@ -56,7 +63,12 @@ def generate_proposals(manufacturer: str | None = None, model: str | None = None
     aggregates = db.session.execute(query).all()
     
     for agg in aggregates:
-        maker, car_model, count, signal_ids = agg
+        maker, car_model, count, signal_ids_raw = agg
+        # Convert signal_ids from string (SQLite) or list (PostgreSQL) to list of ints
+        if is_sqlite and isinstance(signal_ids_raw, str):
+            signal_ids = [int(x) for x in signal_ids_raw.split(',')]
+        else:
+            signal_ids = signal_ids_raw
         
         # Analyze decode failures
         decode_proposal = _analyze_decode_failures(maker, car_model, signal_ids, count)
