@@ -57,12 +57,13 @@ def find_matching_references(
             (BatteryReferenceCapacity.vin_wmi == decoded['wmi'])
         )
     
-    # Exclude non-xlsx sources (manual, etc) but allow NULL for tests/backwards compat
+    # Exclude manual rows explicitly, but allow NULL (tests/legacy) and .xlsx files
+    # SQL: NULL != 'manual' evaluates to NULL (falsy), so use explicit OR with is_(None)
     from sqlalchemy import and_, or_
     query = query.filter(
         or_(
-            BatteryReferenceCapacity.source_file.like('%.xlsx'),
-            BatteryReferenceCapacity.source_file.is_(None)
+            BatteryReferenceCapacity.source_file.is_(None),  # Allow NULL (tests, legacy imports)
+            BatteryReferenceCapacity.source_file != 'manual'  # Exclude manual rows
         )
     )
     
