@@ -7,14 +7,13 @@ from app import create_app
 from app.extensions import db
 
 
-@pytest.mark.skipif(
-    not pytest.config.getoption("--test-db-url", default=""),
-    reason="Migration test requires PostgreSQL"
-)
-def test_phase3_migration_roundtrip():
+def test_phase3_migration_roundtrip(pytestconfig):
     """Test Phase 3 migration: upgrade, downgrade, upgrade."""
     import os
-    os.environ.setdefault('TEST_DATABASE_URL', pytest.config.getoption("--test-db-url", default=""))
+    
+    test_db_url = os.environ.get('TEST_DATABASE_URL')
+    if not test_db_url:
+        pytest.skip("Migration test requires PostgreSQL (TEST_DATABASE_URL not set)")
     
     app = create_app("testing")
     
