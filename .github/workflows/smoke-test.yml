@@ -1,0 +1,115 @@
+name: Smoke Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  smoke-test:
+    name: Docker Image Smoke Test
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: scantest
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: scantest_smoke
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Build production image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./docker/Dockerfile
+          push: false
+          load: true
+          tags: scantest:smoke
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      
+      - name: Start container with real entrypoint
+        run: |
+          docker run -d \
+            --name scantest-smoke \
+            --network host \
+            -e DATABASE_URL="postgresql://scantest:testpass@localhost:5432/scantest_smoke" \
+            -e SECRET_KEY="smoke-test-secret-key-for-ci-only" \
+            -e FLASK_ENV=production \
+            -e AUTO_DB_UPGRADE=true \
+            -e GUNICORN_WORKERS=1 \
+            -e GUNICORN_TIMEOUT=60 \
+            scantest:smoke
+      
+      - name: Wait for /up endpoint
+        run: |
+          echo "Waiting for container to be ready..."
+          for i in {1..60}; do
+            if curl -f http://localhost:8000/up 2>/dev/null; then
+              echo "Container is ready!"
+              exit 0
+            fi
+            echo "Attempt $i: Not ready yet, waiting..."
+            sleep 2
+          done
+          echo "ERROR: Container did not become ready in 120 seconds"
+          docker logs scantest-smoke
+          exit 1
+      
+      - name: Verify battery reference data
+        run: |
+          docker exec scantest-smoke flask shell << 'EOF'
+          from app.extensions import db
+          from sqlalchemy import text
+          
+          # Check row count
+          count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()
+          print(f"Battery reference count: {count}")
+          assert count == 221, f"Expected 221 rows, got {count}"
+          
+          # Check PK044 and PK045
+          pk044 = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity WHERE pack_id = 'PK044'")).scalar()
+          pk045 = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity WHERE pack_id = 'PK045'")).scalar()
+          print(f"PK044 count: {pk044}, PK045 count: {pk045}")
+          assert pk044 > 0, "PK044 not found"
+          assert pk045 > 0, "PK045 not found"
+          
+          # Check no rows with all NULL capacities
+          null_count = db.session.execute(text("""
+              SELECT COUNT(*) FROM battery_reference_capacity 
+              WHERE gross_capacity_kwh IS NULL 
+                AND net_capacity_kwh IS NULL 
+                AND official_capacity_kwh IS NULL
+          """)).scalar()
+          print(f"Rows with all NULL capacities: {null_count}")
+          assert null_count == 0, f"Found {null_count} rows with all NULL capacities"
+          
+          print("✓ All smoke test assertions passed")
+          EOF
+      
+      - name: Show container logs on failure
+        if: failure()
+        run: docker logs scantest-smoke
+      
+      - name: Cleanup
+        if: always()
+        run: |
+          docker stop scantest-smoke || true
+          docker rm scantest-smoke || true

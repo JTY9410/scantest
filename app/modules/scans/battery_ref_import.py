@@ -3,7 +3,6 @@ import click
 from flask import current_app
 from flask.cli import with_appcontext
 from pathlib import Path
-import openpyxl
 from app.extensions import db
 from app.modules.scans.battery_capacity import BatteryReferenceCapacity
 
@@ -33,6 +32,9 @@ def import_battery_reference(xlsx_path: str, clear: bool = False) -> int:
     
     Returns number of rows imported.
     """
+    # Lazy import to avoid breaking app.wsgi if openpyxl is missing
+    import openpyxl
+    
     xlsx_path = Path(xlsx_path)
     
     if not xlsx_path.exists():
