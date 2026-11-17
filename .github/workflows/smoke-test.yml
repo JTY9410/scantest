@@ -129,7 +129,7 @@ jobs:
       
       - name: Test admin battery-references page (Defect 1)
         run: |
-          response=$(docker exec scantest-smoke curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/admin/battery-references || echo "000")
+          response=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8000/admin/battery-references || echo "000")
           echo "Admin battery-references status: $response"
           if [ "$response" != "200" ] && [ "$response" != "302" ]; then
             echo "ERROR: Expected 200 or 302, got $response"
