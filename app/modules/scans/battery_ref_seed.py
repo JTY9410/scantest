@@ -10,7 +10,11 @@ from app.modules.scans.battery_capacity import BatteryReferenceCapacity
 def should_seed_battery_references() -> bool:
     """Check if battery reference data needs seeding.
     
-    Checks for both empty table and old-format rows that need migrating.
+    Checks for:
+    - Empty table
+    - Old-format rows (no source_file) that need migrating
+    - Rows with NULL capacity (invalid references)
+    - Insufficient row count
     """
     total_count = db.session.query(BatteryReferenceCapacity).count()
     if total_count == 0:
@@ -25,9 +29,22 @@ def should_seed_battery_references() -> bool:
         current_app.logger.info(f"Found {old_format_count} old-format rows, will re-import")
         return True
     
-    # Check if we have the expected count (593 rows: 65 + 528)
-    if total_count < 593:
-        current_app.logger.info(f"Found only {total_count} rows, expected 593, will re-import")
+    # Check for invalid rows with NULL capacity (unusable for SOH calculations)
+    from sqlalchemy import or_
+    null_capacity_count = db.session.query(BatteryReferenceCapacity).filter(
+        or_(
+            BatteryReferenceCapacity.gross_capacity_kwh.is_(None),
+            BatteryReferenceCapacity.net_capacity_kwh.is_(None)
+        )
+    ).count()
+    
+    if null_capacity_count > 0:
+        current_app.logger.info(f"Found {null_capacity_count} rows with NULL capacity, will re-import")
+        return True
+    
+    # Check if we have the expected count (223 importable rows)
+    if total_count < 223:
+        current_app.logger.info(f"Found only {total_count} rows, expected 223, will re-import")
         return True
     
     return False
@@ -46,13 +63,18 @@ def seed_battery_references():
         current_app.logger.info(f"Battery reference data already complete ({total} rows), skipping")
         return
     
-    # Delete old-format rows if they exist
-    old_count = db.session.query(BatteryReferenceCapacity).filter(
-        BatteryReferenceCapacity.source_file.is_(None)
+    # Delete old-format rows and rows with NULL capacity
+    from sqlalchemy import or_
+    bad_rows = db.session.query(BatteryReferenceCapacity).filter(
+        or_(
+            BatteryReferenceCapacity.source_file.is_(None),
+            BatteryReferenceCapacity.gross_capacity_kwh.is_(None),
+            BatteryReferenceCapacity.net_capacity_kwh.is_(None)
+        )
     ).delete()
-    if old_count > 0:
+    if bad_rows > 0:
         db.session.commit()
-        current_app.logger.info(f"Removed {old_count} old-format rows")
+        current_app.logger.info(f"Removed {bad_rows} old-format or NULL-capacity rows")
     
     current_app.logger.info("Seeding battery reference capacity data...")
     
