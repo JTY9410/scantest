@@ -449,15 +449,18 @@ class TestApprovalWorkflow:
             db.session.commit()
             model_id = model.id
         
-        from tests.conftest import admin_login
-        admin_login(client, tid='viewer', password='test123')
+        # Non-admin users cannot log in to the admin area
+        from tests.conftest import admin_login, PASSWORD
+        login_response = admin_login(client, tid='viewer', password='test123')
+        assert login_response.status_code == 401  # Login fails for non-admin
         
+        # Without login, accessing admin routes redirects to login
         response = client.post(
             f'/admin/soh/inference/models/{model_id}/approve',
             json={'notes': 'Should not work'}
         )
         
-        assert response.status_code in (403, 404)  # Either forbidden or not found
+        assert response.status_code == 302  # Redirects to login
 
 
 class TestInferenceSaving:
