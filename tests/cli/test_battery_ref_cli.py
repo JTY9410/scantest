@@ -78,12 +78,12 @@ def test_entrypoint_commands_are_registered(app):
 
 
 def test_seed_replaces_null_capacity_rows(app):
-    """Test that seed removes rows with NULL capacity (unusable for SOH)."""
+    """Test that seed removes rows with ALL capacity columns NULL (unusable for SOH)."""
     with app.app_context():
         from app.extensions import db
         from app.modules.scans.battery_capacity import BatteryReferenceCapacity
         
-        # Clear and insert a bad row (NULL capacity, like leftover opendbc data)
+        # Clear and insert a bad row (ALL capacities NULL, like leftover opendbc data)
         db.session.execute(text("DELETE FROM battery_reference_capacity"))
         db.session.commit()
         
@@ -92,8 +92,9 @@ def test_seed_replaces_null_capacity_rows(app):
             model='Model 3',
             year_from=2018,
             year_to=2021,
-            gross_capacity_kwh=None,  # NULL
-            net_capacity_kwh=None,    # NULL
+            gross_capacity_kwh=None,      # NULL
+            net_capacity_kwh=None,        # NULL
+            official_capacity_kwh=None,   # NULL - all three NULL = unusable
             warnings='opendbc PACK_74_KWH',
         )
         db.session.add(bad_row)
@@ -105,13 +106,15 @@ def test_seed_replaces_null_capacity_rows(app):
         
         assert result.exit_code == 0, f"Command failed: {result.output}"
         
-        # Verify NULL-capacity row was removed
+        # Verify rows with ALL capacity columns NULL were removed
         null_count = db.session.execute(text("""
             SELECT COUNT(*) FROM battery_reference_capacity 
-            WHERE gross_capacity_kwh IS NULL OR net_capacity_kwh IS NULL
+            WHERE gross_capacity_kwh IS NULL 
+              AND net_capacity_kwh IS NULL 
+              AND official_capacity_kwh IS NULL
         """)).scalar()
         
-        assert null_count == 0, f"Found {null_count} rows with NULL capacity after seed"
+        assert null_count == 0, f"Found {null_count} rows with all NULL capacities after seed"
         
         # Verify good data was imported
         total_count = db.session.execute(text("SELECT COUNT(*) FROM battery_reference_capacity")).scalar()

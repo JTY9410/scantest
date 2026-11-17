@@ -29,12 +29,13 @@ def should_seed_battery_references() -> bool:
         current_app.logger.info(f"Found {old_format_count} old-format rows, will re-import")
         return True
     
-    # Check for invalid rows with NULL capacity (unusable for SOH calculations)
-    from sqlalchemy import or_
+    # Check for invalid rows with ALL capacity columns NULL (unusable for SOH calculations)
+    from sqlalchemy import and_
     null_capacity_count = db.session.query(BatteryReferenceCapacity).filter(
-        or_(
+        and_(
             BatteryReferenceCapacity.gross_capacity_kwh.is_(None),
-            BatteryReferenceCapacity.net_capacity_kwh.is_(None)
+            BatteryReferenceCapacity.net_capacity_kwh.is_(None),
+            BatteryReferenceCapacity.official_capacity_kwh.is_(None)
         )
     ).count()
     
@@ -63,13 +64,16 @@ def seed_battery_references():
         current_app.logger.info(f"Battery reference data already complete ({total} rows), skipping")
         return
     
-    # Delete old-format rows and rows with NULL capacity
-    from sqlalchemy import or_
+    # Delete old-format rows and rows with ALL capacity columns NULL
+    from sqlalchemy import or_, and_
     bad_rows = db.session.query(BatteryReferenceCapacity).filter(
         or_(
             BatteryReferenceCapacity.source_file.is_(None),
-            BatteryReferenceCapacity.gross_capacity_kwh.is_(None),
-            BatteryReferenceCapacity.net_capacity_kwh.is_(None)
+            and_(
+                BatteryReferenceCapacity.gross_capacity_kwh.is_(None),
+                BatteryReferenceCapacity.net_capacity_kwh.is_(None),
+                BatteryReferenceCapacity.official_capacity_kwh.is_(None)
+            )
         )
     ).delete()
     if bad_rows > 0:
