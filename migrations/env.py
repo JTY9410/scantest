@@ -31,18 +31,39 @@ def get_engine():
         return current_app.extensions['migrate'].db.engine
 
 
+def normalize_database_url(url: str) -> str:
+    """Normalize DATABASE_URL to postgresql+psycopg:// for psycopg3 compatibility.
+    
+    Alembic CLI may receive postgres:// or postgresql:// from environment.
+    Normalize to postgresql+psycopg:// to ensure psycopg3 driver is used.
+    """
+    if not url or not isinstance(url, str):
+        return url
+    
+    # Normalize postgres:// to postgresql://
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    
+    # Add psycopg driver if not specified
+    if url.startswith("postgresql://") and "+psycopg" not in url:
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+    
+    return url
+
+
 def get_engine_url():
     # Support test migration database override for migration testing
     import os
     test_migration_url = os.environ.get('TEST_MIGRATION_DATABASE_URL')
     if test_migration_url:
-        return test_migration_url.replace('%', '%%')
+        return normalize_database_url(test_migration_url).replace('%', '%%')
     
     try:
-        return get_engine().url.render_as_string(hide_password=False).replace(
-            '%', '%%')
+        url = get_engine().url.render_as_string(hide_password=False).replace('%', '%%')
+        return normalize_database_url(url)
     except AttributeError:
-        return str(get_engine().url).replace('%', '%%')
+        url = str(get_engine().url).replace('%', '%%')
+        return normalize_database_url(url)
 
 
 # add your model's MetaData object here

@@ -32,14 +32,30 @@ def _int(name: str, default: int) -> int:
 
 
 def database_url() -> str | None:
-    """DATABASE_URL만 사용한다. postgres:// 스킴이면 psycopg 드라이버로 바꾸고,
-    psycopg가 거부하는 supa 쿼리 파라미터는 제거한다."""
+    """Normalize DATABASE_URL to postgresql+psycopg:// for psycopg3 compatibility.
+    
+    Production may pass postgres://, postgresql://, or postgresql+psycopg://.
+    All forms are normalized to postgresql+psycopg:// to ensure psycopg3 driver is used.
+    Also removes supa query parameter that psycopg rejects.
+    """
     url = os.environ.get("DATABASE_URL")
-    if not url or not url.startswith("postgres://"):
+    if not url:
         return url
-    parts = urlsplit(url)
-    query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if k != "supa"])
-    return urlunsplit(parts._replace(scheme="postgresql+psycopg", query=query))
+    
+    # Normalize postgres:// and postgresql:// to use psycopg3 driver
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    
+    if url.startswith("postgresql://") and "+psycopg" not in url:
+        url = url.replace("postgresql://", "postgresql+psycopg://", 1)
+    
+    # Remove supa query parameter if present (Supabase pooler adds it, psycopg rejects it)
+    if "?" in url:
+        parts = urlsplit(url)
+        query = urlencode([(k, v) for k, v in parse_qsl(parts.query) if k != "supa"])
+        url = urlunsplit(parts._replace(query=query))
+    
+    return url
 
 
 def engine_options() -> dict:
