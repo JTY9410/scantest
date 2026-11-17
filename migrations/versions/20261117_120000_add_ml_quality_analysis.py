@@ -27,7 +27,7 @@ depends_on = None
 def upgrade():
     # scan_quality_signals: structured quality signals collected after each scan
     op.create_table('scan_quality_signals',
-        sa.Column('id', sa.BigInteger(), nullable=False),
+        sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),
         sa.Column('scan_id', sa.Integer(), nullable=False),
         sa.Column('collected_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         
@@ -63,7 +63,7 @@ def upgrade():
     
     # improvement_proposals: ML-driven proposals for config improvements
     op.create_table('improvement_proposals',
-        sa.Column('id', sa.BigInteger(), nullable=False),
+        sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),
         sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
         
@@ -102,7 +102,7 @@ def upgrade():
     
     # proposal_audit_log: audit trail for proposal lifecycle
     op.create_table('proposal_audit_log',
-        sa.Column('id', sa.BigInteger(), nullable=False),
+        sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),
         sa.Column('proposal_id', sa.BigInteger(), nullable=False),
         sa.Column('action', sa.String(20), nullable=False),  # approve, reject, rollback
         sa.Column('user_id', sa.Integer(), nullable=True),
@@ -121,7 +121,7 @@ def upgrade():
     
     # versioned_configs: runtime config storage for approved proposals
     op.create_table('versioned_configs',
-        sa.Column('id', sa.BigInteger(), nullable=False),
+        sa.Column('id', sa.BigInteger(), autoincrement=True, nullable=False),
         sa.Column('config_type', sa.String(50), nullable=False),
         sa.Column('manufacturer', sa.String(50), nullable=True),
         sa.Column('model', sa.String(100), nullable=True),

@@ -21,7 +21,7 @@ def upgrade():
     
     # soh_inference_models table
     op.create_table('soh_inference_models',
-        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('version', sa.String(length=50), nullable=False),
         sa.Column('status', sa.String(length=20), nullable=False),
         sa.Column('scope_maker', sa.String(length=50), nullable=True),
@@ -54,7 +54,7 @@ def upgrade():
     
     # soh_inferences table
     op.create_table('soh_inferences',
-        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('scan_id', sa.Integer(), nullable=False),
         sa.Column('model_id', sa.Integer(), nullable=False),
         sa.Column('estimated_soh', sa.Float(), nullable=False),
@@ -75,7 +75,7 @@ def upgrade():
     
     # soh_inference_model_audit table
     op.create_table('soh_inference_model_audit',
-        sa.Column('id', sa.Integer(), nullable=False),
+        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
         sa.Column('model_id', sa.Integer(), nullable=False),
         sa.Column('action', sa.String(length=50), nullable=False),
         sa.Column('user_id', sa.Integer(), nullable=True),

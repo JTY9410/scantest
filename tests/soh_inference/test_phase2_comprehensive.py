@@ -62,7 +62,7 @@ class TestInferenceEngine:
             assert features['soc'] == 80.0
             assert features['max_cell_v'] == 4.15
             assert features['min_cell_v'] == 4.10
-            assert features['cell_voltage_deviation'] == 0.05
+            assert abs(features['cell_voltage_deviation'] - 0.05) < 0.001
             assert features['max_temp'] == 25
             assert features['temp_deviation'] == 3
             assert features['lifetime_charge_kwh'] == 50000
@@ -254,10 +254,8 @@ class TestInferenceEngine:
 class TestApprovalWorkflow:
     """Test model approval workflow."""
     
-    def test_approve_model_creates_audit_log(self, app, client, make_user):
+    def test_approve_model_creates_audit_log(self, app, admin_client):
         """Test approving a model creates audit log."""
-        user_id = make_user('admin', type='admin')
-        
         with app.app_context():
             model = SOHInferenceModel(
                 version='v1.0-test',
@@ -271,11 +269,8 @@ class TestApprovalWorkflow:
             db.session.commit()
             model_id = model.id
         
-        # Login
-        client.post('/admin/login', data={'tid': 'admin', 'pwd': 'test'})
-        
         # Approve model
-        response = client.post(
+        response = admin_client.post(
             f'/admin/soh/inference/models/{model_id}/approve',
             json={'notes': 'Validation passed, approved for production'}
         )
@@ -299,10 +294,8 @@ class TestApprovalWorkflow:
             assert audits[0].new_status == InferenceModelStatus.APPROVED.value
             assert audits[0].reason == 'Validation passed, approved for production'
     
-    def test_approve_requires_notes(self, app, client, make_user):
+    def test_approve_requires_notes(self, app, admin_client):
         """Test approval requires notes."""
-        user_id = make_user('admin', type='admin')
-        
         with app.app_context():
             model = SOHInferenceModel(
                 version='v1.0-test',
@@ -315,10 +308,8 @@ class TestApprovalWorkflow:
             db.session.commit()
             model_id = model.id
         
-        client.post('/admin/login', data={'tid': 'admin', 'pwd': 'test'})
-        
         # Try to approve without notes
-        response = client.post(
+        response = admin_client.post(
             f'/admin/soh/inference/models/{model_id}/approve',
             json={}
         )
@@ -326,10 +317,8 @@ class TestApprovalWorkflow:
         assert response.status_code == 400
         assert 'notes required' in response.get_json()['error'].lower()
     
-    def test_reject_model_deletes_with_audit(self, app, client, make_user):
+    def test_reject_model_deletes_with_audit(self, app, admin_client):
         """Test rejecting a model deletes it but keeps audit log."""
-        user_id = make_user('admin', type='admin')
-        
         with app.app_context():
             model = SOHInferenceModel(
                 version='v1.0-bad',
@@ -342,10 +331,8 @@ class TestApprovalWorkflow:
             db.session.commit()
             model_id = model.id
         
-        client.post('/admin/login', data={'tid': 'admin', 'pwd': 'test'})
-        
         # Reject model
-        response = client.post(
+        response = admin_client.post(
             f'/admin/soh/inference/models/{model_id}/reject',
             json={'reason': 'Validation metrics too poor, retrain required'}
         )
@@ -366,10 +353,8 @@ class TestApprovalWorkflow:
             assert audits[0].action == 'reject'
             assert audits[0].reason == 'Validation metrics too poor, retrain required'
     
-    def test_reject_requires_reason(self, app, client, make_user):
+    def test_reject_requires_reason(self, app, admin_client):
         """Test rejection requires reason."""
-        user_id = make_user('admin', type='admin')
-        
         with app.app_context():
             model = SOHInferenceModel(
                 version='v1.0-test',
@@ -382,9 +367,7 @@ class TestApprovalWorkflow:
             db.session.commit()
             model_id = model.id
         
-        client.post('/admin/login', data={'tid': 'admin', 'pwd': 'test'})
-        
-        response = client.post(
+        response = admin_client.post(
             f'/admin/soh/inference/models/{model_id}/reject',
             json={}
         )
@@ -392,10 +375,8 @@ class TestApprovalWorkflow:
         assert response.status_code == 400
         assert 'reason required' in response.get_json()['error'].lower()
     
-    def test_retire_approved_model(self, app, client, make_user):
+    def test_retire_approved_model(self, app, admin_client):
         """Test retiring an approved model."""
-        user_id = make_user('admin', type='admin')
-        
         with app.app_context():
             model = SOHInferenceModel(
                 version='v1.0-old',
@@ -409,9 +390,7 @@ class TestApprovalWorkflow:
             db.session.commit()
             model_id = model.id
         
-        client.post('/admin/login', data={'tid': 'admin', 'pwd': 'test'})
-        
-        response = client.post(
+        response = admin_client.post(
             f'/admin/soh/inference/models/{model_id}/retire',
             json={'reason': 'Newer model v2.0 available with better metrics'}
         )
@@ -431,10 +410,8 @@ class TestApprovalWorkflow:
             assert len(audits) == 1
             assert audits[0].action == 'retire'
     
-    def test_retire_requires_reason(self, app, client, make_user):
+    def test_retire_requires_reason(self, app, admin_client):
         """Test retirement requires reason."""
-        user_id = make_user('admin', type='admin')
-        
         with app.app_context():
             model = SOHInferenceModel(
                 version='v1.0-test',
@@ -448,9 +425,7 @@ class TestApprovalWorkflow:
             db.session.commit()
             model_id = model.id
         
-        client.post('/admin/login', data={'tid': 'admin', 'pwd': 'test'})
-        
-        response = client.post(
+        response = admin_client.post(
             f'/admin/soh/inference/models/{model_id}/retire',
             json={}
         )
@@ -460,7 +435,7 @@ class TestApprovalWorkflow:
     
     def test_non_admin_blocked(self, app, client, make_user):
         """Test non-admin users blocked from approval actions."""
-        user_id = make_user('viewer', type='tester')
+        make_user('viewer', type='user', password='test123')
         
         with app.app_context():
             model = SOHInferenceModel(
@@ -474,7 +449,8 @@ class TestApprovalWorkflow:
             db.session.commit()
             model_id = model.id
         
-        client.post('/admin/login', data={'tid': 'viewer', 'pwd': 'test'})
+        from tests.conftest import admin_login
+        admin_login(client, tid='viewer', password='test123')
         
         response = client.post(
             f'/admin/soh/inference/models/{model_id}/approve',
