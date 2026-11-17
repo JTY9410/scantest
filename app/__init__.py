@@ -98,6 +98,7 @@ def _import_models() -> None:
     from app.modules.definitions import audit_models  # noqa: F401
     from app.modules.knowledge import models as knowledge  # noqa: F401
     from app.modules.ml_learning import models as ml_learning  # noqa: F401
+    from app.modules.soh_inference import models as soh_inference  # noqa: F401
     from app.modules.obd import models as obd  # noqa: F401
     from app.modules.reports import models as reports  # noqa: F401
     from app.modules.scans import models as scans  # noqa: F401
@@ -138,13 +139,14 @@ def _register_blueprints(app: Flask) -> None:
     from app.modules.knowledge.routes import bp as knowledge_bp
     from app.modules.members.routes import bp as members_bp
     from app.modules.ml_quality.routes import bp as ml_quality_bp
+    from app.modules.soh_inference.routes import bp as soh_inference_bp
     from app.modules.monitoring.routes import bp as monitoring_bp
     from app.modules.obd.routes import bp as obd_bp
     from app.modules.scanner.routes import bp as scanner_bp
     from app.modules.site.routes import bp as public_bp
 
     csrf.exempt(api_bp)
-    for blueprint in (public_bp, api_bp, auth_bp, admin_bp, battery_admin_bp, definitions_admin_bp, learning_admin_bp, ml_admin_bp, raw_viewer_bp, ml_quality_bp, members_bp, catalog_bp, monitoring_bp,
+    for blueprint in (public_bp, api_bp, auth_bp, admin_bp, battery_admin_bp, definitions_admin_bp, learning_admin_bp, ml_admin_bp, raw_viewer_bp, ml_quality_bp, soh_inference_bp, members_bp, catalog_bp, monitoring_bp,
                       obd_bp, canlab_bp, scanner_bp, knowledge_bp):
         app.register_blueprint(blueprint)
 
